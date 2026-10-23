@@ -45,3 +45,81 @@ jobs:
           curl -fsS http://localhost:8000/health
           curl -fsS http://localhost:8000/models
           docker rm -f avatar-ml
+
+  backend-test:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: avatar_test
+          MYSQL_USER: app
+          MYSQL_PASSWORD: app
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot --silent"
+          --health-interval=5s --health-timeout=5s --health-retries=30
+    env:
+      TEST_DATABASE_URL: app:app@tcp(127.0.0.1:3306)/avatar_test?parseTime=true&loc=UTC&multiStatements=true
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: backend/go.sum
+      - name: Allow triggers with binary logging (service containers cannot take mysqld flags)
+        run: mysql -h127.0.0.1 -uroot -proot -e "SET GLOBAL log_bin_trust_function_creators = 1"
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - name: go vet
+        run: go vet ./...
+      - name: go test (domain golden + migrations + API)
+        run: go test -count=1 ./...
+
+  web-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Type check
+        run: npx tsc --noEmit
+      - name: Build
+        run: npm run build
+
+  # Temiz clone'da `docker compose up --build` calisiyor mu: seed verisi geliyor mu?
+  compose-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Boot the whole stack
+        run: docker compose up --build -d --wait
+      - name: API is up and seeded
+        run: |
+          curl -fsS http://localhost:8080/health
+          curl -fsS "http://localhost:8080/api/v1/lots?has_mismatch=true" | tee /tmp/mismatch.json
+          grep -q '"lot_no":"KZ-2026-001"' /tmp/mismatch.json
+          curl -fsS http://localhost:3000/ | grep -qi "<div id=\"root\">"
+          curl -fsS http://localhost:8000/health
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --no-color | tail -200
+
+  # android-test: Android gelistiricisi ekleyecek.
+  # android-test:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - ...

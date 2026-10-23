@@ -1,0 +1,468 @@
+openapi: 3.1.0
+info:
+  title: Avatar - Uretim, Maliyet, Satis ve Lot Izlenebilirligi API
+  version: 0.1.0
+  description: |
+    Elle yazilmis sozlesme. Ayrintili aciklama ve ornekler: docs/api-contract.md.
+
+    Kurallar:
+    - Para ve miktar JSON'da STRING tasinir ("18.1588"); JSON number reddedilir. Tutar/birim maliyet 4, miktar 3 ondalik.
+    - Tum ID'ler UUIDv7 (istemci uretebilir). Zamanlar RFC3339 UTC, tarihler YYYY-MM-DD.
+    - Hata govdesi: {"error": {"code": "...", "message": "..."}}.
+    - Kimlik dogrulama henuz yok (TODO).
+servers:
+  - url: http://localhost:8080/api/v1
+tags:
+  - name: system
+  - name: master
+  - name: lots
+  - name: stock
+  - name: sync
+paths:
+  /health:
+    get:
+      tags: [system]
+      summary: Saglik kontrolu (DB ping)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Health" } } } }
+        "503": { $ref: "#/components/responses/Error" }
+  /openapi.yaml:
+    get:
+      tags: [system]
+      summary: Bu sozlesme
+      responses:
+        "200": { description: OpenAPI YAML, content: { application/yaml: { schema: { type: string } } } }
+
+  /items:
+    get:
+      tags: [master]
+      summary: Urun listesi
+      parameters:
+        - { name: q, in: query, schema: { type: string }, description: "code veya name icinde arar" }
+        - { name: item_type, in: query, schema: { $ref: "#/components/schemas/ItemType" } }
+        - { name: is_active, in: query, schema: { type: boolean } }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ItemList" } } } }
+    post:
+      tags: [master]
+      summary: Urun olustur
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Item" } } } }
+      responses:
+        "201": { description: Olusturuldu, content: { application/json: { schema: { $ref: "#/components/schemas/Item" } } } }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /items/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [master]
+      summary: Urun getir
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Item" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+    put:
+      tags: [master]
+      summary: Urun guncelle (tam guncelleme; silme yok, is_active=false kullanin)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Item" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Item" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /suppliers:
+    get:
+      tags: [master]
+      summary: Tedarikci listesi
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: supplier_type, in: query, schema: { enum: [material, external_producer, livestock] } }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SupplierList" } } } }
+    post:
+      tags: [master]
+      summary: Tedarikci olustur
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Supplier" } } } }
+      responses:
+        "201": { description: Olusturuldu, content: { application/json: { schema: { $ref: "#/components/schemas/Supplier" } } } }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /suppliers/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [master]
+      summary: Tedarikci getir
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Supplier" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+    put:
+      tags: [master]
+      summary: Tedarikci guncelle
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Supplier" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Supplier" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /customers:
+    get:
+      tags: [master]
+      summary: Musteri listesi
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: customer_type, in: query, schema: { enum: [market, wholesale, end_customer] } }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CustomerList" } } } }
+    post:
+      tags: [master]
+      summary: Musteri olustur
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Customer" } } } }
+      responses:
+        "201": { description: Olusturuldu, content: { application/json: { schema: { $ref: "#/components/schemas/Customer" } } } }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /customers/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [master]
+      summary: Musteri getir
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Customer" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+    put:
+      tags: [master]
+      summary: Musteri guncelle
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Customer" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Customer" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /warehouses:
+    get:
+      tags: [master]
+      summary: Depo listesi
+      parameters:
+        - { name: warehouse_type, in: query, schema: { enum: [internal, external_producer, quarantine, vehicle] } }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/WarehouseList" } } } }
+    post:
+      tags: [master]
+      summary: Depo olustur
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Warehouse" } } } }
+      responses:
+        "201": { description: Olusturuldu, content: { application/json: { schema: { $ref: "#/components/schemas/Warehouse" } } } }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /warehouses/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [master]
+      summary: Depo getir
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Warehouse" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+    put:
+      tags: [master]
+      summary: Depo guncelle
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/Warehouse" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Warehouse" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /lots:
+    get:
+      tags: [lots]
+      summary: Lot listesi (bakiye ve alis belgesi bilgisiyle)
+      parameters:
+        - { name: item_id, in: query, schema: { $ref: "#/components/schemas/Id" } }
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/LotStatus" } }
+        - { name: q, in: query, schema: { type: string }, description: "lot_no, urun kodu veya adinda arar" }
+        - { name: has_mismatch, in: query, schema: { type: boolean }, description: "Alis belgesinde tutar uyusmazligi olanlar" }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/LotList" } } } }
+    post:
+      tags: [lots]
+      summary: Alis lotu olustur (lot + belge satiri + purchase_in hareketi, tek transaction)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseLotRequest" } } } }
+      responses:
+        "201": { description: Olusturuldu, content: { application/json: { schema: { $ref: "#/components/schemas/Lot" } } } }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /lots/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [lots]
+      summary: Lot getir (depo bazli bakiyeler dahil)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Lot" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /stock-movements:
+    get:
+      tags: [stock]
+      summary: Stok hareketleri (degistirilemez defter), yeniden eskiye
+      parameters:
+        - { name: lot_id, in: query, schema: { $ref: "#/components/schemas/Id" } }
+        - { name: ref_type, in: query, schema: { type: string } }
+        - { name: warehouse_id, in: query, schema: { $ref: "#/components/schemas/Id" } }
+        - { name: movement_type, in: query, schema: { type: string } }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MovementList" } } } }
+  /stock-movements/{id}/reverse:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [stock]
+      summary: Hareketi ters kayitla geri al
+      description: |
+        Ayni lot/depo icin isareti ters bir 'reversal' hareketi ekler. Ters kayit tekrar geri alinamaz (422),
+        hareket zaten geri alinmissa (409) veya geri alma stogu negatife dusururse (409) reddedilir.
+        Govde opsiyoneldir; `id` verilirse (UUIDv7) ayni id ile tekrar gonderim idempotenttir.
+      requestBody:
+        required: false
+        content: { application/json: { schema: { $ref: "#/components/schemas/ReverseRequest" } } }
+      responses:
+        "201": { description: Ters kayit olusturuldu, content: { application/json: { schema: { $ref: "#/components/schemas/StockMovement" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /sync/push:
+    post:
+      tags: [sync]
+      summary: Cihazdan islem gonder (idempotent, op_id ile)
+      description: |
+        BUGUN STUB: op_id kaydedilir, ayni op_id tekrar gelirse `duplicate` doner. Payload isleme TODO;
+        bu yuzden ilk gonderim `flagged` doner (uygulanmadi). Sozlesme kesindir.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SyncPushRequest" } } } }
+      responses:
+        "200": { description: Islem basina sonuc, content: { application/json: { schema: { $ref: "#/components/schemas/SyncPushResponse" } } } }
+        "422": { $ref: "#/components/responses/Error" }
+  /sync/pull:
+    get:
+      tags: [sync]
+      summary: since_seq sonrasi degisiklikleri cek (item, customer, warehouse, lot)
+      parameters:
+        - { name: since_seq, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: device_id, in: query, schema: { $ref: "#/components/schemas/Id" } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 1000, default: 500 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SyncPullResponse" } } } }
+
+components:
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/Id" } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 1000, default: 200 } }
+    Offset: { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+  responses:
+    Error:
+      description: Hata
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorBody" } } }
+  schemas:
+    Id: { type: string, format: uuid, description: UUIDv7, examples: ["0192f6c2-7b1e-7c3a-9d2e-5a1f0c4b8e21"] }
+    Qty: { type: string, pattern: '^-?\d+(\.\d{1,3})?$', description: "Miktar, en fazla 3 ondalik, JSON string", examples: ["25.000"] }
+    Amount: { type: string, pattern: '^-?\d+(\.\d{1,4})?$', description: "Tutar / birim maliyet, en fazla 4 ondalik, JSON string", examples: ["18.1588"] }
+    Date: { type: string, format: date, examples: ["2026-03-01"] }
+    DateTime: { type: string, format: date-time, description: RFC3339 UTC, examples: ["2026-03-01T08:30:00.123Z"] }
+    ItemType: { enum: [raw, finished, cut_part, by_product, waste] }
+    Uom: { enum: [kg, adet] }
+    LotStatus: { enum: [active, blocked, recalled, consumed] }
+    ErrorBody:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { enum: [bad_request, validation_error, not_found, conflict, method_not_allowed, internal, unavailable] }
+            message: { type: string }
+    Health:
+      type: object
+      properties: { status: { const: ok }, time: { $ref: "#/components/schemas/DateTime" } }
+    Item:
+      type: object
+      required: [code, name, item_type, base_uom]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        code: { type: string, maxLength: 40 }
+        name: { type: string, maxLength: 160 }
+        item_type: { $ref: "#/components/schemas/ItemType" }
+        base_uom: { $ref: "#/components/schemas/Uom" }
+        unit_weight_kg: { oneOf: [{ $ref: "#/components/schemas/Qty" }, { type: "null" }] }
+        default_sale_price: { oneOf: [{ $ref: "#/components/schemas/Amount" }, { type: "null" }] }
+        is_active: { type: boolean, default: true }
+        created_at: { $ref: "#/components/schemas/DateTime" }
+    Supplier:
+      type: object
+      required: [code, name, supplier_type]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        code: { type: string }
+        name: { type: string }
+        supplier_type: { enum: [material, external_producer, livestock] }
+        contact_name: { type: [string, "null"] }
+        phone: { type: [string, "null"] }
+        email: { type: [string, "null"] }
+        address: { type: [string, "null"] }
+        created_at: { $ref: "#/components/schemas/DateTime" }
+    Customer:
+      type: object
+      required: [code, name, customer_type]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        code: { type: string }
+        name: { type: string }
+        customer_type: { enum: [market, wholesale, end_customer] }
+        contact_name: { type: [string, "null"] }
+        phone: { type: [string, "null"] }
+        email: { type: [string, "null"] }
+        address: { type: [string, "null"] }
+        created_at: { $ref: "#/components/schemas/DateTime" }
+    Warehouse:
+      type: object
+      required: [code, name, warehouse_type]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        code: { type: string }
+        name: { type: string }
+        warehouse_type: { enum: [internal, external_producer, quarantine, vehicle] }
+        created_at: { $ref: "#/components/schemas/DateTime" }
+    ItemList: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/Item" } } } }
+    SupplierList: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/Supplier" } } } }
+    CustomerList: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/Customer" } } } }
+    WarehouseList: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/Warehouse" } } } }
+    LotPurchase:
+      type: object
+      description: Alis belgesi bilgisi. has_mismatch=true ise belgede beyan edilen tutar hesaplanandan farklidir.
+      properties:
+        receipt_id: { $ref: "#/components/schemas/Id" }
+        doc_no: { type: string }
+        invoice_no: { type: [string, "null"] }
+        unit_price: { $ref: "#/components/schemas/Amount" }
+        line_total: { $ref: "#/components/schemas/Amount" }
+        declared_line_total: { oneOf: [{ $ref: "#/components/schemas/Amount" }, { type: "null" }] }
+        has_mismatch: { type: boolean }
+    LotBalance:
+      type: object
+      properties:
+        warehouse_id: { $ref: "#/components/schemas/Id" }
+        warehouse_code: { type: string }
+        qty_on_hand: { $ref: "#/components/schemas/Qty" }
+    Lot:
+      type: object
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        lot_no: { type: string }
+        item_id: { $ref: "#/components/schemas/Id" }
+        item_code: { type: string }
+        item_name: { type: string }
+        supplier_id: { oneOf: [{ $ref: "#/components/schemas/Id" }, { type: "null" }] }
+        supplier_name: { type: [string, "null"] }
+        origin_type: { enum: [purchase, production, cutting, reprocess, return] }
+        origin_id: { oneOf: [{ $ref: "#/components/schemas/Id" }, { type: "null" }] }
+        received_or_produced_at: { $ref: "#/components/schemas/Date" }
+        expiry_date: { oneOf: [{ $ref: "#/components/schemas/Date" }, { type: "null" }] }
+        initial_qty: { $ref: "#/components/schemas/Qty" }
+        uom: { $ref: "#/components/schemas/Uom" }
+        unit_cost: { $ref: "#/components/schemas/Amount" }
+        status: { $ref: "#/components/schemas/LotStatus" }
+        blocked_reason: { type: [string, "null"] }
+        created_at: { $ref: "#/components/schemas/DateTime" }
+        purchase: { oneOf: [{ $ref: "#/components/schemas/LotPurchase" }, { type: "null" }] }
+        qty_on_hand: { $ref: "#/components/schemas/Qty", description: "Tum depolardaki toplam (yalniz GET /lots ve /lots/{id})" }
+        balances: { type: array, items: { $ref: "#/components/schemas/LotBalance" }, description: "Depo kirilimi (yalniz GET /lots/{id})" }
+    LotList: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/Lot" } } } }
+    PurchaseLotRequest:
+      type: object
+      required: [lot_no, item_id, supplier_id, warehouse_id, received_at, qty, unit_price]
+      properties:
+        id: { $ref: "#/components/schemas/Id", description: "Opsiyonel istemci UUIDv7'si" }
+        lot_no: { type: string, maxLength: 40 }
+        item_id: { $ref: "#/components/schemas/Id" }
+        supplier_id: { $ref: "#/components/schemas/Id" }
+        warehouse_id: { $ref: "#/components/schemas/Id", description: "purchase_in hareketinin deposu" }
+        received_at: { $ref: "#/components/schemas/Date" }
+        expiry_date: { oneOf: [{ $ref: "#/components/schemas/Date" }, { type: "null" }] }
+        qty: { $ref: "#/components/schemas/Qty" }
+        unit_price: { $ref: "#/components/schemas/Amount" }
+        declared_line_total: { oneOf: [{ $ref: "#/components/schemas/Amount" }, { type: "null" }], description: "Belgede yazan satir tutari; hesaplanandan farkliysa has_mismatch=true" }
+        doc_no: { type: [string, "null"], description: "Varsayilan PR-<lot_no>" }
+        invoice_no: { type: [string, "null"] }
+    StockMovement:
+      type: object
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        lot_id: { $ref: "#/components/schemas/Id" }
+        lot_no: { type: string }
+        warehouse_id: { $ref: "#/components/schemas/Id" }
+        movement_type: { enum: [purchase_in, send_to_producer, production_consume, production_in, cutting_consume, cutting_in, transfer_out, transfer_in, sale_out, return_in, waste_out, reprocess_consume, reprocess_in, adjustment, reversal] }
+        qty: { $ref: "#/components/schemas/Qty", description: "Isaretli: giris +, cikis -" }
+        unit_cost: { $ref: "#/components/schemas/Amount" }
+        ref_type: { type: string }
+        ref_id: { $ref: "#/components/schemas/Id" }
+        reverses_movement_id: { oneOf: [{ $ref: "#/components/schemas/Id" }, { type: "null" }] }
+        device_id: { oneOf: [{ $ref: "#/components/schemas/Id" }, { type: "null" }] }
+        client_created_at: { oneOf: [{ $ref: "#/components/schemas/DateTime" }, { type: "null" }] }
+        note: { type: [string, "null"] }
+        created_at: { $ref: "#/components/schemas/DateTime" }
+    MovementList: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/StockMovement" } } } }
+    ReverseRequest:
+      type: object
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        note: { type: [string, "null"] }
+        device_id: { $ref: "#/components/schemas/Id" }
+    SyncOperation:
+      type: object
+      required: [op_id, entity, action, payload]
+      properties:
+        op_id: { $ref: "#/components/schemas/Id" }
+        entity: { type: string, examples: [sales_order] }
+        action: { enum: [create, update, delete] }
+        payload: { type: object }
+        client_created_at: { $ref: "#/components/schemas/DateTime" }
+    SyncPushRequest:
+      type: object
+      required: [device_id, operations]
+      properties:
+        device_id: { $ref: "#/components/schemas/Id" }
+        operations: { type: array, minItems: 1, maxItems: 500, items: { $ref: "#/components/schemas/SyncOperation" } }
+    SyncResult:
+      type: object
+      properties:
+        op_id: { type: string }
+        status: { enum: [applied, duplicate, flagged, rejected] }
+        message: { type: string }
+    SyncPushResponse:
+      type: object
+      properties:
+        results: { type: array, items: { $ref: "#/components/schemas/SyncResult" } }
+        server_seq: { type: integer, format: int64 }
+    SyncChange:
+      type: object
+      properties:
+        seq: { type: integer, format: int64 }
+        entity: { enum: [item, customer, warehouse, lot] }
+        entity_id: { $ref: "#/components/schemas/Id" }
+        action: { enum: [upsert, delete] }
+        payload: { type: object, description: "Ilgili varligin API JSON'u (item / customer / warehouse / lot, bakiyesiz)" }
+    SyncPullResponse:
+      type: object
+      properties:
+        changes: { type: array, items: { $ref: "#/components/schemas/SyncChange" } }
+        next_seq: { type: integer, format: int64, description: "Sonraki cekmede since_seq olarak gonderin" }
+        has_more: { type: boolean, description: "true ise hemen tekrar cekin" }
+        blocked_lot_ids: { type: array, items: { $ref: "#/components/schemas/Id" }, description: "Bloke / geri cagrilmis tum lotlar (her cekmede tam liste)" }
