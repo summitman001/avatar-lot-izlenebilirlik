@@ -38,6 +38,14 @@ def test_predict_production(client):
     assert abs(diff) < Decimal("0.01")  # verim 4 ondalik gosterim, adet 2 ondalik
 
 
+def test_predict_production_500g_urun(client):
+    kg1 = client.post("/predict/production", json={"et_kg": "100", "supplier_id": "TED-B"}).json()
+    g500 = client.post("/predict/production", json={"et_kg": "100", "supplier_id": "TED-B", "unit_weight_kg": "0.500"}).json()
+    # ayni cikti kg, adet iki kat
+    assert Decimal(g500["predicted_output_kg"]) == Decimal(kg1["predicted_output_kg"])
+    assert Decimal(g500["predicted_delivered_qty"]) == 2 * Decimal(kg1["predicted_delivered_qty"])
+
+
 def test_predict_production_tedarikci_yoksa_genel_ortalama(client):
     unknown = client.post("/predict/production", json={"et_kg": "100", "supplier_id": "YOK"}).json()
     none = client.post("/predict/production", json={"et_kg": "100"}).json()
