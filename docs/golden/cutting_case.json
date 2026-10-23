@@ -1,0 +1,61 @@
+{
+  "case_id": "RECIPE-LAMB-DEFAULT",
+  "description": "Kuzu parcalama recete varsayilanlari (dokuman senaryosundan, 25 kg karkas)",
+  "input": {
+    "animal": "lamb"
+  },
+  "expected": {
+    "parts": [
+      {
+        "part": "But",
+        "expected_ratio": "0.3000",
+        "reference_sale_price": "16.00",
+        "is_waste": false,
+        "is_by_product": false
+      },
+      {
+        "part": "Kol",
+        "expected_ratio": "0.1800",
+        "reference_sale_price": "15.00",
+        "is_waste": false,
+        "is_by_product": false
+      },
+      {
+        "part": "Sırt",
+        "expected_ratio": "0.1000",
+        "reference_sale_price": "18.00",
+        "is_waste": false,
+        "is_by_product": false
+      },
+      {
+        "part": "Kaburga",
+        "expected_ratio": "0.1200",
+        "reference_sale_price": "12.00",
+        "is_waste": false,
+        "is_by_product": false
+      },
+      {
+        "part": "Gerdan",
+        "expected_ratio": "0.0800",
+        "reference_sale_price": "10.00",
+        "is_waste": false,
+        "is_by_product": false
+      },
+      {
+        "part": "Kıyma",
+        "expected_ratio": "0.1000",
+        "reference_sale_price": "11.00",
+        "is_waste": false,
+        "is_by_product": false
+      },
+      {
+        "part": "Fire",
+        "expected_ratio": "0.1200",
+        "reference_sale_price": "0.00",
+        "is_waste": true,
+        "is_by_product": false
+      }
+    ],
+    "ratio_sum": "1.0000"
+  }
+}

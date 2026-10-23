@@ -1,0 +1,66 @@
+{
+  "production": {
+    "split": "time_ordered_80_20 (en yeni %20 test)",
+    "n_train": 48,
+    "n_test": 12,
+    "models": {
+      "production_baseline_supplier_mean": {
+        "version": "1.0.0",
+        "baseline": true,
+        "metrics": {
+          "target": "delivered_qty (kg)",
+          "mae_kg": "1.1942",
+          "mape_pct": "1.1733"
+        }
+      }
+    }
+  },
+  "cutting": {
+    "split": "random_80_20 (seed=42)",
+    "n_train": 160,
+    "n_test": 40,
+    "models": {
+      "cutting_baseline_breed_mean": {
+        "version": "1.0.0",
+        "baseline": true,
+        "metrics": {
+          "target": "parca kg (but, kol, sirt, kaburga, gerdan, kiyma, fire)",
+          "overall": {
+            "mae_kg": "0.0600",
+            "mape_pct": "2.1519"
+          },
+          "per_part": {
+            "but": {
+              "mae_kg": "0.0903",
+              "mape_pct": "1.3850"
+            },
+            "kol": {
+              "mae_kg": "0.0745",
+              "mape_pct": "2.1052"
+            },
+            "sirt": {
+              "mae_kg": "0.0481",
+              "mape_pct": "2.1947"
+            },
+            "kaburga": {
+              "mae_kg": "0.0626",
+              "mape_pct": "2.3979"
+            },
+            "gerdan": {
+              "mae_kg": "0.0367",
+              "mape_pct": "2.1287"
+            },
+            "kiyma": {
+              "mae_kg": "0.0521",
+              "mape_pct": "2.4645"
+            },
+            "fire": {
+              "mae_kg": "0.0553",
+              "mape_pct": "2.3873"
+            }
+          }
+        }
+      }
+    }
+  }
+}

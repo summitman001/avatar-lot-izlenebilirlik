@@ -1,0 +1,319 @@
+[
+  {
+    "case_id": "UR-001",
+    "description": "Dokuman senaryosu: 85 teslim, 85 faturali, VKP 24.90",
+    "input": {
+      "lots": [
+        {
+          "name": "Dana eti",
+          "category": "meat",
+          "quantity": "100",
+          "unit_cost": "9.70"
+        },
+        {
+          "name": "Baharat",
+          "category": "spice",
+          "quantity": "2",
+          "unit_cost": "24.00"
+        },
+        {
+          "name": "Bağırsak",
+          "category": "casing",
+          "quantity": "5",
+          "unit_cost": "11.60"
+        }
+      ],
+      "delivered_qty": "85",
+      "service_unit_price": "5.50",
+      "invoiced_qty": null,
+      "sale_price": "24.90"
+    },
+    "expected": {
+      "lot_lines": [
+        {
+          "name": "Dana eti",
+          "amount": "970.00"
+        },
+        {
+          "name": "Baharat",
+          "amount": "48.00"
+        },
+        {
+          "name": "Bağırsak",
+          "amount": "58.00"
+        }
+      ],
+      "material_cost": "1076.00",
+      "service_cost": "467.50",
+      "total_cost": "1543.50",
+      "delivered_qty": "85",
+      "invoiced_qty": "85",
+      "ekp_unit": "18.1588",
+      "ekp_display": "18.16",
+      "input_kg_total": "107.000",
+      "yield_input_pct": "79.44",
+      "yield_meat_ratio": "0.8500",
+      "sale_price": "24.90",
+      "revenue": "2116.50",
+      "gross_profit_unit": "6.7412",
+      "gross_profit_total": "573.00",
+      "margin_pct": "27.07",
+      "warnings": []
+    }
+  },
+  {
+    "case_id": "UR-002",
+    "description": "83 teslim, hizmet teslim edilen adet uzerinden faturalanmis",
+    "input": {
+      "lots": [
+        {
+          "name": "Dana eti",
+          "category": "meat",
+          "quantity": "100",
+          "unit_cost": "9.70"
+        },
+        {
+          "name": "Baharat",
+          "category": "spice",
+          "quantity": "2",
+          "unit_cost": "24.00"
+        },
+        {
+          "name": "Bağırsak",
+          "category": "casing",
+          "quantity": "5",
+          "unit_cost": "11.60"
+        }
+      ],
+      "delivered_qty": "83",
+      "service_unit_price": "5.50",
+      "invoiced_qty": null,
+      "sale_price": "24.90"
+    },
+    "expected": {
+      "lot_lines": [
+        {
+          "name": "Dana eti",
+          "amount": "970.00"
+        },
+        {
+          "name": "Baharat",
+          "amount": "48.00"
+        },
+        {
+          "name": "Bağırsak",
+          "amount": "58.00"
+        }
+      ],
+      "material_cost": "1076.00",
+      "service_cost": "456.50",
+      "total_cost": "1532.50",
+      "delivered_qty": "83",
+      "invoiced_qty": "83",
+      "ekp_unit": "18.4639",
+      "ekp_display": "18.46",
+      "input_kg_total": "107.000",
+      "yield_input_pct": "77.57",
+      "yield_meat_ratio": "0.8300",
+      "sale_price": "24.90",
+      "revenue": "2066.70",
+      "gross_profit_unit": "6.4361",
+      "gross_profit_total": "534.20",
+      "margin_pct": "25.85",
+      "warnings": []
+    }
+  },
+  {
+    "case_id": "UR-003",
+    "description": "83 teslim ama uretici 85 adet faturalamis (INVOICED_QTY_MISMATCH)",
+    "input": {
+      "lots": [
+        {
+          "name": "Dana eti",
+          "category": "meat",
+          "quantity": "100",
+          "unit_cost": "9.70"
+        },
+        {
+          "name": "Baharat",
+          "category": "spice",
+          "quantity": "2",
+          "unit_cost": "24.00"
+        },
+        {
+          "name": "Bağırsak",
+          "category": "casing",
+          "quantity": "5",
+          "unit_cost": "11.60"
+        }
+      ],
+      "delivered_qty": "83",
+      "service_unit_price": "5.50",
+      "invoiced_qty": "85",
+      "sale_price": "24.90"
+    },
+    "expected": {
+      "lot_lines": [
+        {
+          "name": "Dana eti",
+          "amount": "970.00"
+        },
+        {
+          "name": "Baharat",
+          "amount": "48.00"
+        },
+        {
+          "name": "Bağırsak",
+          "amount": "58.00"
+        }
+      ],
+      "material_cost": "1076.00",
+      "service_cost": "467.50",
+      "total_cost": "1543.50",
+      "delivered_qty": "83",
+      "invoiced_qty": "85",
+      "ekp_unit": "18.5964",
+      "ekp_display": "18.60",
+      "input_kg_total": "107.000",
+      "yield_input_pct": "77.57",
+      "yield_meat_ratio": "0.8300",
+      "sale_price": "24.90",
+      "revenue": "2066.70",
+      "gross_profit_unit": "6.3036",
+      "gross_profit_total": "523.20",
+      "margin_pct": "25.32",
+      "warnings": [
+        "INVOICED_QTY_MISMATCH"
+      ]
+    }
+  },
+  {
+    "case_id": "UR-004",
+    "description": "Yuvarlama kaniti: ekp_display x adet toplam maliyete esit degil",
+    "input": {
+      "lots": [
+        {
+          "name": "Dana eti",
+          "category": "meat",
+          "quantity": "100",
+          "unit_cost": "9.70"
+        },
+        {
+          "name": "Baharat",
+          "category": "spice",
+          "quantity": "2",
+          "unit_cost": "24.00"
+        },
+        {
+          "name": "Bağırsak",
+          "category": "casing",
+          "quantity": "5",
+          "unit_cost": "11.60"
+        }
+      ],
+      "delivered_qty": "85",
+      "service_unit_price": "5.50",
+      "invoiced_qty": null,
+      "sale_price": "24.90"
+    },
+    "expected": {
+      "lot_lines": [
+        {
+          "name": "Dana eti",
+          "amount": "970.00"
+        },
+        {
+          "name": "Baharat",
+          "amount": "48.00"
+        },
+        {
+          "name": "Bağırsak",
+          "amount": "58.00"
+        }
+      ],
+      "material_cost": "1076.00",
+      "service_cost": "467.50",
+      "total_cost": "1543.50",
+      "delivered_qty": "85",
+      "invoiced_qty": "85",
+      "ekp_unit": "18.1588",
+      "ekp_display": "18.16",
+      "input_kg_total": "107.000",
+      "yield_input_pct": "79.44",
+      "yield_meat_ratio": "0.8500",
+      "sale_price": "24.90",
+      "revenue": "2116.50",
+      "gross_profit_unit": "6.7412",
+      "gross_profit_total": "573.00",
+      "margin_pct": "27.07",
+      "warnings": [],
+      "rounding_proof": {
+        "ekp_display_times_qty": "1543.60",
+        "total_cost": "1543.50",
+        "difference": "0.10"
+      }
+    }
+  },
+  {
+    "case_id": "UR-005",
+    "description": "Verim bilgisi: 107 kg girdi, 85 kg cikti (satis fiyati yok)",
+    "input": {
+      "lots": [
+        {
+          "name": "Dana eti",
+          "category": "meat",
+          "quantity": "100",
+          "unit_cost": "9.70"
+        },
+        {
+          "name": "Baharat",
+          "category": "spice",
+          "quantity": "2",
+          "unit_cost": "24.00"
+        },
+        {
+          "name": "Bağırsak",
+          "category": "casing",
+          "quantity": "5",
+          "unit_cost": "11.60"
+        }
+      ],
+      "delivered_qty": "85",
+      "service_unit_price": "5.50",
+      "invoiced_qty": null,
+      "sale_price": null
+    },
+    "expected": {
+      "lot_lines": [
+        {
+          "name": "Dana eti",
+          "amount": "970.00"
+        },
+        {
+          "name": "Baharat",
+          "amount": "48.00"
+        },
+        {
+          "name": "Bağırsak",
+          "amount": "58.00"
+        }
+      ],
+      "material_cost": "1076.00",
+      "service_cost": "467.50",
+      "total_cost": "1543.50",
+      "delivered_qty": "85",
+      "invoiced_qty": "85",
+      "ekp_unit": "18.1588",
+      "ekp_display": "18.16",
+      "input_kg_total": "107.000",
+      "yield_input_pct": "79.44",
+      "yield_meat_ratio": "0.8500",
+      "sale_price": null,
+      "revenue": null,
+      "gross_profit_unit": null,
+      "gross_profit_total": null,
+      "margin_pct": null,
+      "warnings": []
+    }
+  }
+]

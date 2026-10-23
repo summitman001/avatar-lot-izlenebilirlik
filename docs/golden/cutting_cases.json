@@ -1,0 +1,1256 @@
+[
+  {
+    "case_id": "KZ-2026-001-QTY",
+    "description": "Dokuman senaryosu, fire kaydedilmemis: 3.0 kg fark, WEIGHT_IMBALANCE, closable=false (quantity)",
+    "input": {
+      "input_weight_kg": "25",
+      "unit_cost_per_kg": "11.50",
+      "declared_total_cost": "351.00",
+      "cost_basis": "computed",
+      "method": "quantity",
+      "parts": [
+        {
+          "name": "But",
+          "kg": "7.5",
+          "reference_price": "16.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Kol",
+          "kg": "4.5",
+          "reference_price": "15.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Sırt",
+          "kg": "2.5",
+          "reference_price": "18.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Kaburga",
+          "kg": "3.0",
+          "reference_price": "12.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Gerdan",
+          "kg": "2.0",
+          "reference_price": "10.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Kıyma",
+          "kg": "2.5",
+          "reference_price": "11.00",
+          "is_waste": false,
+          "is_by_product": false
+        }
+      ]
+    },
+    "expected": {
+      "method": "quantity",
+      "cost_basis": "computed",
+      "input_weight_kg": "25.000",
+      "computed_total_cost": "287.50",
+      "declared_total_cost": "351.00",
+      "total_input_cost": "287.50",
+      "parts_weight_kg": "22.000",
+      "balance_diff_kg": "3.000",
+      "closable": false,
+      "sellable_kg": "22.000",
+      "by_product_value": "0.00",
+      "allocation_pool": "287.50",
+      "parts": [
+        {
+          "name": "But",
+          "role": "main",
+          "kg": "7.500",
+          "yield_pct": "30.00",
+          "allocated_cost": "98.01",
+          "unit_cost": "13.0680"
+        },
+        {
+          "name": "Kol",
+          "role": "main",
+          "kg": "4.500",
+          "yield_pct": "18.00",
+          "allocated_cost": "58.81",
+          "unit_cost": "13.0689"
+        },
+        {
+          "name": "Sırt",
+          "role": "main",
+          "kg": "2.500",
+          "yield_pct": "10.00",
+          "allocated_cost": "32.67",
+          "unit_cost": "13.0680"
+        },
+        {
+          "name": "Kaburga",
+          "role": "main",
+          "kg": "3.000",
+          "yield_pct": "12.00",
+          "allocated_cost": "39.20",
+          "unit_cost": "13.0667"
+        },
+        {
+          "name": "Gerdan",
+          "role": "main",
+          "kg": "2.000",
+          "yield_pct": "8.00",
+          "allocated_cost": "26.14",
+          "unit_cost": "13.0700"
+        },
+        {
+          "name": "Kıyma",
+          "role": "main",
+          "kg": "2.500",
+          "yield_pct": "10.00",
+          "allocated_cost": "32.67",
+          "unit_cost": "13.0680"
+        }
+      ],
+      "total_allocated": "287.50",
+      "warnings": [
+        "PURCHASE_TOTAL_MISMATCH",
+        "WEIGHT_IMBALANCE"
+      ]
+    }
+  },
+  {
+    "case_id": "KZ-2026-001-VAL",
+    "description": "Dokuman senaryosu, fire kaydedilmemis: 3.0 kg fark, WEIGHT_IMBALANCE, closable=false (value)",
+    "input": {
+      "input_weight_kg": "25",
+      "unit_cost_per_kg": "11.50",
+      "declared_total_cost": "351.00",
+      "cost_basis": "computed",
+      "method": "value",
+      "parts": [
+        {
+          "name": "But",
+          "kg": "7.5",
+          "reference_price": "16.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Kol",
+          "kg": "4.5",
+          "reference_price": "15.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Sırt",
+          "kg": "2.5",
+          "reference_price": "18.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Kaburga",
+          "kg": "3.0",
+          "reference_price": "12.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Gerdan",
+          "kg": "2.0",
+          "reference_price": "10.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Kıyma",
+          "kg": "2.5",
+          "reference_price": "11.00",
+          "is_waste": false,
+          "is_by_product": false
+        }
+      ]
+    },
+    "expected": {
+      "method": "value",
+      "cost_basis": "computed",
+      "input_weight_kg": "25.000",
+      "computed_total_cost": "287.50",
+      "declared_total_cost": "351.00",
+      "total_input_cost": "287.50",
+      "parts_weight_kg": "22.000",
+      "balance_diff_kg": "3.000",
+      "closable": false,
+      "sellable_kg": "22.000",
+      "by_product_value": "0.00",
+      "allocation_pool": "287.50",
+      "parts": [
+        {
+          "name": "But",
+          "role": "main",
+          "kg": "7.500",
+          "yield_pct": "30.00",
+          "allocated_cost": "109.18",
+          "unit_cost": "14.5573"
+        },
+        {
+          "name": "Kol",
+          "role": "main",
+          "kg": "4.500",
+          "yield_pct": "18.00",
+          "allocated_cost": "61.41",
+          "unit_cost": "13.6467"
+        },
+        {
+          "name": "Sırt",
+          "role": "main",
+          "kg": "2.500",
+          "yield_pct": "10.00",
+          "allocated_cost": "40.94",
+          "unit_cost": "16.3760"
+        },
+        {
+          "name": "Kaburga",
+          "role": "main",
+          "kg": "3.000",
+          "yield_pct": "12.00",
+          "allocated_cost": "32.75",
+          "unit_cost": "10.9167"
+        },
+        {
+          "name": "Gerdan",
+          "role": "main",
+          "kg": "2.000",
+          "yield_pct": "8.00",
+          "allocated_cost": "18.20",
+          "unit_cost": "9.1000"
+        },
+        {
+          "name": "Kıyma",
+          "role": "main",
+          "kg": "2.500",
+          "yield_pct": "10.00",
+          "allocated_cost": "25.02",
+          "unit_cost": "10.0080"
+        }
+      ],
+      "total_allocated": "287.50",
+      "warnings": [
+        "PURCHASE_TOTAL_MISMATCH",
+        "WEIGHT_IMBALANCE"
+      ]
+    }
+  },
+  {
+    "case_id": "KZ-2026-002-QTY",
+    "description": "Ayni senaryo, 3.0 kg fire kaydedilmis, denge tamam, maliyet 287.50 (quantity)",
+    "input": {
+      "input_weight_kg": "25",
+      "unit_cost_per_kg": "11.50",
+      "declared_total_cost": "351.00",
+      "cost_basis": "computed",
+      "method": "quantity",
+      "parts": [
+        {
+          "name": "But",
+          "kg": "7.5",
+          "reference_price": "16.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Kol",
+          "kg": "4.5",
+          "reference_price": "15.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Sırt",
+          "kg": "2.5",
+          "reference_price": "18.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Kaburga",
+          "kg": "3.0",
+          "reference_price": "12.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Gerdan",
+          "kg": "2.0",
+          "reference_price": "10.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Kıyma",
+          "kg": "2.5",
+          "reference_price": "11.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Fire",
+          "kg": "3.0",
+          "reference_price": "0.00",
+          "is_waste": true,
+          "is_by_product": false
+        }
+      ]
+    },
+    "expected": {
+      "method": "quantity",
+      "cost_basis": "computed",
+      "input_weight_kg": "25.000",
+      "computed_total_cost": "287.50",
+      "declared_total_cost": "351.00",
+      "total_input_cost": "287.50",
+      "parts_weight_kg": "25.000",
+      "balance_diff_kg": "0.000",
+      "closable": true,
+      "sellable_kg": "22.000",
+      "by_product_value": "0.00",
+      "allocation_pool": "287.50",
+      "parts": [
+        {
+          "name": "But",
+          "role": "main",
+          "kg": "7.500",
+          "yield_pct": "30.00",
+          "allocated_cost": "98.01",
+          "unit_cost": "13.0680"
+        },
+        {
+          "name": "Kol",
+          "role": "main",
+          "kg": "4.500",
+          "yield_pct": "18.00",
+          "allocated_cost": "58.81",
+          "unit_cost": "13.0689"
+        },
+        {
+          "name": "Sırt",
+          "role": "main",
+          "kg": "2.500",
+          "yield_pct": "10.00",
+          "allocated_cost": "32.67",
+          "unit_cost": "13.0680"
+        },
+        {
+          "name": "Kaburga",
+          "role": "main",
+          "kg": "3.000",
+          "yield_pct": "12.00",
+          "allocated_cost": "39.20",
+          "unit_cost": "13.0667"
+        },
+        {
+          "name": "Gerdan",
+          "role": "main",
+          "kg": "2.000",
+          "yield_pct": "8.00",
+          "allocated_cost": "26.14",
+          "unit_cost": "13.0700"
+        },
+        {
+          "name": "Kıyma",
+          "role": "main",
+          "kg": "2.500",
+          "yield_pct": "10.00",
+          "allocated_cost": "32.67",
+          "unit_cost": "13.0680"
+        },
+        {
+          "name": "Fire",
+          "role": "waste",
+          "kg": "3.000",
+          "yield_pct": "12.00",
+          "allocated_cost": "0.00",
+          "unit_cost": "0.0000"
+        }
+      ],
+      "total_allocated": "287.50",
+      "warnings": [
+        "PURCHASE_TOTAL_MISMATCH"
+      ]
+    }
+  },
+  {
+    "case_id": "KZ-2026-002-VAL",
+    "description": "Ayni senaryo, 3.0 kg fire kaydedilmis, denge tamam, maliyet 287.50 (value)",
+    "input": {
+      "input_weight_kg": "25",
+      "unit_cost_per_kg": "11.50",
+      "declared_total_cost": "351.00",
+      "cost_basis": "computed",
+      "method": "value",
+      "parts": [
+        {
+          "name": "But",
+          "kg": "7.5",
+          "reference_price": "16.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Kol",
+          "kg": "4.5",
+          "reference_price": "15.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Sırt",
+          "kg": "2.5",
+          "reference_price": "18.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Kaburga",
+          "kg": "3.0",
+          "reference_price": "12.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Gerdan",
+          "kg": "2.0",
+          "reference_price": "10.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Kıyma",
+          "kg": "2.5",
+          "reference_price": "11.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Fire",
+          "kg": "3.0",
+          "reference_price": "0.00",
+          "is_waste": true,
+          "is_by_product": false
+        }
+      ]
+    },
+    "expected": {
+      "method": "value",
+      "cost_basis": "computed",
+      "input_weight_kg": "25.000",
+      "computed_total_cost": "287.50",
+      "declared_total_cost": "351.00",
+      "total_input_cost": "287.50",
+      "parts_weight_kg": "25.000",
+      "balance_diff_kg": "0.000",
+      "closable": true,
+      "sellable_kg": "22.000",
+      "by_product_value": "0.00",
+      "allocation_pool": "287.50",
+      "parts": [
+        {
+          "name": "But",
+          "role": "main",
+          "kg": "7.500",
+          "yield_pct": "30.00",
+          "allocated_cost": "109.18",
+          "unit_cost": "14.5573"
+        },
+        {
+          "name": "Kol",
+          "role": "main",
+          "kg": "4.500",
+          "yield_pct": "18.00",
+          "allocated_cost": "61.41",
+          "unit_cost": "13.6467"
+        },
+        {
+          "name": "Sırt",
+          "role": "main",
+          "kg": "2.500",
+          "yield_pct": "10.00",
+          "allocated_cost": "40.94",
+          "unit_cost": "16.3760"
+        },
+        {
+          "name": "Kaburga",
+          "role": "main",
+          "kg": "3.000",
+          "yield_pct": "12.00",
+          "allocated_cost": "32.75",
+          "unit_cost": "10.9167"
+        },
+        {
+          "name": "Gerdan",
+          "role": "main",
+          "kg": "2.000",
+          "yield_pct": "8.00",
+          "allocated_cost": "18.20",
+          "unit_cost": "9.1000"
+        },
+        {
+          "name": "Kıyma",
+          "role": "main",
+          "kg": "2.500",
+          "yield_pct": "10.00",
+          "allocated_cost": "25.02",
+          "unit_cost": "10.0080"
+        },
+        {
+          "name": "Fire",
+          "role": "waste",
+          "kg": "3.000",
+          "yield_pct": "12.00",
+          "allocated_cost": "0.00",
+          "unit_cost": "0.0000"
+        }
+      ],
+      "total_allocated": "287.50",
+      "warnings": [
+        "PURCHASE_TOTAL_MISMATCH"
+      ]
+    }
+  },
+  {
+    "case_id": "KZ-2026-003-QTY",
+    "description": "Alis belgesindeki 351.00 maliyet esas alinmis, denge tamam (quantity)",
+    "input": {
+      "input_weight_kg": "25",
+      "unit_cost_per_kg": "11.50",
+      "declared_total_cost": "351.00",
+      "cost_basis": "declared",
+      "method": "quantity",
+      "parts": [
+        {
+          "name": "But",
+          "kg": "7.5",
+          "reference_price": "16.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Kol",
+          "kg": "4.5",
+          "reference_price": "15.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Sırt",
+          "kg": "2.5",
+          "reference_price": "18.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Kaburga",
+          "kg": "3.0",
+          "reference_price": "12.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Gerdan",
+          "kg": "2.0",
+          "reference_price": "10.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Kıyma",
+          "kg": "2.5",
+          "reference_price": "11.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Fire",
+          "kg": "3.0",
+          "reference_price": "0.00",
+          "is_waste": true,
+          "is_by_product": false
+        }
+      ]
+    },
+    "expected": {
+      "method": "quantity",
+      "cost_basis": "declared",
+      "input_weight_kg": "25.000",
+      "computed_total_cost": "287.50",
+      "declared_total_cost": "351.00",
+      "total_input_cost": "351.00",
+      "parts_weight_kg": "25.000",
+      "balance_diff_kg": "0.000",
+      "closable": true,
+      "sellable_kg": "22.000",
+      "by_product_value": "0.00",
+      "allocation_pool": "351.00",
+      "parts": [
+        {
+          "name": "But",
+          "role": "main",
+          "kg": "7.500",
+          "yield_pct": "30.00",
+          "allocated_cost": "119.65",
+          "unit_cost": "15.9533"
+        },
+        {
+          "name": "Kol",
+          "role": "main",
+          "kg": "4.500",
+          "yield_pct": "18.00",
+          "allocated_cost": "71.80",
+          "unit_cost": "15.9556"
+        },
+        {
+          "name": "Sırt",
+          "role": "main",
+          "kg": "2.500",
+          "yield_pct": "10.00",
+          "allocated_cost": "39.89",
+          "unit_cost": "15.9560"
+        },
+        {
+          "name": "Kaburga",
+          "role": "main",
+          "kg": "3.000",
+          "yield_pct": "12.00",
+          "allocated_cost": "47.86",
+          "unit_cost": "15.9533"
+        },
+        {
+          "name": "Gerdan",
+          "role": "main",
+          "kg": "2.000",
+          "yield_pct": "8.00",
+          "allocated_cost": "31.91",
+          "unit_cost": "15.9550"
+        },
+        {
+          "name": "Kıyma",
+          "role": "main",
+          "kg": "2.500",
+          "yield_pct": "10.00",
+          "allocated_cost": "39.89",
+          "unit_cost": "15.9560"
+        },
+        {
+          "name": "Fire",
+          "role": "waste",
+          "kg": "3.000",
+          "yield_pct": "12.00",
+          "allocated_cost": "0.00",
+          "unit_cost": "0.0000"
+        }
+      ],
+      "total_allocated": "351.00",
+      "warnings": [
+        "PURCHASE_TOTAL_MISMATCH"
+      ]
+    }
+  },
+  {
+    "case_id": "KZ-2026-003-VAL",
+    "description": "Alis belgesindeki 351.00 maliyet esas alinmis, denge tamam (value)",
+    "input": {
+      "input_weight_kg": "25",
+      "unit_cost_per_kg": "11.50",
+      "declared_total_cost": "351.00",
+      "cost_basis": "declared",
+      "method": "value",
+      "parts": [
+        {
+          "name": "But",
+          "kg": "7.5",
+          "reference_price": "16.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Kol",
+          "kg": "4.5",
+          "reference_price": "15.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Sırt",
+          "kg": "2.5",
+          "reference_price": "18.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Kaburga",
+          "kg": "3.0",
+          "reference_price": "12.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Gerdan",
+          "kg": "2.0",
+          "reference_price": "10.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Kıyma",
+          "kg": "2.5",
+          "reference_price": "11.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Fire",
+          "kg": "3.0",
+          "reference_price": "0.00",
+          "is_waste": true,
+          "is_by_product": false
+        }
+      ]
+    },
+    "expected": {
+      "method": "value",
+      "cost_basis": "declared",
+      "input_weight_kg": "25.000",
+      "computed_total_cost": "287.50",
+      "declared_total_cost": "351.00",
+      "total_input_cost": "351.00",
+      "parts_weight_kg": "25.000",
+      "balance_diff_kg": "0.000",
+      "closable": true,
+      "sellable_kg": "22.000",
+      "by_product_value": "0.00",
+      "allocation_pool": "351.00",
+      "parts": [
+        {
+          "name": "But",
+          "role": "main",
+          "kg": "7.500",
+          "yield_pct": "30.00",
+          "allocated_cost": "133.28",
+          "unit_cost": "17.7707"
+        },
+        {
+          "name": "Kol",
+          "role": "main",
+          "kg": "4.500",
+          "yield_pct": "18.00",
+          "allocated_cost": "74.98",
+          "unit_cost": "16.6622"
+        },
+        {
+          "name": "Sırt",
+          "role": "main",
+          "kg": "2.500",
+          "yield_pct": "10.00",
+          "allocated_cost": "49.98",
+          "unit_cost": "19.9920"
+        },
+        {
+          "name": "Kaburga",
+          "role": "main",
+          "kg": "3.000",
+          "yield_pct": "12.00",
+          "allocated_cost": "39.99",
+          "unit_cost": "13.3300"
+        },
+        {
+          "name": "Gerdan",
+          "role": "main",
+          "kg": "2.000",
+          "yield_pct": "8.00",
+          "allocated_cost": "22.22",
+          "unit_cost": "11.1100"
+        },
+        {
+          "name": "Kıyma",
+          "role": "main",
+          "kg": "2.500",
+          "yield_pct": "10.00",
+          "allocated_cost": "30.55",
+          "unit_cost": "12.2200"
+        },
+        {
+          "name": "Fire",
+          "role": "waste",
+          "kg": "3.000",
+          "yield_pct": "12.00",
+          "allocated_cost": "0.00",
+          "unit_cost": "0.0000"
+        }
+      ],
+      "total_allocated": "351.00",
+      "warnings": [
+        "PURCHASE_TOTAL_MISMATCH"
+      ]
+    }
+  },
+  {
+    "case_id": "KZ-2026-004-QTY",
+    "description": "Yan urunlu: 1.0 kg ciger (6 EUR/kg) maliyetten dusulur, kalan ana parcalara dagitilir (quantity)",
+    "input": {
+      "input_weight_kg": "25",
+      "unit_cost_per_kg": "11.50",
+      "declared_total_cost": null,
+      "cost_basis": "computed",
+      "method": "quantity",
+      "parts": [
+        {
+          "name": "But",
+          "kg": "7.0",
+          "reference_price": "16.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Kol",
+          "kg": "4.5",
+          "reference_price": "15.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Sırt",
+          "kg": "2.5",
+          "reference_price": "18.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Kaburga",
+          "kg": "3.0",
+          "reference_price": "12.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Gerdan",
+          "kg": "2.0",
+          "reference_price": "10.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Kıyma",
+          "kg": "2.0",
+          "reference_price": "11.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Ciğer",
+          "kg": "1.0",
+          "reference_price": "6.00",
+          "is_waste": false,
+          "is_by_product": true
+        },
+        {
+          "name": "Fire",
+          "kg": "3.0",
+          "reference_price": "0.00",
+          "is_waste": true,
+          "is_by_product": false
+        }
+      ]
+    },
+    "expected": {
+      "method": "quantity",
+      "cost_basis": "computed",
+      "input_weight_kg": "25.000",
+      "computed_total_cost": "287.50",
+      "declared_total_cost": null,
+      "total_input_cost": "287.50",
+      "parts_weight_kg": "25.000",
+      "balance_diff_kg": "0.000",
+      "closable": true,
+      "sellable_kg": "21.000",
+      "by_product_value": "6.00",
+      "allocation_pool": "281.50",
+      "parts": [
+        {
+          "name": "But",
+          "role": "main",
+          "kg": "7.000",
+          "yield_pct": "28.00",
+          "allocated_cost": "93.84",
+          "unit_cost": "13.4057"
+        },
+        {
+          "name": "Kol",
+          "role": "main",
+          "kg": "4.500",
+          "yield_pct": "18.00",
+          "allocated_cost": "60.32",
+          "unit_cost": "13.4044"
+        },
+        {
+          "name": "Sırt",
+          "role": "main",
+          "kg": "2.500",
+          "yield_pct": "10.00",
+          "allocated_cost": "33.51",
+          "unit_cost": "13.4040"
+        },
+        {
+          "name": "Kaburga",
+          "role": "main",
+          "kg": "3.000",
+          "yield_pct": "12.00",
+          "allocated_cost": "40.21",
+          "unit_cost": "13.4033"
+        },
+        {
+          "name": "Gerdan",
+          "role": "main",
+          "kg": "2.000",
+          "yield_pct": "8.00",
+          "allocated_cost": "26.81",
+          "unit_cost": "13.4050"
+        },
+        {
+          "name": "Kıyma",
+          "role": "main",
+          "kg": "2.000",
+          "yield_pct": "8.00",
+          "allocated_cost": "26.81",
+          "unit_cost": "13.4050"
+        },
+        {
+          "name": "Ciğer",
+          "role": "by_product",
+          "kg": "1.000",
+          "yield_pct": "4.00",
+          "allocated_cost": "6.00",
+          "unit_cost": "6.0000"
+        },
+        {
+          "name": "Fire",
+          "role": "waste",
+          "kg": "3.000",
+          "yield_pct": "12.00",
+          "allocated_cost": "0.00",
+          "unit_cost": "0.0000"
+        }
+      ],
+      "total_allocated": "287.50",
+      "warnings": []
+    }
+  },
+  {
+    "case_id": "KZ-2026-004-VAL",
+    "description": "Yan urunlu: 1.0 kg ciger (6 EUR/kg) maliyetten dusulur, kalan ana parcalara dagitilir (value)",
+    "input": {
+      "input_weight_kg": "25",
+      "unit_cost_per_kg": "11.50",
+      "declared_total_cost": null,
+      "cost_basis": "computed",
+      "method": "value",
+      "parts": [
+        {
+          "name": "But",
+          "kg": "7.0",
+          "reference_price": "16.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Kol",
+          "kg": "4.5",
+          "reference_price": "15.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Sırt",
+          "kg": "2.5",
+          "reference_price": "18.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Kaburga",
+          "kg": "3.0",
+          "reference_price": "12.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Gerdan",
+          "kg": "2.0",
+          "reference_price": "10.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Kıyma",
+          "kg": "2.0",
+          "reference_price": "11.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Ciğer",
+          "kg": "1.0",
+          "reference_price": "6.00",
+          "is_waste": false,
+          "is_by_product": true
+        },
+        {
+          "name": "Fire",
+          "kg": "3.0",
+          "reference_price": "0.00",
+          "is_waste": true,
+          "is_by_product": false
+        }
+      ]
+    },
+    "expected": {
+      "method": "value",
+      "cost_basis": "computed",
+      "input_weight_kg": "25.000",
+      "computed_total_cost": "287.50",
+      "declared_total_cost": null,
+      "total_input_cost": "287.50",
+      "parts_weight_kg": "25.000",
+      "balance_diff_kg": "0.000",
+      "closable": true,
+      "sellable_kg": "21.000",
+      "by_product_value": "6.00",
+      "allocation_pool": "281.50",
+      "parts": [
+        {
+          "name": "But",
+          "role": "main",
+          "kg": "7.000",
+          "yield_pct": "28.00",
+          "allocated_cost": "104.23",
+          "unit_cost": "14.8900"
+        },
+        {
+          "name": "Kol",
+          "role": "main",
+          "kg": "4.500",
+          "yield_pct": "18.00",
+          "allocated_cost": "62.81",
+          "unit_cost": "13.9578"
+        },
+        {
+          "name": "Sırt",
+          "role": "main",
+          "kg": "2.500",
+          "yield_pct": "10.00",
+          "allocated_cost": "41.88",
+          "unit_cost": "16.7520"
+        },
+        {
+          "name": "Kaburga",
+          "role": "main",
+          "kg": "3.000",
+          "yield_pct": "12.00",
+          "allocated_cost": "33.50",
+          "unit_cost": "11.1667"
+        },
+        {
+          "name": "Gerdan",
+          "role": "main",
+          "kg": "2.000",
+          "yield_pct": "8.00",
+          "allocated_cost": "18.61",
+          "unit_cost": "9.3050"
+        },
+        {
+          "name": "Kıyma",
+          "role": "main",
+          "kg": "2.000",
+          "yield_pct": "8.00",
+          "allocated_cost": "20.47",
+          "unit_cost": "10.2350"
+        },
+        {
+          "name": "Ciğer",
+          "role": "by_product",
+          "kg": "1.000",
+          "yield_pct": "4.00",
+          "allocated_cost": "6.00",
+          "unit_cost": "6.0000"
+        },
+        {
+          "name": "Fire",
+          "role": "waste",
+          "kg": "3.000",
+          "yield_pct": "12.00",
+          "allocated_cost": "0.00",
+          "unit_cost": "0.0000"
+        }
+      ],
+      "total_allocated": "287.50",
+      "warnings": []
+    }
+  },
+  {
+    "case_id": "KZ-2026-005-QTY",
+    "description": "Kurus farki: 100.00 / 3 esit parca = 33.33 x 3 = 99.99, 0.01 fark ilk (esit) satira eklenir",
+    "input": {
+      "input_weight_kg": "10",
+      "unit_cost_per_kg": "10.00",
+      "declared_total_cost": null,
+      "cost_basis": "computed",
+      "method": "quantity",
+      "parts": [
+        {
+          "name": "A",
+          "kg": "3.0",
+          "reference_price": "10.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "B",
+          "kg": "3.0",
+          "reference_price": "10.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "C",
+          "kg": "3.0",
+          "reference_price": "10.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Fire",
+          "kg": "1.0",
+          "reference_price": "0.00",
+          "is_waste": true,
+          "is_by_product": false
+        }
+      ]
+    },
+    "expected": {
+      "method": "quantity",
+      "cost_basis": "computed",
+      "input_weight_kg": "10.000",
+      "computed_total_cost": "100.00",
+      "declared_total_cost": null,
+      "total_input_cost": "100.00",
+      "parts_weight_kg": "10.000",
+      "balance_diff_kg": "0.000",
+      "closable": true,
+      "sellable_kg": "9.000",
+      "by_product_value": "0.00",
+      "allocation_pool": "100.00",
+      "parts": [
+        {
+          "name": "A",
+          "role": "main",
+          "kg": "3.000",
+          "yield_pct": "30.00",
+          "allocated_cost": "33.34",
+          "unit_cost": "11.1133"
+        },
+        {
+          "name": "B",
+          "role": "main",
+          "kg": "3.000",
+          "yield_pct": "30.00",
+          "allocated_cost": "33.33",
+          "unit_cost": "11.1100"
+        },
+        {
+          "name": "C",
+          "role": "main",
+          "kg": "3.000",
+          "yield_pct": "30.00",
+          "allocated_cost": "33.33",
+          "unit_cost": "11.1100"
+        },
+        {
+          "name": "Fire",
+          "role": "waste",
+          "kg": "1.000",
+          "yield_pct": "10.00",
+          "allocated_cost": "0.00",
+          "unit_cost": "0.0000"
+        }
+      ],
+      "total_allocated": "100.00",
+      "warnings": []
+    }
+  },
+  {
+    "case_id": "KZ-2026-006-QTY",
+    "description": "Tolerans siniri: fark tam 0.05 kg, uyari yok, closable=true",
+    "input": {
+      "input_weight_kg": "10",
+      "unit_cost_per_kg": "10.00",
+      "declared_total_cost": null,
+      "cost_basis": "computed",
+      "method": "quantity",
+      "parts": [
+        {
+          "name": "A",
+          "kg": "5.00",
+          "reference_price": "10.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "B",
+          "kg": "4.95",
+          "reference_price": "10.00",
+          "is_waste": false,
+          "is_by_product": false
+        }
+      ]
+    },
+    "expected": {
+      "method": "quantity",
+      "cost_basis": "computed",
+      "input_weight_kg": "10.000",
+      "computed_total_cost": "100.00",
+      "declared_total_cost": null,
+      "total_input_cost": "100.00",
+      "parts_weight_kg": "9.950",
+      "balance_diff_kg": "0.050",
+      "closable": true,
+      "sellable_kg": "9.950",
+      "by_product_value": "0.00",
+      "allocation_pool": "100.00",
+      "parts": [
+        {
+          "name": "A",
+          "role": "main",
+          "kg": "5.000",
+          "yield_pct": "50.00",
+          "allocated_cost": "50.25",
+          "unit_cost": "10.0500"
+        },
+        {
+          "name": "B",
+          "role": "main",
+          "kg": "4.950",
+          "yield_pct": "49.50",
+          "allocated_cost": "49.75",
+          "unit_cost": "10.0505"
+        }
+      ],
+      "total_allocated": "100.00",
+      "warnings": []
+    }
+  }
+]
