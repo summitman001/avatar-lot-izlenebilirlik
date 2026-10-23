@@ -43,6 +43,7 @@ def test_predict_production_500g_urun(client):
     g500 = client.post("/predict/production", json={"et_kg": "100", "supplier_id": "TED-B", "unit_weight_kg": "0.500"}).json()
     # ayni cikti kg, adet iki kat
     assert Decimal(g500["predicted_output_kg"]) == Decimal(kg1["predicted_output_kg"])
+    assert len(kg1["predicted_output_kg"].split(".")[1]) == 3  # kg 3 ondalik
     assert Decimal(g500["predicted_delivered_qty"]) == 2 * Decimal(kg1["predicted_delivered_qty"])
 
 

@@ -111,7 +111,7 @@ def predict_production(req: ProductionRequest, request: Request) -> ProductionRe
         et_kg=dstr(req.et_kg),
         unit_weight_kg=dstr(req.unit_weight_kg),
         predicted_yield_ratio=dstr(pred.yield_ratio),
-        predicted_output_kg=dstr(pred.delivered_qty * req.unit_weight_kg),
+        predicted_output_kg=dstr(qty3(pred.delivered_qty * req.unit_weight_kg)),
         predicted_delivered_qty=dstr(pred.delivered_qty),
     )
 
