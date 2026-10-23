@@ -9,3 +9,9 @@ node_modules/
 .vscode/
 *.log
 .hypothesis/
+
+# build ciktilari
+web/dist/
+backend/*.exe
+backend/api.exe
+backend/seed.exe
