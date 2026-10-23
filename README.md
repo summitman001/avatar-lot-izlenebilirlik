@@ -54,6 +54,13 @@ docker/     MySQL ilk kurulum betiği (test veritabanı)
 
 Backend testleri `TEST_DATABASE_URL` ile Docker'daki ayrı `avatar_test` veritabanına bağlanır (veritabanı adı `_test` ile bitmezse reddeder; geliştirme verisine dokunmaz).
 
+## Bilinen sınırlamalar
+
+- **Kimlik doğrulama yok.** API herkese açıktır ve CORS `CORS_ORIGINS=*` ile her origin'e izin verir. Yarışma demosu içindir; üretimde kimlik doğrulama eklenmeli ve CORS daraltılmalıdır.
+- **`POST /sync/push` stub.** `op_id` kaydedilir, tekrarında `duplicate` döner; payload henüz işlenmez, bu yüzden ilk gönderim `applied` değil `flagged` döner. Pull (`item`, `customer`, `warehouse`, `lot`) tamdır. Ayrıntı: [`docs/sync.md`](docs/sync.md).
+- **MySQL `log_bin_trust_function_creators=1` gerekir.** MySQL 8.4'te binlog açıkken `CREATE TRIGGER` SUPER yetkisi ister; uygulama kullanıcısı SUPER değildir. Değiştirilemez `stock_movement` defteri trigger'larla korunduğu için bu ayar compose'ta (`mysqld` bayrağı) ve CI'da (`SET GLOBAL`) açıktır. Yönetilen bir MySQL'de aynı parametreyi açın veya migration'ı yetkili kullanıcıyla çalıştırın.
+- Dış üretim, parçalama, satış, izlenebilirlik ve geri çağırma servisleri henüz yok (şema ve hesap kuralları hazır); bkz. [`docs/HANDOFF.md`](docs/HANDOFF.md).
+
 ## Dokümanlar
 
 - [`docs/HANDOFF.md`](docs/HANDOFF.md) — **devralan geliştirici için**: ne bitti, ne stub, neden bu kararlar, sıradaki işler
