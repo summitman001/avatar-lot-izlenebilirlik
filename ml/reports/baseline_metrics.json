@@ -8,9 +8,9 @@
         "version": "1.0.0",
         "baseline": true,
         "metrics": {
-          "target": "delivered_qty (kg)",
-          "mae_kg": "1.1942",
-          "mape_pct": "1.1733"
+          "target": "delivered_qty (adet)",
+          "mae_kg": "1.1092",
+          "mape_pct": "1.0534"
         }
       }
     }
@@ -26,37 +26,37 @@
         "metrics": {
           "target": "parca kg (but, kol, sirt, kaburga, gerdan, kiyma, fire)",
           "overall": {
-            "mae_kg": "0.0600",
-            "mape_pct": "2.1519"
+            "mae_kg": "0.0618",
+            "mape_pct": "2.2185"
           },
           "per_part": {
             "but": {
-              "mae_kg": "0.0903",
-              "mape_pct": "1.3850"
+              "mae_kg": "0.1008",
+              "mape_pct": "1.5434"
             },
             "kol": {
-              "mae_kg": "0.0745",
-              "mape_pct": "2.1052"
+              "mae_kg": "0.0742",
+              "mape_pct": "2.1224"
             },
             "sirt": {
-              "mae_kg": "0.0481",
-              "mape_pct": "2.1947"
+              "mae_kg": "0.0482",
+              "mape_pct": "2.2020"
             },
             "kaburga": {
-              "mae_kg": "0.0626",
-              "mape_pct": "2.3979"
+              "mae_kg": "0.0617",
+              "mape_pct": "2.4371"
             },
             "gerdan": {
-              "mae_kg": "0.0367",
-              "mape_pct": "2.1287"
+              "mae_kg": "0.0366",
+              "mape_pct": "2.1359"
             },
             "kiyma": {
-              "mae_kg": "0.0521",
-              "mape_pct": "2.4645"
+              "mae_kg": "0.0547",
+              "mape_pct": "2.6720"
             },
             "fire": {
-              "mae_kg": "0.0553",
-              "mape_pct": "2.3873"
+              "mae_kg": "0.0561",
+              "mape_pct": "2.4167"
             }
           }
         }

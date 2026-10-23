@@ -1,0 +1,73 @@
+{
+  "production": {
+    "split": "time_ordered_80_20 (en yeni %20 test)",
+    "n_test": 12,
+    "mae_unit": "kg (delivered_qty)",
+    "models": {
+      "production_baseline_supplier_mean": {
+        "version": "1.0.0",
+        "baseline": true,
+        "points": [
+          {
+            "n_train": 5,
+            "mae": "1.7350",
+            "mape_pct": "1.7150"
+          },
+          {
+            "n_train": 10,
+            "mae": "1.6000",
+            "mape_pct": "1.5981"
+          },
+          {
+            "n_train": 20,
+            "mae": "1.2150",
+            "mape_pct": "1.1728"
+          },
+          {
+            "n_train": 40,
+            "mae": "1.2758",
+            "mape_pct": "1.2169"
+          }
+        ]
+      }
+    }
+  },
+  "cutting": {
+    "split": "random_80_20 (seed=42)",
+    "n_test": 40,
+    "mae_unit": "kg (tum parcalarin ortalamasi)",
+    "models": {
+      "cutting_baseline_breed_mean": {
+        "version": "1.0.0",
+        "baseline": true,
+        "points": [
+          {
+            "n_train": 10,
+            "mae": "0.0736",
+            "mape_pct": "2.6591"
+          },
+          {
+            "n_train": 25,
+            "mae": "0.0654",
+            "mape_pct": "2.3563"
+          },
+          {
+            "n_train": 50,
+            "mae": "0.0631",
+            "mape_pct": "2.2699"
+          },
+          {
+            "n_train": 100,
+            "mae": "0.0614",
+            "mape_pct": "2.2082"
+          },
+          {
+            "n_train": 160,
+            "mae": "0.0618",
+            "mape_pct": "2.2185"
+          }
+        ]
+      }
+    }
+  }
+}

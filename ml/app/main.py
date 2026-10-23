@@ -37,6 +37,7 @@ class ProductionRequest(BaseModel):
     et_kg: Decimal = Field(gt=0, le=100000, max_digits=12, decimal_places=3)
     supplier_id: str | None = None
     producer_id: str | None = None
+    unit_weight_kg: Decimal = Field(default=Decimal("1.000"), gt=0, le=100, max_digits=8, decimal_places=3)
     order_date: date | None = None  # baseline kullanmaz; ileri modeller icin kabul edilir
 
 
@@ -47,8 +48,10 @@ class ProductionResponse(BaseModel):
     supplier_used: str
     fallback: bool
     et_kg: str
+    unit_weight_kg: str
     predicted_yield_ratio: str
-    predicted_delivered_qty: str
+    predicted_output_kg: str
+    predicted_delivered_qty: str  # adet = cikti kg / unit_weight_kg
 
 
 class CuttingRequest(BaseModel):
@@ -91,7 +94,13 @@ def models(request: Request) -> dict[str, object]:
 def predict_production(req: ProductionRequest, request: Request) -> ProductionResponse:
     loaded = _service(request).active(PRODUCTION)
     pred = loaded.model.predict(
-        frame(et_kg=dstr(req.et_kg), supplier_id=req.supplier_id, producer_id=req.producer_id, order_date=req.order_date)
+        frame(
+            et_kg=dstr(req.et_kg),
+            supplier_id=req.supplier_id,
+            producer_id=req.producer_id,
+            unit_weight_kg=dstr(req.unit_weight_kg),
+            order_date=req.order_date,
+        )
     )[0]
     return ProductionResponse(
         model_name=loaded.info.name,
@@ -100,7 +109,9 @@ def predict_production(req: ProductionRequest, request: Request) -> ProductionRe
         supplier_used=pred.notes.get("supplier_used", "ALL"),
         fallback=bool(pred.notes.get("fallback", False)),
         et_kg=dstr(req.et_kg),
+        unit_weight_kg=dstr(req.unit_weight_kg),
         predicted_yield_ratio=dstr(pred.yield_ratio),
+        predicted_output_kg=dstr(qty3(pred.delivered_qty * req.unit_weight_kg)),
         predicted_delivered_qty=dstr(pred.delivered_qty),
     )
 

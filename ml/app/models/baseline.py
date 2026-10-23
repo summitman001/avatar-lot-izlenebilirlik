@@ -24,6 +24,12 @@ def _mean(values: list[Decimal]) -> Decimal:
     return sum(values, Decimal(0)) / Decimal(len(values))
 
 
+def _unit_weights(df: pd.DataFrame) -> list[Decimal]:
+    if "unit_weight_kg" not in df.columns:
+        return [Decimal(1)] * len(df)
+    return [Decimal(w) for w in df["unit_weight_kg"]]
+
+
 def _opt(df: pd.DataFrame, i: int, col: str) -> str | None:
     if col not in df.columns:
         return None
@@ -40,7 +46,9 @@ class SupplierMeanYield(ProductionModel):
         self.global_mean: Decimal | None = None
 
     def fit(self, df: pd.DataFrame) -> "SupplierMeanYield":
-        yields = [Decimal(d) / Decimal(e) for d, e in zip(df["delivered_qty"], df["et_kg"])]
+        # verim = cikti kg / et kg ; cikti kg = teslim adet x urun birim agirligi
+        weights = _unit_weights(df)
+        yields = [Decimal(d) * w / Decimal(e) for d, e, w in zip(df["delivered_qty"], df["et_kg"], weights)]
         self.global_mean = _mean(yields)
         groups: dict[str, list[Decimal]] = {}
         for s, y in zip(df["supplier_id"], yields):
@@ -54,12 +62,13 @@ class SupplierMeanYield(ProductionModel):
         out = []
         for i in range(len(df)):
             et = Decimal(str(df["et_kg"].iloc[i]))
+            unit_weight = Decimal(_opt(df, i, "unit_weight_kg") or "1")
             supplier = _opt(df, i, "supplier_id")
             known = supplier in self.by_supplier
             y = self.by_supplier[supplier] if known else self.global_mean
             out.append(
                 ProductionPrediction(
-                    delivered_qty=(et * y).quantize(_Q2, rounding=ROUND_HALF_UP),
+                    delivered_qty=(et * y / unit_weight).quantize(_Q2, rounding=ROUND_HALF_UP),
                     yield_ratio=ratio4(y),
                     notes={"supplier_used": supplier if known else GLOBAL_KEY, "fallback": not known},
                 )

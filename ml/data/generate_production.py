@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import argparse
 import csv
-from datetime import date
+from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
@@ -31,21 +31,30 @@ PARAMS = {
     "taban_verim_kg_per_kg_et": 0.85,
     "yaz_etkisi_haziran_agustos": -0.01,
     "verim_gurultu_sigma": 0.012,
+    "tedarikci_x_uretici_etkilesimi": {"TED-A x URT-2": "-0.015", "TED-B x URT-2": "+0.008", "TED-C x URT-1": "+0.010"},
+    "et_lotu_yasi_gun": {"dagilim": "Uniform tamsayi", "min": 1, "max": 10, "etki": "-0.003 verim / 3 gun (dogrusal)"},
+    "urun": {"ad": "Narin Sucuk", "unit_weight_kg": "1.000"},
     "baharat_orani_et": {"dagilim": "Uniform", "min": 0.017, "max": 0.023, "yuvarlama": "0.1 kg"},
     "bagirsak_orani_et": {"dagilim": "Uniform", "min": 0.040, "max": 0.060, "yuvarlama": "0.1 kg"},
     "et_fiyati": {"baslangic_eur_kg": 8.60, "aylik_enflasyon": 0.006, "gurultu_sigma": 0.015},
     "baharat_fiyati": {"baslangic_eur_kg": 23.20, "aylik_enflasyon": 0.004, "gurultu_sigma": 0.010},
     "bagirsak_fiyati": {"baslangic_eur_kg": 11.20, "aylik_enflasyon": 0.004, "gurultu_sigma": 0.010},
-    "teslim_adet": "yuvarlanmis tamsayi: et_kg x gercek_verim",
+    "teslim_adet": "yuvarlanmis tamsayi: et_kg x gercek_verim / unit_weight_kg",
 }
 
 SUPPLIERS = {"TED-A": 0.02, "TED-B": 0.0, "TED-C": -0.02}
 SUPPLIER_P = [0.35, 0.40, 0.25]
+# tedarikci x dis uretici etkilesimi (ana etkilere ek)
+INTERACTION = {("TED-A", "URT-2"): -0.015, ("TED-B", "URT-2"): 0.008, ("TED-C", "URT-1"): 0.010}
+LOT_AGE_MIN, LOT_AGE_MAX = 1, 10  # alistan uretime gecen gun
+LOT_AGE_EFFECT_PER_3_DAYS = -0.003
+PRODUCT = "Narin Sucuk"
+UNIT_WEIGHT_KG = Decimal("1.000")
 PRODUCERS = {"URT-1": Decimal("5.50"), "URT-2": Decimal("5.80")}
 PRODUCER_P = [0.60, 0.40]
 
 COLUMNS = [
-    "order_id", "order_date", "year", "month", "month_index", "is_summer", "supplier_id", "producer_id",
+    "order_id", "order_date", "meat_purchase_date", "lot_age_days", "product", "unit_weight_kg", "year", "month", "month_index", "is_summer", "supplier_id", "producer_id",
     "et_kg", "spice_kg", "casing_kg", "meat_unit_price", "spice_unit_price", "casing_unit_price",
     "service_unit_price", "delivered_qty", "yield_ratio", "material_cost", "service_cost", "total_cost",
     "ekp_unit", "ekp_display",
@@ -69,6 +78,7 @@ def generate() -> list[dict[str, str]]:
     spice_noise = rng.normal(0, 0.010, N_ORDERS)
     casing_noise = rng.normal(0, 0.010, N_ORDERS)
     yield_noise = rng.normal(0, 0.012, N_ORDERS)
+    lot_age = rng.integers(LOT_AGE_MIN, LOT_AGE_MAX + 1, N_ORDERS)
 
     rows = []
     for i in range(N_ORDERS):
@@ -77,9 +87,20 @@ def generate() -> list[dict[str, str]]:
         month = (START_MONTH - 1 + m) % 12 + 1
         d = date(year, month, int(day[i]))
         is_summer = 1 if month in (6, 7, 8) else 0
-        true_yield = 0.85 + SUPPLIERS[str(supplier[i])] - 0.01 * is_summer + float(yield_noise[i])
+        sup, prod = str(supplier[i]), str(producer[i])
+        age = int(lot_age[i])
+        true_yield = (
+            0.85
+            + SUPPLIERS[sup]
+            + INTERACTION.get((sup, prod), 0.0)
+            - 0.01 * is_summer
+            + LOT_AGE_EFFECT_PER_3_DAYS * age / 3
+            + float(yield_noise[i])
+        )
         et = Decimal(int(et_kg[i]))
-        delivered = (et * Decimal(repr(true_yield))).quantize(Decimal(1), rounding=ROUND_HALF_UP)
+        # cikti kg = et x verim ; teslim edilen adet = cikti kg / urun birim agirligi
+        output_kg = et * Decimal(repr(true_yield))
+        delivered = (output_kg / UNIT_WEIGHT_KG).quantize(Decimal(1), rounding=ROUND_HALF_UP)
         spice_kg = max(_dec(float(et) * spice_ratio[i], 1), Decimal("0.5"))
         casing_kg = max(_dec(float(et) * casing_ratio[i], 1), Decimal("0.5"))
         meat_price = _dec(8.60 * (1 + 0.006 * m) * (1 + meat_noise[i]), 2)
@@ -92,17 +113,21 @@ def generate() -> list[dict[str, str]]:
             production_cost.Lot("Baharat", "spice", spice_kg, spice_price),
             production_cost.Lot("Bagirsak", "casing", casing_kg, casing_price),
         ]
-        res = production_cost.calculate_production_cost(lots, delivered, service_price)
+        res = production_cost.calculate_production_cost(lots, delivered, service_price, unit_weight_kg=UNIT_WEIGHT_KG)
         rows.append(
             {
                 "order_id": f"UE-{i + 1:03d}",
                 "order_date": d.isoformat(),
+                "meat_purchase_date": (d - timedelta(days=age)).isoformat(),
+                "lot_age_days": str(age),
+                "product": PRODUCT,
+                "unit_weight_kg": dstr(UNIT_WEIGHT_KG),
                 "year": str(year),
                 "month": str(month),
                 "month_index": str(m),
                 "is_summer": str(is_summer),
-                "supplier_id": str(supplier[i]),
-                "producer_id": str(producer[i]),
+                "supplier_id": sup,
+                "producer_id": prod,
                 "et_kg": dstr(et),
                 "spice_kg": dstr(spice_kg),
                 "casing_kg": dstr(casing_kg),
@@ -111,7 +136,7 @@ def generate() -> list[dict[str, str]]:
                 "casing_unit_price": dstr(casing_price),
                 "service_unit_price": dstr(service_price),
                 "delivered_qty": dstr(delivered),
-                "yield_ratio": dstr(ratio4(delivered / et)),
+                "yield_ratio": dstr(ratio4(delivered * UNIT_WEIGHT_KG / et)),
                 "material_cost": dstr(res.material_cost),
                 "service_cost": dstr(res.service_cost),
                 "total_cost": dstr(res.total_cost),

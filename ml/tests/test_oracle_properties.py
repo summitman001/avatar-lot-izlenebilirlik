@@ -66,6 +66,33 @@ def test_fire_maliyet_tasimaz_ve_yuku_ana_parcalara_biner():
     assert [p["allocated_cost"] for p in out["parts"]] == ["150.00", "0.00"]
 
 
+lot_st = st.builds(
+    production_cost.Lot,
+    name=st.just("x"),
+    category=st.sampled_from(["meat", "spice", "casing", "other"]),
+    quantity=st.decimals(min_value="0", max_value="500", places=3),
+    unit_cost=st.decimals(min_value="0", max_value="60", places=4),
+)
+
+
+@settings(max_examples=300, deadline=None)
+@given(
+    lots=st.lists(lot_st, min_size=1, max_size=8),
+    delivered=st.decimals(min_value="1", max_value="500", places=0),
+    price=st.decimals(min_value="0", max_value="20", places=2),
+    invoiced=st.one_of(st.none(), st.decimals(min_value="0", max_value="500", places=0)),
+)
+def test_satir_toplamlari_total_cost_a_birebir_esit(lots, delivered, price, invoiced):
+    r = production_cost.calculate_production_cost(lots, delivered, price, invoiced_qty=invoiced)
+    assert sum(a for _, a in r.lot_lines) == r.material_cost
+    assert r.material_cost + r.service_cost == r.total_cost
+    # her satir tek basina 2 ondalik ROUND_HALF_UP
+    for lot, (_, amount) in zip(lots, r.lot_lines):
+        assert amount == money(lot.quantity * lot.unit_cost)
+    # ekp_display 4 ondalikli degerden degil, dogrudan total/adet'ten yuvarlanir
+    assert r.ekp_display == money(r.total_cost / delivered)
+
+
 def test_float_reddedilir():
     with pytest.raises(TypeError):
         D(1.5)

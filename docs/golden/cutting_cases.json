@@ -7,6 +7,7 @@
       "unit_cost_per_kg": "11.50",
       "declared_total_cost": "351.00",
       "cost_basis": "computed",
+      "resolution_note": "Demo için 287.50 seçildi: birim fiyat (11.50 €/kg) ve ağırlık (25 kg) birbiriyle tutarlı, hatalı olan tek alan beyan edilen toplam (351.00). 351.00 alternatifi alternative_basis altında raporlanır.",
       "method": "quantity",
       "parts": [
         {
@@ -56,6 +57,8 @@
     "expected": {
       "method": "quantity",
       "cost_basis": "computed",
+      "cost_basis_used": "computed",
+      "resolution_note": "Demo için 287.50 seçildi: birim fiyat (11.50 €/kg) ve ağırlık (25 kg) birbiriyle tutarlı, hatalı olan tek alan beyan edilen toplam (351.00). 351.00 alternatifi alternative_basis altında raporlanır.",
       "input_weight_kg": "25.000",
       "computed_total_cost": "287.50",
       "declared_total_cost": "351.00",
@@ -117,6 +120,37 @@
         }
       ],
       "total_allocated": "287.50",
+      "alternative_basis": {
+        "cost_basis": "declared",
+        "total_input_cost": "351.00",
+        "parts": [
+          {
+            "name": "But",
+            "allocated_cost": "119.65"
+          },
+          {
+            "name": "Kol",
+            "allocated_cost": "71.80"
+          },
+          {
+            "name": "Sırt",
+            "allocated_cost": "39.89"
+          },
+          {
+            "name": "Kaburga",
+            "allocated_cost": "47.86"
+          },
+          {
+            "name": "Gerdan",
+            "allocated_cost": "31.91"
+          },
+          {
+            "name": "Kıyma",
+            "allocated_cost": "39.89"
+          }
+        ],
+        "total_allocated": "351.00"
+      },
       "warnings": [
         "PURCHASE_TOTAL_MISMATCH",
         "WEIGHT_IMBALANCE"
@@ -131,6 +165,7 @@
       "unit_cost_per_kg": "11.50",
       "declared_total_cost": "351.00",
       "cost_basis": "computed",
+      "resolution_note": "Demo için 287.50 seçildi: birim fiyat (11.50 €/kg) ve ağırlık (25 kg) birbiriyle tutarlı, hatalı olan tek alan beyan edilen toplam (351.00). 351.00 alternatifi alternative_basis altında raporlanır.",
       "method": "value",
       "parts": [
         {
@@ -180,6 +215,8 @@
     "expected": {
       "method": "value",
       "cost_basis": "computed",
+      "cost_basis_used": "computed",
+      "resolution_note": "Demo için 287.50 seçildi: birim fiyat (11.50 €/kg) ve ağırlık (25 kg) birbiriyle tutarlı, hatalı olan tek alan beyan edilen toplam (351.00). 351.00 alternatifi alternative_basis altında raporlanır.",
       "input_weight_kg": "25.000",
       "computed_total_cost": "287.50",
       "declared_total_cost": "351.00",
@@ -241,6 +278,37 @@
         }
       ],
       "total_allocated": "287.50",
+      "alternative_basis": {
+        "cost_basis": "declared",
+        "total_input_cost": "351.00",
+        "parts": [
+          {
+            "name": "But",
+            "allocated_cost": "133.28"
+          },
+          {
+            "name": "Kol",
+            "allocated_cost": "74.98"
+          },
+          {
+            "name": "Sırt",
+            "allocated_cost": "49.98"
+          },
+          {
+            "name": "Kaburga",
+            "allocated_cost": "39.99"
+          },
+          {
+            "name": "Gerdan",
+            "allocated_cost": "22.22"
+          },
+          {
+            "name": "Kıyma",
+            "allocated_cost": "30.55"
+          }
+        ],
+        "total_allocated": "351.00"
+      },
       "warnings": [
         "PURCHASE_TOTAL_MISMATCH",
         "WEIGHT_IMBALANCE"
@@ -255,6 +323,7 @@
       "unit_cost_per_kg": "11.50",
       "declared_total_cost": "351.00",
       "cost_basis": "computed",
+      "resolution_note": "Demo için 287.50 seçildi: birim fiyat (11.50 €/kg) ve ağırlık (25 kg) birbiriyle tutarlı, hatalı olan tek alan beyan edilen toplam (351.00). 351.00 alternatifi alternative_basis altında raporlanır.",
       "method": "quantity",
       "parts": [
         {
@@ -311,6 +380,8 @@
     "expected": {
       "method": "quantity",
       "cost_basis": "computed",
+      "cost_basis_used": "computed",
+      "resolution_note": "Demo için 287.50 seçildi: birim fiyat (11.50 €/kg) ve ağırlık (25 kg) birbiriyle tutarlı, hatalı olan tek alan beyan edilen toplam (351.00). 351.00 alternatifi alternative_basis altında raporlanır.",
       "input_weight_kg": "25.000",
       "computed_total_cost": "287.50",
       "declared_total_cost": "351.00",
@@ -380,6 +451,41 @@
         }
       ],
       "total_allocated": "287.50",
+      "alternative_basis": {
+        "cost_basis": "declared",
+        "total_input_cost": "351.00",
+        "parts": [
+          {
+            "name": "But",
+            "allocated_cost": "119.65"
+          },
+          {
+            "name": "Kol",
+            "allocated_cost": "71.80"
+          },
+          {
+            "name": "Sırt",
+            "allocated_cost": "39.89"
+          },
+          {
+            "name": "Kaburga",
+            "allocated_cost": "47.86"
+          },
+          {
+            "name": "Gerdan",
+            "allocated_cost": "31.91"
+          },
+          {
+            "name": "Kıyma",
+            "allocated_cost": "39.89"
+          },
+          {
+            "name": "Fire",
+            "allocated_cost": "0.00"
+          }
+        ],
+        "total_allocated": "351.00"
+      },
       "warnings": [
         "PURCHASE_TOTAL_MISMATCH"
       ]
@@ -393,6 +499,7 @@
       "unit_cost_per_kg": "11.50",
       "declared_total_cost": "351.00",
       "cost_basis": "computed",
+      "resolution_note": "Demo için 287.50 seçildi: birim fiyat (11.50 €/kg) ve ağırlık (25 kg) birbiriyle tutarlı, hatalı olan tek alan beyan edilen toplam (351.00). 351.00 alternatifi alternative_basis altında raporlanır.",
       "method": "value",
       "parts": [
         {
@@ -449,6 +556,8 @@
     "expected": {
       "method": "value",
       "cost_basis": "computed",
+      "cost_basis_used": "computed",
+      "resolution_note": "Demo için 287.50 seçildi: birim fiyat (11.50 €/kg) ve ağırlık (25 kg) birbiriyle tutarlı, hatalı olan tek alan beyan edilen toplam (351.00). 351.00 alternatifi alternative_basis altında raporlanır.",
       "input_weight_kg": "25.000",
       "computed_total_cost": "287.50",
       "declared_total_cost": "351.00",
@@ -518,6 +627,41 @@
         }
       ],
       "total_allocated": "287.50",
+      "alternative_basis": {
+        "cost_basis": "declared",
+        "total_input_cost": "351.00",
+        "parts": [
+          {
+            "name": "But",
+            "allocated_cost": "133.28"
+          },
+          {
+            "name": "Kol",
+            "allocated_cost": "74.98"
+          },
+          {
+            "name": "Sırt",
+            "allocated_cost": "49.98"
+          },
+          {
+            "name": "Kaburga",
+            "allocated_cost": "39.99"
+          },
+          {
+            "name": "Gerdan",
+            "allocated_cost": "22.22"
+          },
+          {
+            "name": "Kıyma",
+            "allocated_cost": "30.55"
+          },
+          {
+            "name": "Fire",
+            "allocated_cost": "0.00"
+          }
+        ],
+        "total_allocated": "351.00"
+      },
       "warnings": [
         "PURCHASE_TOTAL_MISMATCH"
       ]
@@ -531,6 +675,7 @@
       "unit_cost_per_kg": "11.50",
       "declared_total_cost": "351.00",
       "cost_basis": "declared",
+      "resolution_note": "Alternatif senaryo: alış belgesinde beyan edilen 351.00 esas alındı; birim fiyat ve ağırlıkla uyuşmazlık bilinerek kabul edildi.",
       "method": "quantity",
       "parts": [
         {
@@ -587,6 +732,8 @@
     "expected": {
       "method": "quantity",
       "cost_basis": "declared",
+      "cost_basis_used": "declared",
+      "resolution_note": "Alternatif senaryo: alış belgesinde beyan edilen 351.00 esas alındı; birim fiyat ve ağırlıkla uyuşmazlık bilinerek kabul edildi.",
       "input_weight_kg": "25.000",
       "computed_total_cost": "287.50",
       "declared_total_cost": "351.00",
@@ -656,6 +803,41 @@
         }
       ],
       "total_allocated": "351.00",
+      "alternative_basis": {
+        "cost_basis": "computed",
+        "total_input_cost": "287.50",
+        "parts": [
+          {
+            "name": "But",
+            "allocated_cost": "98.01"
+          },
+          {
+            "name": "Kol",
+            "allocated_cost": "58.81"
+          },
+          {
+            "name": "Sırt",
+            "allocated_cost": "32.67"
+          },
+          {
+            "name": "Kaburga",
+            "allocated_cost": "39.20"
+          },
+          {
+            "name": "Gerdan",
+            "allocated_cost": "26.14"
+          },
+          {
+            "name": "Kıyma",
+            "allocated_cost": "32.67"
+          },
+          {
+            "name": "Fire",
+            "allocated_cost": "0.00"
+          }
+        ],
+        "total_allocated": "287.50"
+      },
       "warnings": [
         "PURCHASE_TOTAL_MISMATCH"
       ]
@@ -669,6 +851,7 @@
       "unit_cost_per_kg": "11.50",
       "declared_total_cost": "351.00",
       "cost_basis": "declared",
+      "resolution_note": "Alternatif senaryo: alış belgesinde beyan edilen 351.00 esas alındı; birim fiyat ve ağırlıkla uyuşmazlık bilinerek kabul edildi.",
       "method": "value",
       "parts": [
         {
@@ -725,6 +908,8 @@
     "expected": {
       "method": "value",
       "cost_basis": "declared",
+      "cost_basis_used": "declared",
+      "resolution_note": "Alternatif senaryo: alış belgesinde beyan edilen 351.00 esas alındı; birim fiyat ve ağırlıkla uyuşmazlık bilinerek kabul edildi.",
       "input_weight_kg": "25.000",
       "computed_total_cost": "287.50",
       "declared_total_cost": "351.00",
@@ -794,6 +979,41 @@
         }
       ],
       "total_allocated": "351.00",
+      "alternative_basis": {
+        "cost_basis": "computed",
+        "total_input_cost": "287.50",
+        "parts": [
+          {
+            "name": "But",
+            "allocated_cost": "109.18"
+          },
+          {
+            "name": "Kol",
+            "allocated_cost": "61.41"
+          },
+          {
+            "name": "Sırt",
+            "allocated_cost": "40.94"
+          },
+          {
+            "name": "Kaburga",
+            "allocated_cost": "32.75"
+          },
+          {
+            "name": "Gerdan",
+            "allocated_cost": "18.20"
+          },
+          {
+            "name": "Kıyma",
+            "allocated_cost": "25.02"
+          },
+          {
+            "name": "Fire",
+            "allocated_cost": "0.00"
+          }
+        ],
+        "total_allocated": "287.50"
+      },
       "warnings": [
         "PURCHASE_TOTAL_MISMATCH"
       ]
@@ -801,12 +1021,13 @@
   },
   {
     "case_id": "KZ-2026-004-QTY",
-    "description": "Yan urunlu: 1.0 kg ciger (6 EUR/kg) maliyetten dusulur, kalan ana parcalara dagitilir (quantity)",
+    "description": "Yan urunlu: 1.0 kg ciger (6 EUR/kg) maliyetten dusulur, kalan ana parcalara dagitilir (quantity). Ciger eklenince parca toplami 22 kg kalsin diye but 7.5 -> 7.0 kg ve kiyma 2.5 -> 2.0 kg indirildi",
     "input": {
       "input_weight_kg": "25",
       "unit_cost_per_kg": "11.50",
       "declared_total_cost": null,
       "cost_basis": "computed",
+      "resolution_note": null,
       "method": "quantity",
       "parts": [
         {
@@ -870,6 +1091,8 @@
     "expected": {
       "method": "quantity",
       "cost_basis": "computed",
+      "cost_basis_used": "computed",
+      "resolution_note": null,
       "input_weight_kg": "25.000",
       "computed_total_cost": "287.50",
       "declared_total_cost": null,
@@ -947,17 +1170,19 @@
         }
       ],
       "total_allocated": "287.50",
+      "alternative_basis": null,
       "warnings": []
     }
   },
   {
     "case_id": "KZ-2026-004-VAL",
-    "description": "Yan urunlu: 1.0 kg ciger (6 EUR/kg) maliyetten dusulur, kalan ana parcalara dagitilir (value)",
+    "description": "Yan urunlu: 1.0 kg ciger (6 EUR/kg) maliyetten dusulur, kalan ana parcalara dagitilir (value). Ciger eklenince parca toplami 22 kg kalsin diye but 7.5 -> 7.0 kg ve kiyma 2.5 -> 2.0 kg indirildi",
     "input": {
       "input_weight_kg": "25",
       "unit_cost_per_kg": "11.50",
       "declared_total_cost": null,
       "cost_basis": "computed",
+      "resolution_note": null,
       "method": "value",
       "parts": [
         {
@@ -1021,6 +1246,8 @@
     "expected": {
       "method": "value",
       "cost_basis": "computed",
+      "cost_basis_used": "computed",
+      "resolution_note": null,
       "input_weight_kg": "25.000",
       "computed_total_cost": "287.50",
       "declared_total_cost": null,
@@ -1098,6 +1325,7 @@
         }
       ],
       "total_allocated": "287.50",
+      "alternative_basis": null,
       "warnings": []
     }
   },
@@ -1109,6 +1337,7 @@
       "unit_cost_per_kg": "10.00",
       "declared_total_cost": null,
       "cost_basis": "computed",
+      "resolution_note": null,
       "method": "quantity",
       "parts": [
         {
@@ -1144,6 +1373,8 @@
     "expected": {
       "method": "quantity",
       "cost_basis": "computed",
+      "cost_basis_used": "computed",
+      "resolution_note": null,
       "input_weight_kg": "10.000",
       "computed_total_cost": "100.00",
       "declared_total_cost": null,
@@ -1189,6 +1420,7 @@
         }
       ],
       "total_allocated": "100.00",
+      "alternative_basis": null,
       "warnings": []
     }
   },
@@ -1200,6 +1432,7 @@
       "unit_cost_per_kg": "10.00",
       "declared_total_cost": null,
       "cost_basis": "computed",
+      "resolution_note": null,
       "method": "quantity",
       "parts": [
         {
@@ -1221,6 +1454,8 @@
     "expected": {
       "method": "quantity",
       "cost_basis": "computed",
+      "cost_basis_used": "computed",
+      "resolution_note": null,
       "input_weight_kg": "10.000",
       "computed_total_cost": "100.00",
       "declared_total_cost": null,
@@ -1250,7 +1485,185 @@
         }
       ],
       "total_allocated": "100.00",
+      "alternative_basis": null,
       "warnings": []
+    }
+  },
+  {
+    "case_id": "KZ-2026-007-QTY",
+    "description": "Uyusmazlik cozumlenmemis: cost_basis ve resolution_note yok, MISMATCH_RESOLUTION_MISSING, closable=false",
+    "input": {
+      "input_weight_kg": "25",
+      "unit_cost_per_kg": "11.50",
+      "declared_total_cost": "351.00",
+      "cost_basis": null,
+      "resolution_note": null,
+      "method": "quantity",
+      "parts": [
+        {
+          "name": "But",
+          "kg": "7.5",
+          "reference_price": "16.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Kol",
+          "kg": "4.5",
+          "reference_price": "15.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Sırt",
+          "kg": "2.5",
+          "reference_price": "18.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Kaburga",
+          "kg": "3.0",
+          "reference_price": "12.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Gerdan",
+          "kg": "2.0",
+          "reference_price": "10.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Kıyma",
+          "kg": "2.5",
+          "reference_price": "11.00",
+          "is_waste": false,
+          "is_by_product": false
+        },
+        {
+          "name": "Fire",
+          "kg": "3.0",
+          "reference_price": "0.00",
+          "is_waste": true,
+          "is_by_product": false
+        }
+      ]
+    },
+    "expected": {
+      "method": "quantity",
+      "cost_basis": null,
+      "cost_basis_used": "computed",
+      "resolution_note": null,
+      "input_weight_kg": "25.000",
+      "computed_total_cost": "287.50",
+      "declared_total_cost": "351.00",
+      "total_input_cost": "287.50",
+      "parts_weight_kg": "25.000",
+      "balance_diff_kg": "0.000",
+      "closable": false,
+      "sellable_kg": "22.000",
+      "by_product_value": "0.00",
+      "allocation_pool": "287.50",
+      "parts": [
+        {
+          "name": "But",
+          "role": "main",
+          "kg": "7.500",
+          "yield_pct": "30.00",
+          "allocated_cost": "98.01",
+          "unit_cost": "13.0680"
+        },
+        {
+          "name": "Kol",
+          "role": "main",
+          "kg": "4.500",
+          "yield_pct": "18.00",
+          "allocated_cost": "58.81",
+          "unit_cost": "13.0689"
+        },
+        {
+          "name": "Sırt",
+          "role": "main",
+          "kg": "2.500",
+          "yield_pct": "10.00",
+          "allocated_cost": "32.67",
+          "unit_cost": "13.0680"
+        },
+        {
+          "name": "Kaburga",
+          "role": "main",
+          "kg": "3.000",
+          "yield_pct": "12.00",
+          "allocated_cost": "39.20",
+          "unit_cost": "13.0667"
+        },
+        {
+          "name": "Gerdan",
+          "role": "main",
+          "kg": "2.000",
+          "yield_pct": "8.00",
+          "allocated_cost": "26.14",
+          "unit_cost": "13.0700"
+        },
+        {
+          "name": "Kıyma",
+          "role": "main",
+          "kg": "2.500",
+          "yield_pct": "10.00",
+          "allocated_cost": "32.67",
+          "unit_cost": "13.0680"
+        },
+        {
+          "name": "Fire",
+          "role": "waste",
+          "kg": "3.000",
+          "yield_pct": "12.00",
+          "allocated_cost": "0.00",
+          "unit_cost": "0.0000"
+        }
+      ],
+      "total_allocated": "287.50",
+      "alternative_basis": {
+        "cost_basis": "declared",
+        "total_input_cost": "351.00",
+        "parts": [
+          {
+            "name": "But",
+            "allocated_cost": "119.65"
+          },
+          {
+            "name": "Kol",
+            "allocated_cost": "71.80"
+          },
+          {
+            "name": "Sırt",
+            "allocated_cost": "39.89"
+          },
+          {
+            "name": "Kaburga",
+            "allocated_cost": "47.86"
+          },
+          {
+            "name": "Gerdan",
+            "allocated_cost": "31.91"
+          },
+          {
+            "name": "Kıyma",
+            "allocated_cost": "39.89"
+          },
+          {
+            "name": "Fire",
+            "allocated_cost": "0.00"
+          }
+        ],
+        "total_allocated": "351.00"
+      },
+      "warnings": [
+        "PURCHASE_TOTAL_MISMATCH",
+        "MISMATCH_RESOLUTION_MISSING"
+      ]
     }
   }
 ]

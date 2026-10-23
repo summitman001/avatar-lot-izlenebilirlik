@@ -33,9 +33,14 @@ BREED_EFFECT = {
     "Akkaraman": {"kol": -0.001, "kaburga": 0.003, "fire": 0.003},
     "Merinos": {"but": 0.006, "kol": -0.004, "kaburga": -0.002, "gerdan": -0.002},
 }
-SEX_EFFECT = {"M": {"but": 0.002, "fire": -0.001}, "F": {"but": -0.002, "fire": 0.001}}
-# karkas agirligi REF_CARCASS ustunde kg basina oran degisimi (yagli parcalar artar, but azalir)
-WEIGHT_SLOPE = {"but": -0.0012, "kol": -0.0003, "sirt": 0.0, "kaburga": 0.0010, "gerdan": 0.0003, "kiyma": 0.0006, "fire": 0.0004}
+SEX_EFFECT = {
+    "M": {"but": 0.003, "kol": 0.001, "kaburga": -0.002, "kiyma": -0.001, "fire": -0.001},
+    "F": {"but": -0.003, "kol": -0.001, "kaburga": 0.002, "kiyma": 0.001, "fire": 0.001},
+}
+# karkas agirligi REF_CARCASS ustunde kg basina oran degisimi: but ve kol duser, kaburga ve kiyma artar
+WEIGHT_SLOPE = {"but": -0.0012, "kol": -0.0006, "sirt": 0.0, "kaburga": 0.0010, "gerdan": 0.0003, "kiyma": 0.0008, "fire": 0.0004}
+# irk x agirlik etkilesimi: agirlik egiminin irka gore carpani
+BREED_SLOPE_MULT = {"Morkaraman": 0.7, "Akkaraman": 1.0, "Merinos": 1.5}
 NOISE_SIGMA = {"but": 0.006, "kol": 0.004, "sirt": 0.003, "kaburga": 0.003, "gerdan": 0.002, "kiyma": 0.003, "fire": 0.004}
 
 PARAMS = {
@@ -49,6 +54,7 @@ PARAMS = {
     "breed_effect": BREED_EFFECT,
     "sex_effect": SEX_EFFECT,
     "weight_slope_per_kg": WEIGHT_SLOPE,
+    "breed_slope_multiplier": BREED_SLOPE_MULT,
     "noise_sigma": NOISE_SIGMA,
 }
 
@@ -70,7 +76,7 @@ def generate() -> list[dict[str, str]]:
                 BASE_RATIO[p]
                 + BREED_EFFECT[breed].get(p, 0.0)
                 + SEX_EFFECT[sex].get(p, 0.0)
-                + WEIGHT_SLOPE[p] * (float(carcass_d) - REF_CARCASS)
+                + WEIGHT_SLOPE[p] * BREED_SLOPE_MULT[breed] * (float(carcass_d) - REF_CARCASS)
                 + rng.normal(0, NOISE_SIGMA[p])
             )
             ratios.append(max(r, 0.01))
@@ -98,7 +104,7 @@ def main(argv: list[str] | None = None) -> Path:
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     args = parser.parse_args(argv)
-    path = args.out / "lamb_cutting.csv"
+    path = args.out / "cutting_records.csv"
     write_csv(generate(), path)
     print(f"yazildi: {path}")
     return path

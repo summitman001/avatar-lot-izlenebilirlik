@@ -8,7 +8,7 @@ from fractions import Fraction
 
 import pytest
 
-from oracle import cli, cutting_allocation
+from oracle import cli, cutting_allocation, production_cost
 
 
 def prod(case_id):
@@ -70,6 +70,31 @@ def test_ur005_verim():
     e = prod("UR-005")
     # girdi 100 + 2 + 5 = 107 kg ; 85/107 = 0.794392 -> %79.44 ; et bazli 85/100 = 0.85
     assert (e["input_kg_total"], e["yield_input_pct"], e["yield_meat_ratio"]) == ("107.000", "79.44", "0.8500")
+
+
+def test_ur006_500g_urun():
+    e = prod("UR-006")
+    # 170 adet x 0.500 kg = 85 kg cikti ; girdi 107 kg -> verim ayni: %79.44, et bazli 0.8500
+    assert (e["output_kg"], e["yield_input_pct"], e["yield_meat_ratio"]) == ("85.000", "79.44", "0.8500")
+    # hizmet 170 x 2.75 = 467.50 ; toplam yine 1543.50 ; adet basi 1543.50 / 170 = 9.079411 -> 9.0794 ; 2 ondalik 9.08
+    assert (e["service_cost"], e["total_cost"], e["ekp_unit"], e["ekp_display"]) == ("467.50", "1543.50", "9.0794", "9.08")
+    # kg basi maliyet 1543.50 / 85 = 18.1588 (1 kg'lik urunle ayni)
+    assert e["ekp_per_kg"] == "18.1588"
+    # ciro 170 x 12.45 = 2116.50 ; kar 573.00 ; marj %27.07 ; birim kar 12.45 - 9.079411 = 3.370588 -> 3.3706
+    assert (e["revenue"], e["gross_profit_total"], e["margin_pct"], e["gross_profit_unit"]) == ("2116.50", "573.00", "27.07", "3.3706")
+
+
+def test_kg_adet_cevirimi_dogrudan_adet_degil():
+    # 85 adet x 0.5 kg = 42.5 kg ; 42.5 / 107 = 0.397196 -> %39.72 ; et bazli 42.5 / 100 = 0.4250
+    inp = {**cli.production_cases()[0]["input"], "unit_weight_kg": "0.500", "sale_price": None}
+    e = production_cost.calculate(inp)
+    assert (e["output_kg"], e["yield_input_pct"], e["yield_meat_ratio"]) == ("42.500", "39.72", "0.4250")
+
+
+def test_unit_weight_yoksa_verim_null():
+    inp = {**cli.production_cases()[0]["input"], "unit_weight_kg": None}
+    e = production_cost.calculate(inp)
+    assert e["yield_input_pct"] is None and e["yield_meat_ratio"] is None and e["output_kg"] is None
 
 
 # ---------------- Gorev 2
@@ -179,7 +204,7 @@ def frac_distribute(total: Fraction, weights: list[Fraction]) -> list[Fraction]:
 def test_fraction_capraz_kontrol(case):
     inp = case["input"]
     parts = inp["parts"]
-    if inp["cost_basis"] == "computed":
+    if case["expected"]["cost_basis_used"] == "computed":
         total = _round_half_up(Fraction(inp["input_weight_kg"]) * Fraction(inp["unit_cost_per_kg"]), 2)
     else:
         total = Fraction(inp["declared_total_cost"])
@@ -198,3 +223,35 @@ def test_fraction_capraz_kontrol(case):
     for i, p in enumerate(case["expected"]["parts"]):
         want = alloc.get(i, bp.get(i, Fraction(0)))
         assert Decimal(p["allocated_cost"]) == Decimal(want.numerator) / Decimal(want.denominator)
+
+
+# ---------------- Uyusmazlik cozumlemesi
+def test_kz007_cozumlenmemis_uyusmazlik_kapatilamaz():
+    e = cut("KZ-2026-007-QTY")
+    # denge tamam (diff 0.000) ama cost_basis ve resolution_note yok -> closable=false
+    assert e["balance_diff_kg"] == "0.000" and e["closable"] is False
+    assert e["warnings"] == ["PURCHASE_TOTAL_MISMATCH", "MISMATCH_RESOLUTION_MISSING"]
+    # gecici esas: hesaplanan 25 x 11.50 = 287.50
+    assert e["cost_basis"] is None and e["cost_basis_used"] == "computed" and e["total_input_cost"] == "287.50"
+
+
+def test_cozumleme_icin_ikisi_de_gerekli():
+    base = cli.cutting_cases()[2]["input"]  # KZ-2026-002-QTY (esas + not var)
+    assert cutting_allocation.allocate(base)["closable"] is True
+    for patch in ({"cost_basis": None}, {"resolution_note": None}, {"resolution_note": "   "}):
+        e = cutting_allocation.allocate({**base, **patch})
+        assert e["closable"] is False and "MISMATCH_RESOLUTION_MISSING" in e["warnings"]
+
+
+def test_uyusmazlik_yoksa_not_gerekmez():
+    e = cut("KZ-2026-005-QTY")
+    assert e["resolution_note"] is None and e["closable"] is True and e["alternative_basis"] is None
+
+
+def test_alternatif_esas_raporlanir():
+    e = cut("KZ-2026-002-QTY")
+    alt = e["alternative_basis"]
+    # secilen 287.50 (computed), alternatif 351.00 (declared), ayni dagitim 003'teki ile
+    assert e["cost_basis_used"] == "computed" and alt["cost_basis"] == "declared"
+    assert alt["total_input_cost"] == "351.00" and alt["total_allocated"] == "351.00"
+    assert [p["allocated_cost"] for p in alt["parts"]] == costs(cut("KZ-2026-003-QTY"))

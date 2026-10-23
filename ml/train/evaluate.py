@@ -5,6 +5,11 @@
 Metrikler: MAE ve MAPE. Kayitli her model ayni fonksiyonla degerlendirilir; yarin
 Ridge ve gradient boosting `app.registry.register` ile eklenince `--all` hepsini karsilastirir.
 Metrikler JSON'da string (Decimal).
+
+Ogrenme egrisi: ayni degerlendirme fonksiyonlari artan egitim kaydi sayisiyla calistirilir
+(production: 5, 10, 20, 40; cutting: 10, 25, 50, 100, 160); sonuc reports/learning_curve.json.
+Production icin egitim kayitlari egitim bolmesinin EN YENI n kaydidir (teste en yakin donem);
+cutting icin sabit seed ile karistirilmis egitim bolmesinin ilk n kaydi (ic ice altkumeler).
 """
 from __future__ import annotations
 
@@ -14,6 +19,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from app import datasets, registry
@@ -21,6 +27,9 @@ from app.models.base import CUTTING, PRODUCTION
 from oracle.decimal_utils import dstr
 
 REPORT_PATH = datasets.ML_ROOT / "reports" / "baseline_metrics.json"
+CURVE_PATH = datasets.ML_ROOT / "reports" / "learning_curve.json"
+CURVE_SIZES = {PRODUCTION: [5, 10, 20, 40], CUTTING: [10, 25, 50, 100, 160]}
+CURVE_SEED = 7
 _Q4 = Decimal("0.0001")
 
 
@@ -44,7 +53,7 @@ def evaluate_production(model, train: pd.DataFrame, test: pd.DataFrame) -> dict[
     preds = model.predict(test)
     y_true = [Decimal(x) for x in test["delivered_qty"]]
     m = regression_metrics(y_true, [p.delivered_qty for p in preds])
-    return {"target": "delivered_qty (kg)", "mae_kg": dstr(m["mae"]), "mape_pct": dstr(m["mape_pct"])}
+    return {"target": "delivered_qty (adet)", "mae_kg": dstr(m["mae"]), "mape_pct": dstr(m["mape_pct"])}
 
 
 def evaluate_cutting(model, train: pd.DataFrame, test: pd.DataFrame) -> dict[str, Any]:
@@ -95,8 +104,50 @@ def evaluate_task(task: str, train: pd.DataFrame, test: pd.DataFrame, baseline_o
 def run(out: Path = REPORT_PATH, baseline_only: bool = True, data_dir: Path | None = None) -> dict[str, Any]:
     splits = build_splits(data_dir)
     report = {task: evaluate_task(task, tr, te, baseline_only) for task, (tr, te) in splits.items()}
+    _write_json(out, report)
+    return report
+
+
+def _write_json(out: Path, report: dict[str, Any]) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+
+
+def _headline(task: str, metrics: dict[str, Any]) -> dict[str, str]:
+    if task == PRODUCTION:
+        return {"mae": metrics["mae_kg"], "mape_pct": metrics["mape_pct"]}
+    return {"mae": metrics["overall"]["mae_kg"], "mape_pct": metrics["overall"]["mape_pct"]}
+
+
+def training_subset(task: str, train: pd.DataFrame, n: int) -> pd.DataFrame:
+    if task == PRODUCTION:
+        return train.iloc[len(train) - n :].reset_index(drop=True)  # en yeni n kayit
+    order = np.random.default_rng(CURVE_SEED).permutation(len(train))
+    return train.iloc[order[:n]].reset_index(drop=True)
+
+
+def learning_curve_task(
+    task: str, train: pd.DataFrame, test: pd.DataFrame, sizes: list[int] | None = None, baseline_only: bool = True
+) -> dict[str, Any]:
+    """Her kayitli model icin artan egitim boyutunda test MAE/MAPE (ortak degerlendirme fonksiyonlariyla)."""
+    sizes = [n for n in (sizes or CURVE_SIZES[task]) if n <= len(train)]
+    models = {}
+    for spec in registry.specs(task, baseline_only=baseline_only):
+        points = []
+        for n in sizes:
+            metrics = _EVALUATORS[task](spec.factory(), training_subset(task, train, n), test)
+            points.append({"n_train": n, **_headline(task, metrics)})
+        models[spec.info.name] = {"version": spec.info.version, "baseline": spec.info.baseline, "points": points}
+    unit = "kg (delivered_qty)" if task == PRODUCTION else "kg (tum parcalarin ortalamasi)"
+    return {"split": _SPLIT_NAMES[task], "n_test": len(test), "mae_unit": unit, "models": models}
+
+
+def run_learning_curve(
+    out: Path = CURVE_PATH, baseline_only: bool = True, data_dir: Path | None = None
+) -> dict[str, Any]:
+    splits = build_splits(data_dir)
+    report = {task: learning_curve_task(task, tr, te, baseline_only=baseline_only) for task, (tr, te) in splits.items()}
+    _write_json(out, report)
     return report
 
 
@@ -109,6 +160,9 @@ def main(argv: list[str] | None = None) -> None:
     report = run(out, baseline_only=not args.all)
     print(json.dumps(report, indent=2, ensure_ascii=False))
     print(f"yazildi: {out}")
+    curve_out = CURVE_PATH if not args.all else CURVE_PATH.with_name("learning_curve_all.json")
+    run_learning_curve(curve_out, baseline_only=not args.all)
+    print(f"yazildi: {curve_out}")
 
 
 if __name__ == "__main__":

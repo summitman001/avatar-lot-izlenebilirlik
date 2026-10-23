@@ -33,6 +33,31 @@ def test_rastgele_bolme_deterministik_ve_ayrik():
     assert not set(a_tr.lamb_id) & set(a_te.lamb_id)
 
 
+def test_ogrenme_egrisi_boyutlari_ve_alt_kume():
+    prod_train, prod_test = datasets.split_time_ordered(datasets.load_production())
+    cut_train, cut_test = datasets.split_random(datasets.load_cutting())
+    for n in (5, 40):
+        sub = evaluate.training_subset("production", prod_train, n)
+        assert len(sub) == n and sub.order_date.min() >= prod_train.order_date.iloc[-n]  # en yeni n kayit
+    small = set(evaluate.training_subset("cutting", cut_train, 25).lamb_id)
+    big = set(evaluate.training_subset("cutting", cut_train, 50).lamb_id)
+    assert small < big  # ic ice altkumeler
+
+
+def test_ogrenme_egrisi_raporu(tmp_path):
+    report = evaluate.run_learning_curve(tmp_path / "lc.json")
+    sizes = {t: [p["n_train"] for p in next(iter(v["models"].values()))["points"]] for t, v in report.items()}
+    assert sizes == {"production": [5, 10, 20, 40], "cutting": [10, 25, 50, 100, 160]}
+    for task in report.values():
+        for model in task["models"].values():
+            assert all(isinstance(p["mae"], str) and isinstance(p["mape_pct"], str) for p in model["points"])
+
+
+def test_ogrenme_egrisi_dosyasi_guncel(tmp_path):
+    fresh = evaluate.run_learning_curve(tmp_path / "lc.json")
+    assert json.loads(evaluate.CURVE_PATH.read_text(encoding="utf-8")) == fresh
+
+
 def test_rapor_yazilir(tmp_path):
     out = tmp_path / "baseline_metrics.json"
     report = evaluate.run(out)
