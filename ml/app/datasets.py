@@ -10,7 +10,7 @@ import pandas as pd
 ML_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = Path(os.environ.get("ML_DATA_DIR", ML_ROOT / "data" / "out"))
 PRODUCTION_CSV = "production_orders.csv"
-CUTTING_CSV = "lamb_cutting.csv"
+CUTTING_CSV = "cutting_records.csv"
 
 TEST_FRACTION = 0.2
 CUTTING_SPLIT_SEED = 42
