@@ -79,3 +79,14 @@ Doküman senaryosunda satış fiyatı (VKP) verilmediği için kâr ve marj örn
 | UR-006 (170 adet × 500 g) | 9,0794 | 3,3706 | 573,00 | %27,07 |
 
 VKP gerçek değerle değişirse yalnızca `ml/oracle/cli.py` içindeki `VKP` sabiti güncellenir ve golden dosyaları yeniden üretilir.
+
+## Backend uygulamasına ilişkin varsayımlar ve tespitler
+
+Bu bölüm Go backend'in (`backend/`) veri modelini ve API davranışını etkileyen kararları özetler. Sayısal kurallar yukarıdadır; Go bunları `backend/internal/domain` içinde uygular ve `docs/golden/*.json` dosyalarını okuyan testlerle doğrular (`go test ./internal/domain`).
+
+1. **VKP 24,90 € varsayımı.** Yarışma dokümanı satış fiyatı vermediği için `SUCUK-NARIN-1KG` ürününün `default_sale_price` değeri **24.9000** olarak seed'lenir (`backend/cmd/seed`). Bu değer dokümandan gelmez, bir **varsayımdır**; gerçek fiyat netleşince yalnızca ürün kaydı güncellenir (`PUT /api/v1/items/{id}`) ve — golden senaryolar için — `ml/oracle/cli.py` içindeki `VKP` sabiti.
+2. **KZ-2026-001 alış belgesi tutarsızlığı.** 25 kg × 11,50 €/kg = **287,50 €** (hesaplanan) iken belgede **351,00 €** (beyan) yazıyor. Sistem bu satırı gizlemez ve sessizce düzeltmez: `purchase_receipt_line.line_total = 287.50`, `declared_line_total = 351.00`, **`has_mismatch = TRUE`**. Lot maliyeti hesaplanan birim fiyattan (11,5000) kurulur; web'de lot listesinde "Tutar uyuşmazlığı" rozeti görünür, `GET /api/v1/lots?has_mismatch=true` ile filtrelenir. Hangi tutarın geçerli olduğu kararı parçalama kaydında `cost_basis` + `resolution_note` ile verilir (yukarıdaki "Görev 2" kuralları). Gerçek iş kuralı yarışma sahibine teyit edilmelidir.
+3. **Satır tutarı yuvarlaması.** `line_total = round2(qty × unit_price)` (ROUND_HALF_UP); örn. 18,500 kg × 11,75 = 217,375 → **217,38**. Veritabanında tutarlar `DECIMAL(14,4)` saklanır ama satır tutarları 2 ondalıkta yuvarlanmış değerdir; API tutarları 4 ondalıklı string döner (`"217.3800"`).
+4. **Senkron push bugün stub.** `POST /sync/push` yalnızca `op_id`'yi kaydeder; payload'ı **işlemez**. İlk gönderim bu yüzden `applied` değil **`flagged`** döner (istemci "uygulandı" sanıp yerel kaydı silmesin). Aynı `op_id` tekrar gelirse `duplicate`. Payload işleme yazılınca stub kayıtları temizlenmelidir (bkz. `docs/HANDOFF.md`).
+5. **Stok defteri.** `stock_movement` değiştirilemez (UPDATE/DELETE trigger ile reddedilir); düzeltme yalnızca `reversal` kaydıyladır. Giriş tipleri (+), çıkış tipleri (−) işaret kuralı veritabanında CHECK ile zorlanır. Geri alma stoğu negatife düşürüyorsa reddedilir.
+6. **Kimlik doğrulama yok.** API şimdilik açıktır (CORS `*`); yarışma demosu içindir, üretimde eklenmelidir.
