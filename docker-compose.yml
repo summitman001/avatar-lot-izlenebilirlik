@@ -53,6 +53,24 @@ services:
       - up
     restart: "no"
 
+  # Test veritabanini (yoksa) olusturur; mevcut volume'larda init betigi tekrar calismadigi icin
+  # `make test-backend` bunu cagirir. Elle: docker compose run --rm test-db
+  test-db:
+    image: mysql:8.4
+    profiles: ["tools"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      MYSQL_PWD: ${MYSQL_ROOT_PASSWORD:-root}
+    entrypoint: ["mysql", "-hmysql", "-uroot"]
+    command:
+      - -e
+      - >-
+        CREATE DATABASE IF NOT EXISTS `${MYSQL_TEST_DATABASE:-avatar_test}` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+        GRANT ALL PRIVILEGES ON `${MYSQL_TEST_DATABASE:-avatar_test}`.* TO '${MYSQL_USER:-app}'@'%';
+    restart: "no"
+
   seed:
     build:
       context: ./backend

@@ -41,7 +41,7 @@ Bu dosya, backend iskeletini devralan full-stack geliştirici içindir. Branch: 
 6. **Defter bütünlüğü veritabanında.** Trigger (UPDATE/DELETE yasak), işaret CHECK'i, `UNIQUE (reverses_movement_id)` — uygulama hatalı olsa bile kayıt bozulmaz. `ReverseMovement` lot satırını `FOR UPDATE` kilitleyip bakiyeyi kontrol eder (negatif stok yok).
 7. **Push stub `applied` değil `flagged` döner.** İstemci "uygulandı" sanıp yerel kaydı silmesin.
 8. **`log_bin_trust_function_creators=1`** (compose'ta mysqld bayrağı, CI'da `SET GLOBAL`): MySQL 8.4'te binlog açıkken `CREATE TRIGGER` SUPER ister; uygulama kullanıcısı SUPER değil. Yönetilen bir MySQL'de bu parametreyi açın ya da migration'ı yetkili kullanıcıyla çalıştırın.
-9. **Test veritabanı ayrı (`avatar_test`)**, `docker/mysql-init/01-test-db.sh` ile oluşur — **yalnızca boş volume'da çalışır**. Eski volume'unuz varsa `make reset`. Testler `_test` ile bitmeyen veritabanında çalışmayı reddeder.
+9. **Test veritabanı ayrı (`avatar_test`).** Taze volume'da `docker/mysql-init/01-test-db.sh` oluşturur; mevcut volume'larda `make test-backend` önce `docker compose run --rm test-db` ile (root, `CREATE DATABASE IF NOT EXISTS` + GRANT) oluşturur, `make reset` gerekmez. Testler `_test` ile bitmeyen veritabanında çalışmayı reddeder.
 10. **Test migration'ı `iofs` kaynağıyla** (`db/migrate.go`): `file://` URL'i Windows sürücü harfleriyle bozuluyor.
 11. **Go `go 1.23`**, yerelde 1.27 ile geliştirildi; Docker imajı 1.23. Yeni bağımlılık eklerken `go.mod`'daki `go` satırının yükselmediğini kontrol edin.
 12. **Silme yok.** Spesifikasyon gereği; ürünü pasifleştirmek için `is_active=false`. İzlenebilirlik için kayıt silinmemeli.

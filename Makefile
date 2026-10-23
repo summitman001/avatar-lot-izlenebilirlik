@@ -26,6 +26,7 @@ test: test-backend   ## Go testleri
 
 test-backend:  ## Go unit + entegrasyon testleri (MySQL konteyneri gerekir, otomatik baslatilir)
 	docker compose up -d --wait mysql
+	docker compose run --rm test-db
 	cd backend && go test -count=1 ./...
 
 test-web:      ## Web tip kontrolu + build
