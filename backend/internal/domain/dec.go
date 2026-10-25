@@ -111,3 +111,9 @@ func (d Date) Value() (driver.Value, error) { return d.Format(dateLayout), nil }
 func NewDate(y int, m time.Month, day int) Date {
 	return Date{time.Date(y, m, day, 0, 0, 0, 0, time.UTC)}
 }
+
+// Today sunucunun bugunku UTC tarihini doner (ornek: receive aninda uretilen cikti lotunun tarihi).
+func Today() Date {
+	t := time.Now().UTC()
+	return NewDate(t.Year(), t.Month(), t.Day())
+}

@@ -56,6 +56,7 @@ func insertMovement(ctx context.Context, q DBTX, m domain.StockMovement) (*domai
 type MovementFilter struct {
 	LotID        string
 	RefType      string
+	RefID        string
 	WarehouseID  string
 	MovementType string
 	Page         Page
@@ -68,6 +69,9 @@ func (s *Store) ListMovements(ctx context.Context, f MovementFilter) ([]domain.S
 	}
 	if f.RefType != "" {
 		b.add(`sm.ref_type = ?`, f.RefType)
+	}
+	if f.RefID != "" {
+		b.add(`sm.ref_id = ?`, f.RefID)
 	}
 	if f.WarehouseID != "" {
 		b.add(`sm.warehouse_id = ?`, f.WarehouseID)
