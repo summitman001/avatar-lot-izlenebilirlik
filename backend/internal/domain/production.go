@@ -84,18 +84,26 @@ type ProductionInputLine struct {
 }
 
 // ProductionPredictionView prediction tablosunun API gorunumudur (model tahmini vs gerceklesen).
+// EN GUNCEL kayit donulur (stage='materials_sent' varsa o, yoksa 'draft'). EKP tahmini HIBRIT bir
+// yaklasimdir: ML yalnizca fiziksel verimi (adet/kg) tahmin eder, maliyeti bilmez; predicted_ekp_unit
+// bu tahmini KESIN malzeme maliyetiyle birlestirerek sunucu tarafinda hesaplanir (bkz.
+// docs/assumptions.md, "Hibrit EKP tahmini"). Bu yuzden 'draft' asamasinda (malzeme maliyeti henuz
+// bilinmezken) predicted_ekp_unit alani null'dur; yalnizca 'materials_sent' asamasinda doludur.
 type ProductionPredictionView struct {
 	ModelName             string  `json:"model_name"`
 	ModelVersion          string  `json:"model_version"`
 	Baseline              bool    `json:"baseline"`
+	Stage                 string  `json:"stage"` // draft | materials_sent
 	PredictedYieldRatio   string  `json:"predicted_yield_ratio"`
 	PredictedOutputKg     string  `json:"predicted_output_kg"`
 	PredictedDeliveredQty string  `json:"predicted_delivered_qty"`
+	PredictedEkpUnit      *string `json:"predicted_ekp_unit"`
 	ActualDeliveredQty    *string `json:"actual_delivered_qty"`
+	ActualEkpUnit         *string `json:"actual_ekp_unit"`
 	DeliveredQtyErrorAbs  *string `json:"delivered_qty_error_abs"`
 	DeliveredQtyErrorPct  *string `json:"delivered_qty_error_pct"`
-	// NOT: ML servisi bir maliyet modeli DEGILDIR, yalnizca fiziksel verimi (kg/adet) tahmin eder;
-	// bu yuzden "beklenen EKP" alani yoktur (bkz. docs/assumptions.md, "ML entegrasyonu").
+	EkpErrorAbs           *string `json:"ekp_error_abs"`
+	EkpErrorPct           *string `json:"ekp_error_pct"`
 }
 
 // ---------------------------------------------------------------------------

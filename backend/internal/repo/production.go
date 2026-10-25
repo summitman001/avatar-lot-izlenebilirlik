@@ -37,19 +37,26 @@ var assumedYieldRatio = decimal.RequireFromString("0.85")
 
 func ptrStr(s string) *string { return &s }
 
-// nextSequenceNo "<prefix>-<yil>-NNN" biciminde bir sonraki numarayi uretir (3 haneli, sifir dolgulu).
-// Es zamanli iki istek ayni numarayi secebilir; UNIQUE kisit ikinciyi 409 ile reddeder (yeniden
-// denemez - demo kapsaminda tek yazarli kullanim beklenir, bkz. docs/assumptions.md).
-func nextSequenceNo(ctx context.Context, tx *sql.Tx, table, column, prefix string) (string, error) {
-	base := fmt.Sprintf("%s-%d-", prefix, time.Now().UTC().Year())
-	var maxN int
-	q := fmt.Sprintf(
-		`SELECT COALESCE(MAX(CAST(SUBSTRING(%s, LENGTH(?) + 1) AS UNSIGNED)), 0) FROM %s WHERE %s LIKE CONCAT(?, '%%')`,
-		column, table, column)
-	if err := tx.QueryRowContext(ctx, q, base, base).Scan(&maxN); err != nil {
+// nextSequenceNo "<prefix>-<yil>-NNN" biciminde bir sonraki numarayi ATOMIK uretir (number_sequence
+// tablosu, bkz. migration 000005). INSERT ... ON DUPLICATE KEY UPDATE tek basina satiri kilitler
+// (satir yoksa olusturup 1 ile baslatir, varsa +1 artirir); es zamanli iki cagri aym satirda
+// SERILESTIRILIR (ikincisi ilki commit/rollback olana kadar bu INSERT satirinda bekler), bu yuzden
+// hic kimse ayni numarayi alamaz. `tx` disinda cagrilmaz: kilit, cagiran transaction commit olana
+// kadar tutulur.
+func nextSequenceNo(ctx context.Context, tx *sql.Tx, prefix string) (string, error) {
+	year := time.Now().UTC().Year()
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO number_sequence (prefix, year, seq_value) VALUES (?, ?, 1)
+		 ON DUPLICATE KEY UPDATE seq_value = seq_value + 1`,
+		prefix, year); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%s%03d", base, maxN+1), nil
+	var val int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT seq_value FROM number_sequence WHERE prefix = ? AND year = ?`, prefix, year).Scan(&val); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s-%d-%03d", prefix, year, val), nil
 }
 
 // ---------------------------------------------------------------------------
@@ -123,46 +130,67 @@ func loadProductionInputs(ctx context.Context, q DBTX, orderID string) ([]domain
 	return out, rows.Err()
 }
 
-// loadProductionPrediction en son ML tahminini (bu siparis icin) API gorunumune cevirir; tahmin
-// hic alinamadiysa (ML olusturma aninda kapaliydi) nil, nil doner.
+// predictionStage: ML tahmininin hangi asamada alindigi (asama basina ayri satir, uzerine yazilmaz).
+const (
+	predictionStageDraft         = "draft"
+	predictionStageMaterialsSent = "materials_sent"
+)
+
+// storedPrediction tahmin tablosunun predicted_json'una yazilan govdedir: ML'in HAM yaniti
+// (mlclient.ProductionPrediction) + bizim HESAPLADIGIMIZ hibrit EKP tahmini (ML'in bilmedigi).
+// PredictedEkpUnit yalnizca materials_sent asamasinda doludur (draft'ta malzeme maliyeti bilinmez).
+type storedPrediction struct {
+	mlclient.ProductionPrediction
+	PredictedEkpUnit *string `json:"predicted_ekp_unit"`
+}
+
+// loadProductionPrediction en son ML tahminini (bu siparis icin, hangi asamada olursa olsun en
+// guncel satir) API gorunumune cevirir; tahmin hic alinamadiysa (ML her iki asamada da kapaliydi)
+// nil, nil doner.
 func loadProductionPrediction(ctx context.Context, q DBTX, orderID string) (*domain.ProductionPredictionView, error) {
-	var modelName, modelVersion string
+	var modelName, modelVersion, stage string
 	var predictedJSON, actualJSON, errorJSON []byte
 	err := q.QueryRowContext(ctx,
-		`SELECT model_name, model_version, predicted_json, actual_json, error_json
+		`SELECT model_name, model_version, stage, predicted_json, actual_json, error_json
 		 FROM prediction WHERE target_type = 'production' AND ref_id = ? ORDER BY created_at DESC LIMIT 1`,
-		orderID).Scan(&modelName, &modelVersion, &predictedJSON, &actualJSON, &errorJSON)
+		orderID).Scan(&modelName, &modelVersion, &stage, &predictedJSON, &actualJSON, &errorJSON)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	var pred mlclient.ProductionPrediction
+	var pred storedPrediction
 	if err := json.Unmarshal(predictedJSON, &pred); err != nil {
 		return nil, err
 	}
 	view := &domain.ProductionPredictionView{
-		ModelName: modelName, ModelVersion: modelVersion, Baseline: pred.Baseline,
+		ModelName: modelName, ModelVersion: modelVersion, Baseline: pred.Baseline, Stage: stage,
 		PredictedYieldRatio: pred.PredictedYieldRatio, PredictedOutputKg: pred.PredictedOutputKg,
-		PredictedDeliveredQty: pred.PredictedDeliveredQty,
+		PredictedDeliveredQty: pred.PredictedDeliveredQty, PredictedEkpUnit: pred.PredictedEkpUnit,
 	}
 	if len(actualJSON) > 0 {
 		var actual struct {
-			DeliveredQty string `json:"delivered_qty"`
+			DeliveredQty string  `json:"delivered_qty"`
+			EkpUnit      *string `json:"ekp_unit"`
 		}
 		if err := json.Unmarshal(actualJSON, &actual); err == nil {
 			view.ActualDeliveredQty = &actual.DeliveredQty
+			view.ActualEkpUnit = actual.EkpUnit
 		}
 	}
 	if len(errorJSON) > 0 {
 		var e struct {
-			DeliveredQtyErrorAbs string `json:"delivered_qty_error_abs"`
-			DeliveredQtyErrorPct string `json:"delivered_qty_error_pct"`
+			DeliveredQtyErrorAbs string  `json:"delivered_qty_error_abs"`
+			DeliveredQtyErrorPct string  `json:"delivered_qty_error_pct"`
+			EkpErrorAbs          *string `json:"ekp_error_abs"`
+			EkpErrorPct          *string `json:"ekp_error_pct"`
 		}
 		if err := json.Unmarshal(errorJSON, &e); err == nil {
 			view.DeliveredQtyErrorAbs = &e.DeliveredQtyErrorAbs
 			view.DeliveredQtyErrorPct = &e.DeliveredQtyErrorPct
+			view.EkpErrorAbs = e.EkpErrorAbs
+			view.EkpErrorPct = e.EkpErrorPct
 		}
 	}
 	return view, nil
@@ -257,9 +285,22 @@ func (s *Store) ListProductionOrders(ctx context.Context, f ProductionOrderFilte
 // ML tahmini (en iyi gayret)
 // ---------------------------------------------------------------------------
 
+// insertPrediction tahmin satirini ekler (asama basina ayri satir; oncekinin UZERINE YAZILMAZ).
+func (s *Store) insertPrediction(ctx context.Context, orderID, stage string, pred *mlclient.ProductionPrediction, predictedEkpUnit *string, input map[string]string) error {
+	inputJSON, _ := json.Marshal(input)
+	predictedJSON, _ := json.Marshal(storedPrediction{ProductionPrediction: *pred, PredictedEkpUnit: predictedEkpUnit})
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO prediction (id, model_name, model_version, target_type, stage, ref_id, input_json, predicted_json)
+		 VALUES (?, ?, ?, 'production', ?, ?, ?, ?)`,
+		domain.NewID(), pred.ModelName, pred.ModelVersion, stage, orderID, string(inputJSON), string(predictedJSON))
+	return err
+}
+
 // predictOnCreate siparis olustuktan SONRA (ayni transaction disinda) cagrilir: ML cagrisi basarisiz
-// olursa islem geri alinmaz, yalniz loglanir. et_kg tahmini kaba bir varsayimdir (assumedYieldRatio);
-// gercek deger receive asamasinda bilinir ve recordPredictionActual ile karsilastirilir.
+// olursa islem geri alinmaz, yalniz loglanir. Hammadde kompozisyonu henuz bilinmedigi icin et_kg
+// kaba bir varsayimdir (assumedYieldRatio); malzeme maliyeti de bilinmedigi icin bu asamada
+// predicted_ekp_unit HESAPLANMAZ (bkz. docs/assumptions.md, "Hibrit EKP tahmini"). Kesin tahmin
+// predictOnMaterialsSent'tedir.
 func (s *Store) predictOnCreate(ctx context.Context, o *domain.ProductionOrder) {
 	if s.ml == nil {
 		return
@@ -280,22 +321,95 @@ func (s *Store) predictOnCreate(ctx context.Context, o *domain.ProductionOrder) 
 		slog.Warn("ml tahmini alinamadi, siparis tahminsiz olusturuldu", "order_no", o.OrderNo, "err", err)
 		return
 	}
-	input, _ := json.Marshal(map[string]string{
+	input := map[string]string{
 		"et_kg_estimate":      estimatedEtKg.StringFixed(domain.QtyScale),
 		"unit_weight_kg":      unitWeight.StringFixed(domain.QtyScale),
 		"assumed_yield_ratio": assumedYieldRatio.String(),
-	})
-	predicted, _ := json.Marshal(pred)
-	if _, err := s.db.ExecContext(ctx,
-		`INSERT INTO prediction (id, model_name, model_version, target_type, ref_id, input_json, predicted_json)
-		 VALUES (?, ?, ?, 'production', ?, ?, ?)`,
-		domain.NewID(), pred.ModelName, pred.ModelVersion, o.ID, string(input), string(predicted)); err != nil {
+	}
+	if err := s.insertPrediction(ctx, o.ID, predictionStageDraft, pred, nil, input); err != nil {
 		slog.Warn("ml tahmini kaydedilemedi", "order_no", o.OrderNo, "err", err)
 	}
 }
 
-// recordPredictionActual receive sirasinda gerceklesen degeri tahminle karsilastirip prediction
-// satirini gunceller. Tahmin hic alinmamissa (ML kapaliydi) sessizce atlanir.
+// predictOnMaterialsSent SendMaterials basariyla committen SONRA (en iyi gayret) cagrilir. Bu noktada
+// GERCEK sevk edilen et miktari ve KESIN malzeme maliyeti bilinir; ML'e gercek et_kg ile sorulur ve
+// sonuc hibrit formulle EKP tahminine cevrilir:
+//
+//	predicted_ekp_unit = (material_cost + round2(predicted_qty * service_unit_price)) / predicted_qty
+//
+// (hizmet bedelinde faturalanan adetin tahmini adetle ayni oldugu varsayilir; 4 ondalik, DivRound).
+// Onceki (draft asamasindaki) tahmin satirini DEGISTIRMEZ, yeni bir satir ekler (stage=materials_sent);
+// en guncel satir GET/cost-report'ta gosterilir (loadProductionPrediction, ORDER BY created_at DESC).
+func (s *Store) predictOnMaterialsSent(ctx context.Context, orderID string) {
+	if s.ml == nil {
+		return
+	}
+	var orderNo, productItemID, producerSupplierID string
+	var serviceUnitPrice domain.Amount
+	if err := s.db.QueryRowContext(ctx,
+		`SELECT order_no, product_item_id, producer_supplier_id, service_unit_price FROM production_order WHERE id = ?`, orderID).
+		Scan(&orderNo, &productItemID, &producerSupplierID, &serviceUnitPrice); err != nil {
+		slog.Warn("ml tahmini icin siparis okunamadi", "order_id", orderID, "err", err)
+		return
+	}
+	product, err := getItem(ctx, s.db, productItemID)
+	if err != nil {
+		slog.Warn("ml tahmini icin urun okunamadi", "order_id", orderID, "err", err)
+		return
+	}
+	inputs, err := loadProductionInputs(ctx, s.db, orderID)
+	if err != nil {
+		slog.Warn("ml tahmini icin girdiler okunamadi", "order_id", orderID, "err", err)
+		return
+	}
+	materialCost, meatKg := decimal.Zero, decimal.Zero
+	for _, in := range inputs {
+		materialCost = materialCost.Add(domain.LineTotal(in.QtySent.Decimal, in.UnitCostAtSend.Decimal))
+		if in.MaterialCategory != nil && *in.MaterialCategory == "meat" {
+			meatKg = meatKg.Add(in.QtySent.Decimal)
+		}
+	}
+	if !meatKg.IsPositive() {
+		slog.Warn("ml tahmini atlandi: sevk edilen hammaddeler arasinda et (meat) yok", "order_no", orderNo)
+		return
+	}
+	unitWeight := decimal.NewFromInt(1)
+	if product.UnitWeightKg != nil {
+		unitWeight = product.UnitWeightKg.Decimal
+	}
+
+	pred, err := s.ml.PredictProduction(ctx, mlclient.ProductionPredictionInput{
+		EtKg: meatKg.StringFixed(domain.QtyScale), ProducerID: &producerSupplierID,
+		UnitWeightKg: unitWeight.StringFixed(domain.QtyScale),
+	})
+	if err != nil {
+		slog.Warn("ml tahmini alinamadi (materials_sent), siparis tahminsiz devam ediyor", "order_no", orderNo, "err", err)
+		return
+	}
+	predictedQty, err := decimal.NewFromString(pred.PredictedDeliveredQty)
+	if err != nil || !predictedQty.IsPositive() {
+		slog.Warn("ml gecersiz predicted_delivered_qty dondurdu", "order_no", orderNo, "value", pred.PredictedDeliveredQty)
+		return
+	}
+	predictedServiceCost := domain.LineTotal(predictedQty, serviceUnitPrice.Decimal)
+	predictedEkp := materialCost.Add(predictedServiceCost).DivRound(predictedQty, domain.AmountScale)
+	predictedEkpStr := predictedEkp.StringFixed(domain.AmountScale)
+
+	input := map[string]string{
+		"et_kg": meatKg.StringFixed(domain.QtyScale), "unit_weight_kg": unitWeight.StringFixed(domain.QtyScale),
+		"material_cost":      materialCost.StringFixed(domain.AmountScale),
+		"service_unit_price": serviceUnitPrice.StringFixed(domain.AmountScale),
+	}
+	if err := s.insertPrediction(ctx, orderID, predictionStageMaterialsSent, pred, &predictedEkpStr, input); err != nil {
+		slog.Warn("ml tahmini kaydedilemedi (materials_sent)", "order_no", orderNo, "err", err)
+	}
+}
+
+// recordPredictionActual receive sirasinda gerceklesen degeri EN GUNCEL tahminle (draft veya
+// materials_sent, hangisi varsa) karsilastirip o satiri gunceller. predicted_ekp_unit yalnizca
+// materials_sent asamasinda doluysa EKP sapmasi da yazilir; draft'tan hic materials_sent tahmini
+// alinamadiysa (ML o sirada kapaliydi) yalniz adet sapmasi yazilir, EKP alanlari bos kalir.
+// Tahmin hic alinmamissa (ML hicbir asamada erisilemedi) sessizce atlanir.
 func (s *Store) recordPredictionActual(ctx context.Context, tx *sql.Tx, orderID string, receivedQty, ekpUnit decimal.Decimal) error {
 	var id string
 	var predictedJSON []byte
@@ -308,7 +422,7 @@ func (s *Store) recordPredictionActual(ctx context.Context, tx *sql.Tx, orderID 
 	if err != nil {
 		return err
 	}
-	var pred mlclient.ProductionPrediction
+	var pred storedPrediction
 	if err := json.Unmarshal(predictedJSON, &pred); err != nil {
 		return err
 	}
@@ -317,19 +431,29 @@ func (s *Store) recordPredictionActual(ctx context.Context, tx *sql.Tx, orderID 
 		return err
 	}
 
-	actual, _ := json.Marshal(map[string]string{
-		"delivered_qty": receivedQty.StringFixed(domain.QtyScale),
-		"ekp_unit":      ekpUnit.StringFixed(domain.AmountScale),
-	})
+	actualFields := map[string]string{"delivered_qty": receivedQty.StringFixed(domain.QtyScale)}
 	errAbs := receivedQty.Sub(predictedQty)
 	errPct := decimal.Zero
 	if predictedQty.IsPositive() {
 		errPct = domain.Round2(errAbs.Abs().Mul(decimal.NewFromInt(100)).Div(predictedQty))
 	}
-	errJSON, _ := json.Marshal(map[string]string{
+	errFields := map[string]string{
 		"delivered_qty_error_abs": errAbs.StringFixed(domain.QtyScale),
 		"delivered_qty_error_pct": errPct.StringFixed(2),
-	})
+	}
+
+	if pred.PredictedEkpUnit != nil {
+		predictedEkp, perr := decimal.NewFromString(*pred.PredictedEkpUnit)
+		if perr == nil && predictedEkp.IsPositive() {
+			actualFields["ekp_unit"] = ekpUnit.StringFixed(domain.AmountScale)
+			ekpErrAbs := ekpUnit.Sub(predictedEkp)
+			errFields["ekp_error_abs"] = ekpErrAbs.StringFixed(domain.AmountScale)
+			errFields["ekp_error_pct"] = domain.Round2(ekpErrAbs.Abs().Mul(decimal.NewFromInt(100)).Div(predictedEkp)).StringFixed(2)
+		}
+	}
+
+	actual, _ := json.Marshal(actualFields)
+	errJSON, _ := json.Marshal(errFields)
 	_, err = tx.ExecContext(ctx, `UPDATE prediction SET actual_json = ?, error_json = ? WHERE id = ?`,
 		string(actual), string(errJSON), id)
 	return err
@@ -368,7 +492,7 @@ func (s *Store) CreateProductionOrder(ctx context.Context, req domain.CreateProd
 		orderNo := ""
 		if req.OrderNo != nil {
 			orderNo = *req.OrderNo
-		} else if orderNo, err = nextSequenceNo(ctx, tx, "production_order", "order_no", "URT"); err != nil {
+		} else if orderNo, err = nextSequenceNo(ctx, tx, "URT"); err != nil {
 			return err
 		}
 
@@ -451,7 +575,6 @@ func sendSourceWarehouse(ctx context.Context, tx *sql.Tx, orderID, lotID string)
 // transfer_in (+) hareket cifti + production_input satiri, tek transaction'da. draft veya
 // materials_sent durumunda birden fazla cagriya (kismi sevkiyat) izin verilir.
 func (s *Store) SendMaterials(ctx context.Context, orderID string, req domain.SendMaterialsRequest) (*domain.ProductionOrder, error) {
-	var out *domain.ProductionOrder
 	err := s.InTx(ctx, func(tx *sql.Tx) error {
 		var status, externalWhID string
 		if err := tx.QueryRowContext(ctx,
@@ -500,11 +623,15 @@ func (s *Store) SendMaterials(ctx context.Context, orderID string, req domain.Se
 		if _, err := tx.ExecContext(ctx, `UPDATE production_order SET status = 'materials_sent' WHERE id = ?`, orderID); err != nil {
 			return mapErr(err)
 		}
-		var err error
-		out, err = getProductionOrderDetail(ctx, tx, orderID)
-		return err
+		return nil
 	})
-	return out, err
+	if err != nil {
+		return nil, err
+	}
+	// Bu noktada gercek malzeme maliyeti kesindir; ML'e gercek et_kg ile sorup hibrit EKP tahmini
+	// uretir (en iyi gayret, ayri bir prediction satiri olarak -- oncekinin uzerine yazmaz).
+	s.predictOnMaterialsSent(ctx, orderID)
+	return s.GetProductionOrder(ctx, orderID)
 }
 
 // ReceiveProduction mamulu teslim alir ve EKP'yi domain.CalculateProductionCost ile hesaplar:
@@ -640,7 +767,7 @@ func (s *Store) ReceiveProduction(ctx context.Context, orderID string, req domai
 		lotNo := ""
 		if req.OutputLotNo != nil {
 			lotNo = *req.OutputLotNo
-		} else if lotNo, err = nextSequenceNo(ctx, tx, "lot", "lot_no", "SUC"); err != nil {
+		} else if lotNo, err = nextSequenceNo(ctx, tx, "SUC"); err != nil {
 			return err
 		}
 		ekp := decimal.RequireFromString(result.EkpUnit)

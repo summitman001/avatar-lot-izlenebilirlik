@@ -50,7 +50,8 @@ type ProductionPrediction struct {
 }
 
 // PredictProduction POST /predict/production cagirir. ML'in kendisi maliyet modeli DEGILDIR: yalnizca
-// fiziksel verim (adet/kg) tahmin eder, EKP tahmini doner ONEMSIZ (bkz. docs/assumptions.md).
+// fiziksel verim (adet/kg) tahmin eder; HTTP yanitinda EKP alani YOKTUR. EKP tahmini (hibrit yaklasim:
+// bu fiziksel tahmin + kesin malzeme maliyeti) cagiran tarafta (repo/production.go) hesaplanir.
 func (c *Client) PredictProduction(ctx context.Context, in ProductionPredictionInput) (*ProductionPrediction, error) {
 	body, err := json.Marshal(in)
 	if err != nil {
