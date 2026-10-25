@@ -4,10 +4,16 @@
 package integration
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/shopspring/decimal"
@@ -575,5 +581,95 @@ func setLotStatus(t *testing.T, lotID, status string) {
 	t.Helper()
 	if _, err := testDB.Exec(`UPDATE lot SET status = ? WHERE id = ?`, status, lotID); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Atomik numara uretimi (number_sequence)
+// ---------------------------------------------------------------------------
+
+// postOrderNoRaw dogrudan HTTP ile POST /production-orders cagirir; t.Fatal KULLANMAZ (goroutine
+// icinden guvenli degildir) -- hata, cagirana donulur.
+func postOrderNoRaw(srv *httptest.Server, body any) (string, error) {
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return "", err
+	}
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/production-orders", bytes.NewReader(raw))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer res.Body.Close()
+	b, err := io.ReadAll(res.Body)
+	if err != nil {
+		return "", err
+	}
+	if res.StatusCode != http.StatusCreated {
+		return "", fmt.Errorf("status %d: %s", res.StatusCode, string(b))
+	}
+	var out map[string]any
+	if err := json.Unmarshal(b, &out); err != nil {
+		return "", err
+	}
+	orderNo, _ := out["order_no"].(string)
+	if orderNo == "" {
+		return "", fmt.Errorf("order_no bos: %s", string(b))
+	}
+	return orderNo, nil
+}
+
+// TestProductionOrderNumberingIsAtomicUnderConcurrency: 10 siparis AYNI ANDA (order_no verilmeden)
+// olusturulur; number_sequence tablosu + INSERT...ON DUPLICATE KEY UPDATE sayesinde hepsi benzersiz
+// URT-<yil>-NNN numarasi almali (eski MAX+1 yaklasiminda bu yaris durumunda numara cakisabilirdi).
+func TestProductionOrderNumberingIsAtomicUnderConcurrency(t *testing.T) {
+	e := newEnv(t)
+	f := e.prodFixture()
+
+	const n = 10
+	type result struct {
+		orderNo string
+		err     error
+	}
+	results := make(chan result, n)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			orderNo, err := postOrderNoRaw(e.srv, map[string]any{
+				"product_item_id": f.product, "producer_supplier_id": f.producer, "external_warehouse_id": f.extWh,
+				"planned_qty": "1", "service_unit_price": "1.0000",
+			})
+			results <- result{orderNo: orderNo, err: err}
+		}()
+	}
+	wg.Wait()
+	close(results)
+
+	seen := map[string]bool{}
+	for res := range results {
+		if res.err != nil {
+			t.Fatal(res.err)
+		}
+		if !strings.HasPrefix(res.orderNo, "URT-") {
+			t.Errorf("beklenmeyen order_no bicimi: %s", res.orderNo)
+		}
+		if seen[res.orderNo] {
+			t.Errorf("tekrarlanan order_no: %s", res.orderNo)
+		}
+		seen[res.orderNo] = true
+	}
+	if len(seen) != n {
+		t.Fatalf("%d benzersiz numara beklenirdi, %d geldi: %v", n, len(seen), seen)
+	}
+
+	// Veritabaninda da dogrula: tam olarak n farkli order_no var.
+	if got := count(t, `SELECT COUNT(DISTINCT order_no) FROM production_order WHERE order_no LIKE 'URT-%'`); got != n {
+		t.Fatalf("DB'de %d benzersiz order_no beklenirdi, %d bulundu", n, got)
 	}
 }
