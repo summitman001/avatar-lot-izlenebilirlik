@@ -118,20 +118,39 @@ function SummaryCard({ order }: { order: ProductionOrder }) {
   )
 }
 
+const STAGE_LABEL: Record<NonNullable<ProductionOrder['prediction']>['stage'], string> = {
+  draft: 'taslak tahmini', materials_sent: 'sevk sonrası tahmini',
+}
+
 function PredictionCard({ prediction: p }: { prediction: NonNullable<ProductionOrder['prediction']> }) {
   return (
     <Card withBorder>
       <Stack gap="xs">
         <Group justify="space-between">
           <Text fw={500}>Tahmin vs Gerçek</Text>
-          <Badge variant="light">{p.model_name} {p.baseline && '(baseline)'}</Badge>
+          <Group gap="xs">
+            <Badge variant="light" color="gray">{STAGE_LABEL[p.stage]}</Badge>
+            <Badge variant="light">{p.model_name} {p.baseline && '(baseline)'}</Badge>
+          </Group>
         </Group>
         <Group justify="space-between"><Text size="sm" c="dimmed">Beklenen Adet</Text><Text size="sm">{p.predicted_delivered_qty}</Text></Group>
         <Group justify="space-between"><Text size="sm" c="dimmed">Gerçek Adet</Text><Text size="sm">{p.actual_delivered_qty ?? '—'}</Text></Group>
-        <Group justify="space-between"><Text size="sm" c="dimmed">Sapma</Text>
+        <Group justify="space-between"><Text size="sm" c="dimmed">Adet Sapması</Text>
           <Text size="sm">{p.delivered_qty_error_abs ? `${p.delivered_qty_error_abs} (%${p.delivered_qty_error_pct})` : '—'}</Text>
         </Group>
-        <Text size="xs" c="dimmed">ML servisi yalnızca fiziksel verimi tahmin eder; EKP tahmini içermez.</Text>
+        <Group justify="space-between"><Text size="sm" c="dimmed">Beklenen EKP</Text>
+          <Text size="sm">{p.predicted_ekp_unit ? `${p.predicted_ekp_unit} €` : '—'}</Text>
+        </Group>
+        <Group justify="space-between"><Text size="sm" c="dimmed">Gerçek EKP</Text>
+          <Text size="sm">{p.actual_ekp_unit ? `${p.actual_ekp_unit} €` : '—'}</Text>
+        </Group>
+        <Group justify="space-between"><Text size="sm" c="dimmed">EKP Sapması</Text>
+          <Text size="sm">{p.ekp_error_abs ? `${p.ekp_error_abs} € (%${p.ekp_error_pct})` : '—'}</Text>
+        </Group>
+        <Text size="xs" c="dimmed">
+          Beklenen EKP hibrit bir tahmindir: ML&apos;in fiziksel verim tahmini + kesin malzeme maliyeti
+          (yalnızca hammaddeler sevk edildikten sonra hesaplanabilir).
+        </Text>
       </Stack>
     </Card>
   )

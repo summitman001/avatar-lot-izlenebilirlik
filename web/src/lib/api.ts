@@ -127,16 +127,24 @@ export interface ProductionStatusEvent {
   at: string
 }
 
+// ProductionPrediction: EN GUNCEL tahmin kaydi (draft veya materials_sent, hangisi daha yeniyse).
+// predicted_ekp_unit yalnizca 'materials_sent' asamasinda doludur (malzeme maliyeti o asamada
+// kesinlesir); hibrit yaklasim: ML'in fiziksel verim tahmini + kesin malzeme maliyeti.
 export interface ProductionPrediction {
   model_name: string
   model_version: string
   baseline: boolean
+  stage: 'draft' | 'materials_sent'
   predicted_yield_ratio: Decimal
   predicted_output_kg: Decimal
   predicted_delivered_qty: Decimal
+  predicted_ekp_unit: Decimal | null
   actual_delivered_qty: Decimal | null
+  actual_ekp_unit: Decimal | null
   delivered_qty_error_abs: Decimal | null
   delivered_qty_error_pct: Decimal | null
+  ekp_error_abs: Decimal | null
+  ekp_error_pct: Decimal | null
 }
 
 export interface ProductionOrder {
