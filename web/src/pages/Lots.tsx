@@ -2,6 +2,7 @@ import { Alert, Badge, Checkbox, Group, Loader, Select, Table, Text, TextInput, 
 import { useDebouncedValue } from '@mantine/hooks'
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { apiGet, type List, type Lot } from '../lib/api'
 
 const STATUS: Record<Lot['status'], { label: string; color: string }> = {
@@ -25,7 +26,8 @@ function MismatchBadge({ lot }: { lot: Lot }) {
 }
 
 export default function Lots() {
-  const [q, setQ] = useState('')
+  const [params] = useSearchParams()
+  const [q, setQ] = useState(params.get('q') ?? '')
   const [status, setStatus] = useState<string | null>(null)
   const [onlyMismatch, setOnlyMismatch] = useState(false)
   const [debouncedQ] = useDebouncedValue(q, 300)
