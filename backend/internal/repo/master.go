@@ -14,11 +14,11 @@ import (
 // item
 // ---------------------------------------------------------------------------
 
-const itemCols = `id, code, name, item_type, base_uom, unit_weight_kg, default_sale_price, is_active, created_at`
+const itemCols = `id, code, name, item_type, base_uom, material_category, unit_weight_kg, default_sale_price, is_active, created_at`
 
 func scanItem(row interface{ Scan(...any) error }) (*domain.Item, error) {
 	var it domain.Item
-	err := row.Scan(&it.ID, &it.Code, &it.Name, &it.ItemType, &it.BaseUOM,
+	err := row.Scan(&it.ID, &it.Code, &it.Name, &it.ItemType, &it.BaseUOM, &it.MaterialCategory,
 		&it.UnitWeightKg, &it.DefaultSalePrice, &it.IsActive, &it.CreatedAt)
 	if err != nil {
 		return nil, mapErr(err)
@@ -79,9 +79,9 @@ func (s *Store) CreateItem(ctx context.Context, in domain.Item) (*domain.Item, e
 	var out *domain.Item
 	err = s.InTx(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO item (id, code, name, item_type, base_uom, unit_weight_kg, default_sale_price, is_active)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			id, in.Code, in.Name, in.ItemType, in.BaseUOM, in.UnitWeightKg, in.DefaultSalePrice, in.IsActive); err != nil {
+			`INSERT INTO item (id, code, name, item_type, base_uom, material_category, unit_weight_kg, default_sale_price, is_active)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			id, in.Code, in.Name, in.ItemType, in.BaseUOM, in.MaterialCategory, in.UnitWeightKg, in.DefaultSalePrice, in.IsActive); err != nil {
 			return mapErr(err)
 		}
 		if out, err = getItem(ctx, tx, id); err != nil {
@@ -96,9 +96,9 @@ func (s *Store) UpdateItem(ctx context.Context, id string, in domain.Item) (*dom
 	var out *domain.Item
 	err := s.InTx(ctx, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx,
-			`UPDATE item SET code=?, name=?, item_type=?, base_uom=?, unit_weight_kg=?, default_sale_price=?, is_active=?
+			`UPDATE item SET code=?, name=?, item_type=?, base_uom=?, material_category=?, unit_weight_kg=?, default_sale_price=?, is_active=?
 			 WHERE id = ?`,
-			in.Code, in.Name, in.ItemType, in.BaseUOM, in.UnitWeightKg, in.DefaultSalePrice, in.IsActive, id)
+			in.Code, in.Name, in.ItemType, in.BaseUOM, in.MaterialCategory, in.UnitWeightKg, in.DefaultSalePrice, in.IsActive, id)
 		if err != nil {
 			return mapErr(err)
 		}
