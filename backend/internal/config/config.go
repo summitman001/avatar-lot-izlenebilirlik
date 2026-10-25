@@ -13,6 +13,7 @@ type Config struct {
 	DSN         string   // go-sql-driver DSN
 	CORSOrigins []string // "*" = hepsi
 	GoldenDir   string   // seed: docs/golden dizini
+	MLURL       string   // ML tahmin servisi (bkz. internal/mlclient); erisilemezse tahmin atlanir
 }
 
 func env(key, def string) string {
@@ -45,5 +46,6 @@ func Load() Config {
 		DSN:         dsn,
 		CORSOrigins: origins,
 		GoldenDir:   env("GOLDEN_DIR", "../docs/golden"),
+		MLURL:       env("ML_URL", "http://localhost:8000"),
 	}
 }

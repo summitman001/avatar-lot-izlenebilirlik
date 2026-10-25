@@ -321,6 +321,109 @@ Aynı `op_id` tekrar gönderilirse: `"status": "duplicate", "message": "op_id da
 
 ---
 
+## Dış üretim siparişleri (Görev 1)
+
+Durum makinesi: `draft → materials_sent → received → closed`. Geçersiz geçişler `409`. Ayrıntılı kurallar ve örnekler: [`docs/assumptions.md`](assumptions.md) ("Dış üretim (Görev 1) servisine ilişkin varsayımlar ve tespitler").
+
+### `POST /production-orders` — sipariş oluştur (durum `draft`)
+
+```json
+{
+  "product_item_id": "01a174fc-3594-70aa-9633-15f7e5522093",
+  "producer_supplier_id": "01a174fc-2e17-7a08-ac08-30badb2fc575",
+  "external_warehouse_id": "01a174fc-2fdf-70da-a64b-a8994d461a3c",
+  "planned_qty": "85",
+  "service_unit_price": "5.5000",
+  "sale_price": "24.9000"
+}
+```
+
+Opsiyonel: `id`, `order_no` (boşsa `URT-<yıl>-NNN` **atomik** üretilir — eş zamanlı isteklerde de çakışmaz). Oluşturulunca ML servisine (`ML_URL`) en iyi gayretle bir tahmin istenir (`prediction`, `stage: "draft"`; malzeme kompozisyonu henüz bilinmediği için yalnızca adet tahmini, `predicted_ekp_unit: null`); ML kapalıysa sipariş yine oluşturulur, `prediction` boş kalır.
+
+### `POST /production-orders/{id}/send-materials` — hammadde sevk et
+
+`draft` veya `materials_sent` durumunda kabul edilir (kısmi/çok partili sevkiyat için tekrar çağrılabilir):
+
+```json
+{ "lines": [
+  { "lot_id": "01a174fc-3daa-7e29-a6a6-335611b68b22", "qty": "100.000" },
+  { "lot_id": "01a174fc-401c-74de-8157-9942629d7faf", "qty": "2.000" },
+  { "lot_id": "01a174fc-428f-7e29-bbdd-f963c4344fe6", "qty": "5.000" }
+]}
+```
+
+Her satır için `send_to_producer` (−) + `transfer_in` (+) hareket çifti ve bir `production_input` satırı oluşur; durum `materials_sent` olur. Başarılı her çağrıdan sonra (en iyi gayret) ML'e GERÇEK sevk edilen et miktarıyla tekrar sorulup yeni bir tahmin satırı eklenir — artık kesin malzeme maliyeti bilindiği için bu satırda `predicted_ekp_unit` doludur (bkz. `GET .../cost-report` örneği). Hatalar: lot aktif değilse (`blocked`/`recalled`/`consumed`) `422`; lotun tek bir depoda yeterli bakiyesi yoksa `409`; aynı lot bu siparişe ikinci kez gönderilirse `409` (bir lot, bir siparişe en fazla bir kez sevk edilir).
+
+### `POST /production-orders/{id}/receive` — mamulü teslim al
+
+Yalnız `materials_sent` durumunda kabul edilir:
+
+```json
+{
+  "received_qty": "85",
+  "output_lot_no": "SUC-2026-045",
+  "service_invoice_no": "URT-2026-045-INV",
+  "service_invoiced_qty": "85",
+  "returns": [{ "lot_id": "01a174fc-3daa-7e29-a6a6-335611b68b22", "qty": "10.000" }]
+}
+```
+
+`returns` opsiyoneldir (dış üreticiden geri gelen artan hammadde). İade edilmeyen (fire dahil) miktar `production_consume` ile düşülür ve maliyete girer. `200` yanıtı (kısaltılmış, golden `UR-001` ile birebir):
+
+```json
+{
+  "status": "received",
+  "material_cost": "1076.0000",
+  "service_cost": "467.5000",
+  "total_cost": "1543.5000",
+  "ekp_unit": "18.1588",
+  "output_lot_id": "01a174fc-51e3-79b8-b35c-a3b67b3b2efd",
+  "output_lot_no": "SUC-2026-045",
+  "warnings": []
+}
+```
+
+`INVOICED_QTY_MISMATCH` (`service_invoiced_qty ≠ received_qty`) ve `QTY_VARIANCE` (`|received_qty − planned_qty| / planned_qty > %2`) uyarıları `warnings`'e eklenir. Hatalar: `materials_sent` dışı durumda `409`; iade miktarı sevk edilenden fazlaysa `422`; bir hammaddenin ürününde `material_category` tanımlı değilse `422`.
+
+### `POST /production-orders/{id}/close` — kapat
+
+Yalnız `received` durumunda kabul edilir. Gövde opsiyonel: `receive`'de `service_invoice_no` verilmediyse burada (`{"service_invoice_no": "..."}`) tamamlanabilir; ikisi de boşsa `422`.
+
+### `GET /production-orders/{id}/cost-report` — maliyet raporu
+
+`received` veya `closed` durumunda (aksi halde `422`):
+
+```json
+{
+  "order_no": "URT-2026-045",
+  "lines": [
+    { "label": "Dana Eti", "qty": "100.000", "unit_price": "9.7000", "amount": "970.00" },
+    { "label": "Sucuk Baharatı", "qty": "2.000", "unit_price": "24.0000", "amount": "48.00" },
+    { "label": "Bağırsak", "qty": "5.000", "unit_price": "11.6000", "amount": "58.00" },
+    { "label": "Hizmet bedeli", "qty": "85.000", "unit_price": "5.5000", "amount": "467.50" }
+  ],
+  "ekp_unit": "18.1588", "ekp_display": "18.16", "ekp_per_kg": "18.1588",
+  "yield_input_pct": "79.44", "yield_meat_ratio": "0.8500",
+  "revenue": "2116.50", "gross_profit_total": "573.00", "margin_pct": "27.07",
+  "qty_variance_pct": "0.00", "warnings": [],
+  "prediction": {
+    "model_name": "production_baseline_supplier_mean", "baseline": true, "stage": "materials_sent",
+    "predicted_delivered_qty": "84.87", "predicted_ekp_unit": "18.1783",
+    "actual_delivered_qty": "85.000", "actual_ekp_unit": "18.1588",
+    "delivered_qty_error_abs": "0.130", "delivered_qty_error_pct": "0.15",
+    "ekp_error_abs": "-0.0195", "ekp_error_pct": "0.11"
+  }
+}
+```
+
+`ekp_display` yalnızca gösterim içindir; değerleme `ekp_unit` veya `total_cost` üzerinden yapılır (bkz. `docs/assumptions.md`, yuvarlama notu). `prediction.predicted_ekp_unit` **hibrit bir tahmindir**: ML'in kendisi maliyet bilmez (yalnızca fiziksel verimi/adedi tahmin eder), bu alan sunucuda `(material_cost + round2(predicted_qty × service_unit_price)) / predicted_qty` formülüyle hesaplanır. İki aşamalı: `stage: "draft"` (sipariş oluşunca, malzeme maliyeti henüz bilinmediği için `predicted_ekp_unit: null`) ve `stage: "materials_sent"` (hammadde sevki tamamlanınca, kesin malzeme maliyetiyle hesaplanır — yukarıdaki örnek bu aşamadandır). Ayrıntı: `docs/assumptions.md` ("Hibrit EKP tahmini").
+
+### `GET /production-orders/{id}/movements`
+
+Bu siparişe ait tüm stok hareketlerini (`send_to_producer`, `transfer_in/out`, `production_consume`, `production_in`) kronolojik döner; biçim `GET /stock-movements` ile aynıdır.
+
+---
+
 ## Henüz uygulanmamış (sözleşme taslağı yok)
 
-Dış üretim, parçalama, satış/sevkiyat/iade, izlenebilirlik sorguları, geri çağırma, tahmin/uyarı uç noktaları ve cihaz kaydı sonraki işlerdir (bkz. [`docs/HANDOFF.md`](HANDOFF.md)). Şemaları `backend/migrations/000001_init.up.sql` içinde hazırdır; hesap kuralları Go'da `backend/internal/domain` içinde (`CalculateProductionCost`, `AllocateCutting`) golden testlerle doğrulanmıştır.
+Parçalama, satış/sevkiyat/iade, izlenebilirlik sorguları, geri çağırma, uyarı uç noktaları ve cihaz kaydı sonraki işlerdir (bkz. [`docs/HANDOFF.md`](HANDOFF.md)). Şemaları `backend/migrations/000001_init.up.sql` içinde hazırdır; hesap kuralları Go'da `backend/internal/domain` içinde (`AllocateCutting`) golden testlerle doğrulanmıştır.

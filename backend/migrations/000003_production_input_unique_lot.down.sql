@@ -1,0 +1,1 @@
+ALTER TABLE production_input DROP KEY uq_production_input_order_lot;

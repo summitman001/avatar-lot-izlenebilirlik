@@ -13,6 +13,7 @@ import (
 var (
 	itemTypes      = set("raw", "finished", "cut_part", "by_product", "waste")
 	uoms           = set("kg", "adet")
+	materialCats   = set("meat", "spice", "casing", "other")
 	supplierTypes  = set("material", "external_producer", "livestock")
 	customerTypes  = set("market", "wholesale", "end_customer")
 	warehouseTypes = set("internal", "external_producer", "quarantine", "vehicle")
@@ -65,11 +66,15 @@ func checkEmail(p *string) error {
 }
 
 type Item struct {
-	ID               string    `json:"id"`
-	Code             string    `json:"code"`
-	Name             string    `json:"name"`
-	ItemType         string    `json:"item_type"`
-	BaseUOM          string    `json:"base_uom"`
+	ID       string `json:"id"`
+	Code     string `json:"code"`
+	Name     string `json:"name"`
+	ItemType string `json:"item_type"`
+	BaseUOM  string `json:"base_uom"`
+	// MaterialCategory: yalnizca item_type=raw icin anlamli (Gorev 1 maliyet satirinin kategorisi:
+	// meat|spice|casing|other). CalculateProductionCost'un gectigi her hammadde lotunun urununde
+	// dolu olmasi gerekir; bos kalirsa dis uretime hammadde gonderilemez.
+	MaterialCategory *string   `json:"material_category"`
 	UnitWeightKg     *Qty      `json:"unit_weight_kg"`
 	DefaultSalePrice *Amount   `json:"default_sale_price"`
 	IsActive         bool      `json:"is_active"`
@@ -98,6 +103,11 @@ func (i *Item) Validate() error {
 	}
 	if err := oneOf("base_uom", i.BaseUOM, uoms); err != nil {
 		return err
+	}
+	if i.MaterialCategory != nil {
+		if err := oneOf("material_category", *i.MaterialCategory, materialCats); err != nil {
+			return err
+		}
 	}
 	if i.UnitWeightKg != nil && !i.UnitWeightKg.IsPositive() {
 		return Invalid("unit_weight_kg sifirdan buyuk olmali")

@@ -150,7 +150,7 @@ func (h *handlers) listMovements(w nethttp.ResponseWriter, r *nethttp.Request) {
 	}
 	q := r.URL.Query()
 	items, err := h.store.ListMovements(r.Context(), repo.MovementFilter{
-		LotID: q.Get("lot_id"), RefType: q.Get("ref_type"),
+		LotID: q.Get("lot_id"), RefType: q.Get("ref_type"), RefID: q.Get("ref_id"),
 		WarehouseID: q.Get("warehouse_id"), MovementType: q.Get("movement_type"), Page: p,
 	})
 	if err != nil {
@@ -176,6 +176,133 @@ func (h *handlers) reverseMovement(w nethttp.ResponseWriter, r *nethttp.Request)
 		return
 	}
 	writeJSON(w, nethttp.StatusCreated, m)
+}
+
+// ---------------------------------------------------------------------------
+// dis uretim (Gorev 1)
+// ---------------------------------------------------------------------------
+
+func (h *handlers) listProductionOrders(w nethttp.ResponseWriter, r *nethttp.Request) {
+	p, err := pageFrom(r)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	q := r.URL.Query()
+	if st := q.Get("status"); st != "" && !domain.ProductionOrderStatuses[st] {
+		writeError(w, r, badRequest("status gecersiz: "+st))
+		return
+	}
+	items, err := h.store.ListProductionOrders(r.Context(), repo.ProductionOrderFilter{Status: q.Get("status"), Q: q.Get("q"), Page: p})
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, nethttp.StatusOK, map[string]any{"items": items})
+}
+
+func (h *handlers) createProductionOrder(w nethttp.ResponseWriter, r *nethttp.Request) {
+	var req domain.CreateProductionOrderRequest
+	if err := decodeBody(w, r, &req); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	if err := req.Validate(); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	out, err := h.store.CreateProductionOrder(r.Context(), req)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, nethttp.StatusCreated, out)
+}
+
+func (h *handlers) getProductionOrder(w nethttp.ResponseWriter, r *nethttp.Request) {
+	out, err := h.store.GetProductionOrder(r.Context(), chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, nethttp.StatusOK, out)
+}
+
+func (h *handlers) sendProductionMaterials(w nethttp.ResponseWriter, r *nethttp.Request) {
+	var req domain.SendMaterialsRequest
+	if err := decodeBody(w, r, &req); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	if err := req.Validate(); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	out, err := h.store.SendMaterials(r.Context(), chi.URLParam(r, "id"), req)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, nethttp.StatusOK, out)
+}
+
+func (h *handlers) receiveProduction(w nethttp.ResponseWriter, r *nethttp.Request) {
+	var req domain.ReceiveProductionRequest
+	if err := decodeBody(w, r, &req); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	if err := req.Validate(); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	out, err := h.store.ReceiveProduction(r.Context(), chi.URLParam(r, "id"), req)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, nethttp.StatusOK, out)
+}
+
+func (h *handlers) closeProductionOrder(w nethttp.ResponseWriter, r *nethttp.Request) {
+	var req domain.CloseProductionOrderRequest
+	if err := decodeOptionalBody(w, r, &req); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	if err := req.Validate(); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	out, err := h.store.CloseProductionOrder(r.Context(), chi.URLParam(r, "id"), req)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, nethttp.StatusOK, out)
+}
+
+func (h *handlers) productionCostReport(w nethttp.ResponseWriter, r *nethttp.Request) {
+	out, err := h.store.GetProductionCostReport(r.Context(), chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, nethttp.StatusOK, out)
+}
+
+func (h *handlers) productionMovements(w nethttp.ResponseWriter, r *nethttp.Request) {
+	id := chi.URLParam(r, "id")
+	if _, err := h.store.GetProductionOrder(r.Context(), id); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	items, err := h.store.ListMovements(r.Context(), repo.MovementFilter{RefType: "production_order", RefID: id, Page: repo.Page{Limit: repo.MaxLimit}})
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, nethttp.StatusOK, map[string]any{"items": items})
 }
 
 // ---------------------------------------------------------------------------

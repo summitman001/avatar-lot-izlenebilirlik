@@ -13,6 +13,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 
 	"github.com/summitman001/avatar-lot-izlenebilirlik/backend/internal/domain"
+	"github.com/summitman001/avatar-lot-izlenebilirlik/backend/internal/mlclient"
 )
 
 // DBTX hem *sql.DB hem *sql.Tx tarafindan saglanir; okuma fonksiyonlari ikisiyle de calisir.
@@ -22,11 +23,21 @@ type DBTX interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-type Store struct{ db *sql.DB }
+type Store struct {
+	db *sql.DB
+	ml *mlclient.Client // nil ise ML entegrasyonu atlanir (bkz. production.go, predictOnCreate)
+}
 
 func New(db *sql.DB) *Store { return &Store{db: db} }
 
 func (s *Store) DB() *sql.DB { return s.db }
+
+// SetMLClient ML tahmin istemcisini baglar (zincirlenebilir: repo.New(db).SetMLClient(c)). nil
+// gecilebilir (ML'siz calisma, ornegin testlerde).
+func (s *Store) SetMLClient(c *mlclient.Client) *Store {
+	s.ml = c
+	return s
+}
 
 // InTx fn'i tek transaction'da calistirir; hata donerse geri alir.
 func (s *Store) InTx(ctx context.Context, fn func(tx *sql.Tx) error) error {

@@ -4,6 +4,8 @@ import { NavLink as RouterLink, Route, Routes } from 'react-router-dom'
 import { API_URL, apiGet } from './lib/api'
 import ComingSoon from './pages/ComingSoon'
 import Lots from './pages/Lots'
+import ProductionOrderDetail from './pages/ProductionOrderDetail'
+import ProductionOrders from './pages/ProductionOrders'
 import Products from './pages/Products'
 
 // Sol menu. `ready: false` olanlar "Yakında" placeholder'ıdır (docs/HANDOFF.md sıradaki işler).
@@ -12,7 +14,7 @@ const MENU = [
   { path: '/urunler', label: 'Ürünler', ready: true },
   { path: '/lotlar', label: 'Lotlar', ready: true },
   { path: '/alislar', label: 'Alışlar', ready: false },
-  { path: '/dis-uretim', label: 'Dış Üretim', ready: false },
+  { path: '/dis-uretim', label: 'Dış Üretim', ready: true },
   { path: '/parcalama', label: 'Parçalama', ready: false },
   { path: '/satis-sevkiyat', label: 'Satış/Sevkiyat', ready: false },
   { path: '/izlenebilirlik', label: 'İzlenebilirlik', ready: false },
@@ -63,6 +65,8 @@ export default function App() {
           ))}
           <Route path="/urunler" element={<Products />} />
           <Route path="/lotlar" element={<Lots />} />
+          <Route path="/dis-uretim" element={<ProductionOrders />} />
+          <Route path="/dis-uretim/:id" element={<ProductionOrderDetail />} />
           <Route path="*" element={<ComingSoon title="Sayfa bulunamadı" />} />
         </Routes>
       </AppShell.Main>

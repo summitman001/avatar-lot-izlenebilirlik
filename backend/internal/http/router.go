@@ -105,6 +105,15 @@ func NewRouter(d Deps) nethttp.Handler {
 			},
 		})
 
+		r.Get("/production-orders", h.listProductionOrders)
+		r.Post("/production-orders", h.createProductionOrder)
+		r.Get("/production-orders/{id}", h.getProductionOrder)
+		r.Post("/production-orders/{id}/send-materials", h.sendProductionMaterials)
+		r.Post("/production-orders/{id}/receive", h.receiveProduction)
+		r.Post("/production-orders/{id}/close", h.closeProductionOrder)
+		r.Get("/production-orders/{id}/cost-report", h.productionCostReport)
+		r.Get("/production-orders/{id}/movements", h.productionMovements)
+
 		r.Get("/lots", h.listLots)
 		r.Post("/lots", h.createLot)
 		r.Get("/lots/{id}", h.getLot)
