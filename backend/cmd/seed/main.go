@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"github.com/summitman001/avatar-lot-izlenebilirlik/backend/internal/config"
 	"github.com/summitman001/avatar-lot-izlenebilirlik/backend/internal/db"
 	"github.com/summitman001/avatar-lot-izlenebilirlik/backend/internal/domain"
+	"github.com/summitman001/avatar-lot-izlenebilirlik/backend/internal/mlclient"
 	"github.com/summitman001/avatar-lot-izlenebilirlik/backend/internal/repo"
 )
 
@@ -42,7 +44,8 @@ func run(ctx context.Context) error {
 		return err
 	}
 	defer conn.Close()
-	s := &seeder{store: repo.New(conn), db: conn, ids: map[string]string{}}
+	store := repo.New(conn).SetMLClient(mlclient.New(cfg.MLURL))
+	s := &seeder{store: store, db: conn, ids: map[string]string{}}
 
 	if err := s.suppliers(ctx); err != nil {
 		return err
@@ -60,6 +63,9 @@ func run(ctx context.Context) error {
 		return err
 	}
 	if err := s.purchases(ctx); err != nil {
+		return err
+	}
+	if err := s.externalProduction(ctx); err != nil {
 		return err
 	}
 	slog.Info("seed tamam", "olusturulan", s.created, "atlanan", s.skipped)
@@ -180,9 +186,11 @@ func (s *seeder) customers(ctx context.Context) error {
 
 func (s *seeder) items(ctx context.Context) error {
 	for _, v := range []domain.Item{
-		{Code: "ET-DANA", Name: "Dana Eti", ItemType: "raw", BaseUOM: "kg"},
-		{Code: "BAHARAT-SUCUK", Name: "Sucuk Baharatı", ItemType: "raw", BaseUOM: "kg"},
-		{Code: "BAGIRSAK", Name: "Bağırsak", ItemType: "raw", BaseUOM: "kg"},
+		// material_category Gorev 1 maliyet hesabinin kategori alanidir (meat|spice|casing|other);
+		// bkz. migrations/000002_item_material_category, docs/assumptions.md.
+		{Code: "ET-DANA", Name: "Dana Eti", ItemType: "raw", BaseUOM: "kg", MaterialCategory: str("meat")},
+		{Code: "BAHARAT-SUCUK", Name: "Sucuk Baharatı", ItemType: "raw", BaseUOM: "kg", MaterialCategory: str("spice")},
+		{Code: "BAGIRSAK", Name: "Bağırsak", ItemType: "raw", BaseUOM: "kg", MaterialCategory: str("casing")},
 		// VARSAYIM: default_sale_price 24.90 yarışma dokümanından gelmez (docs/assumptions.md, "VKP varsayımı").
 		{Code: "SUCUK-NARIN-1KG", Name: "Narin Sucuk 1 kg", ItemType: "finished", BaseUOM: "adet", UnitWeightKg: qtyP("1.000"), DefaultSalePrice: amtP("24.9000")},
 		{Code: "KUZU-BUTUN", Name: "Bütün Kuzu", ItemType: "raw", BaseUOM: "kg"},
@@ -327,5 +335,71 @@ func (s *seeder) purchases(ctx context.Context) error {
 		s.created++
 		slog.Info("alis lotu olusturuldu", "lot_no", lot.LotNo, "has_mismatch", lot.Purchase.HasMismatch)
 	}
+	return nil
+}
+
+// externalProduction URT-2026-045 senaryosunu SERVISLER UZERINDEN (repo fonksiyonlariyla, ham SQL
+// ile degil) baştan sona olusturur: hammadde sevki -> 85 adet kabul -> kapanis. Golden UR-001 ile
+// ayni girdileri kullanir (ekp_unit = 18.1588, bkz. docs/golden/production_cases.json).
+func (s *seeder) externalProduction(ctx context.Context) error {
+	const orderNo = "URT-2026-045"
+	var existingID string
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM production_order WHERE order_no = ?`, orderNo).Scan(&existingID)
+	if err == nil {
+		s.skipped++
+		return nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+
+	order, err := s.store.CreateProductionOrder(ctx, domain.CreateProductionOrderRequest{
+		OrderNo:             str(orderNo),
+		ProductItemID:       s.must(ctx, "item", "SUCUK-NARIN-1KG"),
+		ProducerSupplierID:  s.must(ctx, "supplier", "SUP-URT"),
+		ExternalWarehouseID: s.must(ctx, "warehouse", "WH-EXT-01"),
+		PlannedQty:          qty("85"),
+		ServiceUnitPrice:    amt("5.5000"),
+		SalePrice:           amtP("24.9000"), // VARSAYIM: docs/assumptions.md "VKP varsayımı"
+	})
+	if err != nil {
+		return err
+	}
+	s.created++
+	slog.Info("dis uretim siparisi olusturuldu", "order_no", order.OrderNo)
+
+	// Hammaddeler: ayni gun alinan ET-2026-001 (100 kg), BHR-2026-001 (2 kg), BGR-2026-001 (5 kg) --
+	// uc lotun TAMAMI (golden UR-001 ile ayni kompozisyon).
+	var lines []domain.SendMaterialsLine
+	for _, lotNo := range []string{"ET-2026-001", "BHR-2026-001", "BGR-2026-001"} {
+		lot, err := s.store.LotByNo(ctx, lotNo)
+		if err != nil {
+			return fmt.Errorf("sevk icin lot bulunamadi %s: %w", lotNo, err)
+		}
+		lines = append(lines, domain.SendMaterialsLine{LotID: lot.ID, Qty: *lot.QtyOnHand})
+	}
+	order, err = s.store.SendMaterials(ctx, order.ID, domain.SendMaterialsRequest{Lines: lines})
+	if err != nil {
+		return err
+	}
+	slog.Info("hammaddeler dis ureticiye sevk edildi", "order_no", order.OrderNo, "satir", len(lines))
+
+	order, err = s.store.ReceiveProduction(ctx, order.ID, domain.ReceiveProductionRequest{
+		ReceivedQty:        qty("85"),
+		OutputLotNo:        str("SUC-2026-045"),
+		ServiceInvoiceNo:   str("URT-2026-045-INV"),
+		ServiceInvoicedQty: qtyP("85"),
+	})
+	if err != nil {
+		return err
+	}
+	slog.Info("mamul teslim alindi", "order_no", order.OrderNo, "output_lot_no", *order.OutputLotNo,
+		"ekp_unit", order.EkpUnit.StringFixed(domain.AmountScale))
+
+	order, err = s.store.CloseProductionOrder(ctx, order.ID, domain.CloseProductionOrderRequest{})
+	if err != nil {
+		return err
+	}
+	slog.Info("dis uretim siparisi kapandi", "order_no", order.OrderNo, "status", order.Status)
 	return nil
 }

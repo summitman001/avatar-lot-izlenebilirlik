@@ -14,6 +14,7 @@ import (
 	"github.com/summitman001/avatar-lot-izlenebilirlik/backend/internal/config"
 	"github.com/summitman001/avatar-lot-izlenebilirlik/backend/internal/db"
 	apihttp "github.com/summitman001/avatar-lot-izlenebilirlik/backend/internal/http"
+	"github.com/summitman001/avatar-lot-izlenebilirlik/backend/internal/mlclient"
 	"github.com/summitman001/avatar-lot-izlenebilirlik/backend/internal/repo"
 )
 
@@ -36,9 +37,10 @@ func run() error {
 	}
 	defer conn.Close()
 
+	store := repo.New(conn).SetMLClient(mlclient.New(cfg.MLURL))
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           apihttp.NewRouter(apihttp.Deps{DB: conn, Store: repo.New(conn), CORSOrigins: cfg.CORSOrigins}),
+		Handler:           apihttp.NewRouter(apihttp.Deps{DB: conn, Store: store, CORSOrigins: cfg.CORSOrigins}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,
