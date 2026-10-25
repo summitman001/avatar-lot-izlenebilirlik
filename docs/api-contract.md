@@ -338,7 +338,7 @@ Durum makinesi: `draft → materials_sent → received → closed`. Geçersiz ge
 }
 ```
 
-Opsiyonel: `id`, `order_no` (boşsa `URT-<yıl>-NNN` üretilir). Oluşturulunca ML servisine (`ML_URL`) en iyi gayretle bir tahmin istenir (`prediction`, yalnız detay yanıtında); ML kapalıysa sipariş yine oluşturulur, `prediction` boş kalır.
+Opsiyonel: `id`, `order_no` (boşsa `URT-<yıl>-NNN` **atomik** üretilir — eş zamanlı isteklerde de çakışmaz). Oluşturulunca ML servisine (`ML_URL`) en iyi gayretle bir tahmin istenir (`prediction`, `stage: "draft"`; malzeme kompozisyonu henüz bilinmediği için yalnızca adet tahmini, `predicted_ekp_unit: null`); ML kapalıysa sipariş yine oluşturulur, `prediction` boş kalır.
 
 ### `POST /production-orders/{id}/send-materials` — hammadde sevk et
 
@@ -352,7 +352,7 @@ Opsiyonel: `id`, `order_no` (boşsa `URT-<yıl>-NNN` üretilir). Oluşturulunca 
 ]}
 ```
 
-Her satır için `send_to_producer` (−) + `transfer_in` (+) hareket çifti ve bir `production_input` satırı oluşur; durum `materials_sent` olur. Hatalar: lot aktif değilse (`blocked`/`recalled`/`consumed`) `422`; lotun tek bir depoda yeterli bakiyesi yoksa `409`; aynı lot bu siparişe ikinci kez gönderilirse `409` (bir lot, bir siparişe en fazla bir kez sevk edilir).
+Her satır için `send_to_producer` (−) + `transfer_in` (+) hareket çifti ve bir `production_input` satırı oluşur; durum `materials_sent` olur. Başarılı her çağrıdan sonra (en iyi gayret) ML'e GERÇEK sevk edilen et miktarıyla tekrar sorulup yeni bir tahmin satırı eklenir — artık kesin malzeme maliyeti bilindiği için bu satırda `predicted_ekp_unit` doludur (bkz. `GET .../cost-report` örneği). Hatalar: lot aktif değilse (`blocked`/`recalled`/`consumed`) `422`; lotun tek bir depoda yeterli bakiyesi yoksa `409`; aynı lot bu siparişe ikinci kez gönderilirse `409` (bir lot, bir siparişe en fazla bir kez sevk edilir).
 
 ### `POST /production-orders/{id}/receive` — mamulü teslim al
 
@@ -407,14 +407,16 @@ Yalnız `received` durumunda kabul edilir. Gövde opsiyonel: `receive`'de `servi
   "revenue": "2116.50", "gross_profit_total": "573.00", "margin_pct": "27.07",
   "qty_variance_pct": "0.00", "warnings": [],
   "prediction": {
-    "model_name": "production_baseline_supplier_mean", "baseline": true,
-    "predicted_delivered_qty": "84.87", "actual_delivered_qty": "85.000",
-    "delivered_qty_error_abs": "0.130", "delivered_qty_error_pct": "0.15"
+    "model_name": "production_baseline_supplier_mean", "baseline": true, "stage": "materials_sent",
+    "predicted_delivered_qty": "84.87", "predicted_ekp_unit": "18.1783",
+    "actual_delivered_qty": "85.000", "actual_ekp_unit": "18.1588",
+    "delivered_qty_error_abs": "0.130", "delivered_qty_error_pct": "0.15",
+    "ekp_error_abs": "-0.0195", "ekp_error_pct": "0.11"
   }
 }
 ```
 
-`ekp_display` yalnızca gösterim içindir; değerleme `ekp_unit` veya `total_cost` üzerinden yapılır (bkz. `docs/assumptions.md`, yuvarlama notu). `prediction.predicted_ekp_unit` **yoktur**: ML yalnızca fiziksel verimi (adet/kg) tahmin eder, maliyet modeli değildir.
+`ekp_display` yalnızca gösterim içindir; değerleme `ekp_unit` veya `total_cost` üzerinden yapılır (bkz. `docs/assumptions.md`, yuvarlama notu). `prediction.predicted_ekp_unit` **hibrit bir tahmindir**: ML'in kendisi maliyet bilmez (yalnızca fiziksel verimi/adedi tahmin eder), bu alan sunucuda `(material_cost + round2(predicted_qty × service_unit_price)) / predicted_qty` formülüyle hesaplanır. İki aşamalı: `stage: "draft"` (sipariş oluşunca, malzeme maliyeti henüz bilinmediği için `predicted_ekp_unit: null`) ve `stage: "materials_sent"` (hammadde sevki tamamlanınca, kesin malzeme maliyetiyle hesaplanır — yukarıdaki örnek bu aşamadandır). Ayrıntı: `docs/assumptions.md` ("Hibrit EKP tahmini").
 
 ### `GET /production-orders/{id}/movements`
 

@@ -255,8 +255,10 @@ paths:
       tags: [production]
       summary: Dis uretim siparisi olustur (durum draft)
       description: |
-        `order_no` verilmezse `URT-<yil>-NNN` uretilir. ML servisi erisilebilirse (bkz. `ML_URL`) en iyi
-        gayretle bir tahmin alinip `prediction` tablosuna yazilir; ML kapaliysa siparis yine olusturulur.
+        `order_no` verilmezse `URT-<yil>-NNN` ATOMIK uretilir (number_sequence tablosu; es zamanli
+        isteklerde de cakismaz). ML servisi erisilebilirse (bkz. `ML_URL`) en iyi gayretle bir tahmin
+        alinip `prediction` tablosuna stage=draft olarak yazilir (yalniz adet tahmini; malzeme maliyeti
+        henuz bilinmedigi icin predicted_ekp_unit=null); ML kapaliysa siparis yine olusturulur.
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreateProductionOrderRequest" } } } }
       responses:
         "201": { description: Olusturuldu, content: { application/json: { schema: { $ref: "#/components/schemas/ProductionOrder" } } } }
@@ -278,6 +280,9 @@ paths:
       description: |
         `draft` veya `materials_sent` durumunda kabul edilir (kismi/coklu sevkiyat). Her satir icin
         send_to_producer (-) + transfer_in (+) hareket cifti ve bir `production_input` satiri olusur.
+        Basarili her cagridan sonra (en iyi gayret) ML'e GERCEK sevk edilen et miktariyla tekrar
+        sorulup yeni bir tahmin satiri eklenir (stage=materials_sent); artik kesin malzeme maliyeti
+        bilindigi icin bu satirda predicted_ekp_unit doludur (hibrit EKP tahmini).
         Bloke/aktif-olmayan lot (422), yetersiz veya birden fazla depoya bolunmus stok (409), zaten
         bu siparise sevk edilmis lot (409, UNIQUE) reddedilir.
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SendMaterialsRequest" } } } }
@@ -625,17 +630,25 @@ components:
       properties: { status: { $ref: "#/components/schemas/ProductionOrderStatus" }, at: { $ref: "#/components/schemas/DateTime" } }
     ProductionPrediction:
       type: object
-      description: "ML yalnizca fiziksel verimi tahmin eder; EKP tahmini YOKTUR (bkz. docs/assumptions.md)"
+      description: >
+        EN GUNCEL tahmin kaydi. Hibrit yaklasim: ML yalnizca fiziksel verimi (adet/kg) tahmin eder;
+        predicted_ekp_unit sunucuda bu tahmin + KESIN malzeme maliyetiyle hesaplanir, bu yuzden
+        yalnizca stage=materials_sent asamasinda doludur (bkz. docs/assumptions.md).
       properties:
         model_name: { type: string }
         model_version: { type: string }
         baseline: { type: boolean }
+        stage: { enum: [draft, materials_sent], description: "draft: siparis olusunca (malzeme maliyeti bilinmez); materials_sent: hammadde sevki tamamlaninca (kesin maliyetle)" }
         predicted_yield_ratio: { $ref: "#/components/schemas/Amount" }
         predicted_output_kg: { $ref: "#/components/schemas/Qty" }
         predicted_delivered_qty: { $ref: "#/components/schemas/Qty" }
+        predicted_ekp_unit: { oneOf: [{ $ref: "#/components/schemas/Amount" }, { type: "null" }], description: "yalniz stage=materials_sent; formul: (material_cost + round2(predicted_qty*service_unit_price)) / predicted_qty" }
         actual_delivered_qty: { oneOf: [{ $ref: "#/components/schemas/Qty" }, { type: "null" }], description: "receive'den sonra dolar" }
-        delivered_qty_error_abs: { oneOf: [{ $ref: "#/components/schemas/Qty" }, { type: "null" }] }
+        actual_ekp_unit: { oneOf: [{ $ref: "#/components/schemas/Amount" }, { type: "null" }], description: "receive'den sonra dolar (predicted_ekp_unit doluysa)" }
+        delivered_qty_error_abs: { oneOf: [{ $ref: "#/components/schemas/Qty" }, { type: "null" }], description: "isaretli: actual - predicted" }
         delivered_qty_error_pct: { oneOf: [{ type: string }, { type: "null" }] }
+        ekp_error_abs: { oneOf: [{ type: string }, { type: "null" }], description: "isaretli: actual_ekp_unit - predicted_ekp_unit" }
+        ekp_error_pct: { oneOf: [{ type: string }, { type: "null" }] }
     ProductionOrder:
       type: object
       properties:
