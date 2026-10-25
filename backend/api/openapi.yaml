@@ -17,6 +17,7 @@ tags:
   - name: master
   - name: lots
   - name: stock
+  - name: production
   - name: sync
 paths:
   /health:
@@ -238,6 +239,106 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+
+  /production-orders:
+    get:
+      tags: [production]
+      summary: Dis uretim siparisi listesi (girdiler/tahmin icermez)
+      parameters:
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/ProductionOrderStatus" } }
+        - { name: q, in: query, schema: { type: string }, description: "order_no veya urun kodu/adinda arar" }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ProductionOrderList" } } } }
+    post:
+      tags: [production]
+      summary: Dis uretim siparisi olustur (durum draft)
+      description: |
+        `order_no` verilmezse `URT-<yil>-NNN` uretilir. ML servisi erisilebilirse (bkz. `ML_URL`) en iyi
+        gayretle bir tahmin alinip `prediction` tablosuna yazilir; ML kapaliysa siparis yine olusturulur.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreateProductionOrderRequest" } } } }
+      responses:
+        "201": { description: Olusturuldu, content: { application/json: { schema: { $ref: "#/components/schemas/ProductionOrder" } } } }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /production-orders/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [production]
+      summary: Siparis detayi (girdiler, durum gecmisi, ML tahmini dahil)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ProductionOrder" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+  /production-orders/{id}/send-materials:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [production]
+      summary: Hammadde(leri) dis uretici deposuna sevk et
+      description: |
+        `draft` veya `materials_sent` durumunda kabul edilir (kismi/coklu sevkiyat). Her satir icin
+        send_to_producer (-) + transfer_in (+) hareket cifti ve bir `production_input` satiri olusur.
+        Bloke/aktif-olmayan lot (422), yetersiz veya birden fazla depoya bolunmus stok (409), zaten
+        bu siparise sevk edilmis lot (409, UNIQUE) reddedilir.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SendMaterialsRequest" } } } }
+      responses:
+        "200": { description: OK (durum materials_sent), content: { application/json: { schema: { $ref: "#/components/schemas/ProductionOrder" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /production-orders/{id}/receive:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [production]
+      summary: Mamulu teslim al; EKP'yi hesapla ve cikti lotunu olustur
+      description: |
+        Yalniz `materials_sent` durumunda kabul edilir (409 aksi halde). `returns` ile dis uretici
+        deposundan iade edilen hammadde miktari belirtilir; iade edilmeyen (fire dahil) miktar
+        `production_consume` ile dusulur ve EKP'ye girer. Cikti lotu (origin=production,
+        unit_cost=ekp_unit) + production_in hareketi + her girdi icin lot_link olusur.
+        `INVOICED_QTY_MISMATCH` ve `QTY_VARIANCE` (>%2 planlanan-teslim farki) uyarilari donebilir.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ReceiveProductionRequest" } } } }
+      responses:
+        "200": { description: OK (durum received), content: { application/json: { schema: { $ref: "#/components/schemas/ProductionOrder" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /production-orders/{id}/close:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [production]
+      summary: Siparisi kapat
+      description: |
+        Yalniz `received` durumunda kabul edilir (409 aksi halde). Servis fatura numarasi (receive'de
+        veya burada `service_invoice_no` ile) verilmemisse 422. Govde opsiyoneldir.
+      requestBody:
+        required: false
+        content: { application/json: { schema: { $ref: "#/components/schemas/CloseProductionOrderRequest" } } }
+      responses:
+        "200": { description: OK (durum closed), content: { application/json: { schema: { $ref: "#/components/schemas/ProductionOrder" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /production-orders/{id}/cost-report:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [production]
+      summary: Maliyet raporu (received veya closed durumunda)
+      description: |
+        material_cost/service_cost/total_cost/ekp_unit saklanan degerlerdir; verim/kar/marj/ekp_display
+        her istekte CalculateProductionCost ile taze hesaplanir (receive'deki ile ayni girdilerle).
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ProductionCostReport" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { description: "Siparis henuz teslim alinmadi", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorBody" } } } }
+  /production-orders/{id}/movements:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [production]
+      summary: Bu siparise ait tum stok hareketleri (kronolojik)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MovementList" } } } }
+        "404": { $ref: "#/components/responses/Error" }
 
   /sync/push:
     post:
@@ -466,3 +567,141 @@ components:
         next_seq: { type: integer, format: int64, description: "Sonraki cekmede since_seq olarak gonderin" }
         has_more: { type: boolean, description: "true ise hemen tekrar cekin" }
         blocked_lot_ids: { type: array, items: { $ref: "#/components/schemas/Id" }, description: "Bloke / geri cagrilmis tum lotlar (her cekmede tam liste)" }
+    ProductionOrderStatus: { enum: [draft, materials_sent, received, closed] }
+    CreateProductionOrderRequest:
+      type: object
+      required: [product_item_id, producer_supplier_id, external_warehouse_id, planned_qty, service_unit_price]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        order_no: { type: [string, "null"], description: "Bos ise URT-<yil>-NNN uretilir" }
+        product_item_id: { $ref: "#/components/schemas/Id" }
+        producer_supplier_id: { $ref: "#/components/schemas/Id" }
+        external_warehouse_id: { $ref: "#/components/schemas/Id" }
+        planned_qty: { $ref: "#/components/schemas/Qty" }
+        service_unit_price: { $ref: "#/components/schemas/Amount" }
+        sale_price: { oneOf: [{ $ref: "#/components/schemas/Amount" }, { type: "null" }] }
+    SendMaterialsLine:
+      type: object
+      required: [lot_id, qty]
+      properties: { lot_id: { $ref: "#/components/schemas/Id" }, qty: { $ref: "#/components/schemas/Qty" } }
+    SendMaterialsRequest:
+      type: object
+      required: [lines]
+      properties: { lines: { type: array, minItems: 1, items: { $ref: "#/components/schemas/SendMaterialsLine" } } }
+    ReceiveReturnLine:
+      type: object
+      required: [lot_id, qty]
+      properties: { lot_id: { $ref: "#/components/schemas/Id" }, qty: { $ref: "#/components/schemas/Qty" } }
+    ReceiveProductionRequest:
+      type: object
+      required: [received_qty]
+      properties:
+        received_qty: { $ref: "#/components/schemas/Qty" }
+        output_lot_no: { type: [string, "null"], description: "Bos ise SUC-<yil>-NNN uretilir" }
+        expiry_date: { oneOf: [{ $ref: "#/components/schemas/Date" }, { type: "null" }] }
+        service_invoice_no: { type: [string, "null"], description: "Opsiyonel; verilmezse close'da zorunludur" }
+        service_invoiced_qty: { oneOf: [{ $ref: "#/components/schemas/Qty" }, { type: "null" }], description: "Bos ise received_qty" }
+        returns: { type: array, items: { $ref: "#/components/schemas/ReceiveReturnLine" }, description: "Dis uretici deposundan iade edilen miktarlar (opsiyonel)" }
+    CloseProductionOrderRequest:
+      type: object
+      properties:
+        service_invoice_no: { type: [string, "null"], description: "receive'de verilmediyse burada tamamlanabilir" }
+    ProductionInputLine:
+      type: object
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        lot_id: { $ref: "#/components/schemas/Id" }
+        lot_no: { type: string }
+        item_id: { $ref: "#/components/schemas/Id" }
+        item_code: { type: string }
+        item_name: { type: string }
+        material_category: { oneOf: [{ enum: [meat, spice, casing, other] }, { type: "null" }] }
+        qty_sent: { $ref: "#/components/schemas/Qty" }
+        qty_consumed: { oneOf: [{ $ref: "#/components/schemas/Qty" }, { type: "null" }], description: "receive oncesi null" }
+        qty_returned: { oneOf: [{ $ref: "#/components/schemas/Qty" }, { type: "null" }] }
+        unit_cost_at_send: { $ref: "#/components/schemas/Amount" }
+    ProductionStatusEvent:
+      type: object
+      properties: { status: { $ref: "#/components/schemas/ProductionOrderStatus" }, at: { $ref: "#/components/schemas/DateTime" } }
+    ProductionPrediction:
+      type: object
+      description: "ML yalnizca fiziksel verimi tahmin eder; EKP tahmini YOKTUR (bkz. docs/assumptions.md)"
+      properties:
+        model_name: { type: string }
+        model_version: { type: string }
+        baseline: { type: boolean }
+        predicted_yield_ratio: { $ref: "#/components/schemas/Amount" }
+        predicted_output_kg: { $ref: "#/components/schemas/Qty" }
+        predicted_delivered_qty: { $ref: "#/components/schemas/Qty" }
+        actual_delivered_qty: { oneOf: [{ $ref: "#/components/schemas/Qty" }, { type: "null" }], description: "receive'den sonra dolar" }
+        delivered_qty_error_abs: { oneOf: [{ $ref: "#/components/schemas/Qty" }, { type: "null" }] }
+        delivered_qty_error_pct: { oneOf: [{ type: string }, { type: "null" }] }
+    ProductionOrder:
+      type: object
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        order_no: { type: string }
+        product_item_id: { $ref: "#/components/schemas/Id" }
+        product_item_code: { type: string }
+        product_item_name: { type: string }
+        product_unit_weight_kg: { oneOf: [{ $ref: "#/components/schemas/Qty" }, { type: "null" }] }
+        producer_supplier_id: { $ref: "#/components/schemas/Id" }
+        producer_supplier_name: { type: string }
+        external_warehouse_id: { $ref: "#/components/schemas/Id" }
+        external_warehouse_code: { type: string }
+        planned_qty: { $ref: "#/components/schemas/Qty" }
+        received_qty: { oneOf: [{ $ref: "#/components/schemas/Qty" }, { type: "null" }] }
+        service_unit_price: { $ref: "#/components/schemas/Amount" }
+        service_invoice_no: { type: [string, "null"] }
+        service_invoiced_qty: { oneOf: [{ $ref: "#/components/schemas/Qty" }, { type: "null" }] }
+        status: { $ref: "#/components/schemas/ProductionOrderStatus" }
+        output_lot_id: { oneOf: [{ $ref: "#/components/schemas/Id" }, { type: "null" }] }
+        output_lot_no: { type: [string, "null"] }
+        material_cost: { oneOf: [{ $ref: "#/components/schemas/Amount" }, { type: "null" }] }
+        service_cost: { oneOf: [{ $ref: "#/components/schemas/Amount" }, { type: "null" }] }
+        total_cost: { oneOf: [{ $ref: "#/components/schemas/Amount" }, { type: "null" }] }
+        ekp_unit: { oneOf: [{ $ref: "#/components/schemas/Amount" }, { type: "null" }] }
+        sale_price: { oneOf: [{ $ref: "#/components/schemas/Amount" }, { type: "null" }] }
+        closed_at: { oneOf: [{ $ref: "#/components/schemas/DateTime" }, { type: "null" }] }
+        created_at: { $ref: "#/components/schemas/DateTime" }
+        warnings: { type: array, items: { enum: [INVOICED_QTY_MISMATCH, QTY_VARIANCE] } }
+        inputs: { type: array, items: { $ref: "#/components/schemas/ProductionInputLine" }, description: "Yalniz GET /production-orders/{id}" }
+        status_history: { type: array, items: { $ref: "#/components/schemas/ProductionStatusEvent" }, description: "Yalniz GET /production-orders/{id}" }
+        prediction: { oneOf: [{ $ref: "#/components/schemas/ProductionPrediction" }, { type: "null" }], description: "Yalniz GET /production-orders/{id}" }
+    ProductionOrderList: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/ProductionOrder" } } } }
+    CostReportLine:
+      type: object
+      properties:
+        label: { type: string }
+        qty: { oneOf: [{ $ref: "#/components/schemas/Qty" }, { type: "null" }] }
+        unit_price: { oneOf: [{ $ref: "#/components/schemas/Amount" }, { type: "null" }] }
+        amount: { type: string, description: "2 ondalik tutar" }
+    ProductionCostReport:
+      type: object
+      description: "Dokumandaki tabloya karsilik gelir (Maliyet unsuru | miktar | birim fiyat | tutar)"
+      properties:
+        order_no: { type: string }
+        status: { $ref: "#/components/schemas/ProductionOrderStatus" }
+        lines: { type: array, items: { $ref: "#/components/schemas/CostReportLine" } }
+        material_cost: { type: string }
+        service_cost: { type: string }
+        total_cost: { type: string }
+        planned_qty: { $ref: "#/components/schemas/Qty" }
+        received_qty: { $ref: "#/components/schemas/Qty" }
+        invoiced_qty: { $ref: "#/components/schemas/Qty" }
+        qty_variance_pct: { type: string, description: "|received-planned|/planned x 100, 2 ondalik" }
+        ekp_unit: { type: string, description: "4 ondalik; degerleme bu alan veya total_cost uzerinden yapilir" }
+        ekp_display: { type: string, description: "2 ondalik; YALNIZCA gosterim, degerleme icin kullanilmaz" }
+        ekp_per_kg: { oneOf: [{ type: string }, { type: "null" }] }
+        unit_weight_kg: { oneOf: [{ $ref: "#/components/schemas/Qty" }, { type: "null" }] }
+        output_kg: { oneOf: [{ $ref: "#/components/schemas/Qty" }, { type: "null" }] }
+        input_kg_total: { $ref: "#/components/schemas/Qty" }
+        yield_input_pct: { oneOf: [{ type: string }, { type: "null" }] }
+        yield_meat_ratio: { oneOf: [{ type: string }, { type: "null" }] }
+        sale_price: { oneOf: [{ $ref: "#/components/schemas/Amount" }, { type: "null" }] }
+        revenue: { oneOf: [{ type: string }, { type: "null" }] }
+        gross_profit_unit: { oneOf: [{ type: string }, { type: "null" }] }
+        gross_profit_total: { oneOf: [{ type: string }, { type: "null" }] }
+        margin_pct: { oneOf: [{ type: string }, { type: "null" }] }
+        warnings: { type: array, items: { enum: [INVOICED_QTY_MISMATCH, QTY_VARIANCE] } }
+        prediction: { oneOf: [{ $ref: "#/components/schemas/ProductionPrediction" }, { type: "null" }] }
