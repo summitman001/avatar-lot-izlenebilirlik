@@ -14,7 +14,7 @@ MySQL → migration → seed → API → web sırasıyla kendiliğinden ayağa k
 
 | Servis | Adres | Not |
 |---|---|---|
-| Web paneli | http://localhost:3000 | Ürünler ve Lotlar canlı; diğer sayfalar "yakında" |
+| Web paneli | http://localhost:3000 | Ürünler, Lotlar, Dış Üretim, Satış/Sevkiyat canlı; diğer sayfalar "yakında" |
 | API | http://localhost:8080/api/v1 | `GET /health`, `GET /openapi.yaml` |
 | ML servisi | http://localhost:8000 | `GET /health`, `GET /models` |
 | MySQL | localhost:3306 | kullanıcı `app` / `app`, veritabanları `avatar` ve `avatar_test` |
@@ -32,7 +32,7 @@ backend/    Go 1.23 API (chi, database/sql, golang-migrate, shopspring/decimal; 
 web/        React 18 + Vite + TypeScript + TanStack Query + React Router + Mantine
 ml/         Python 3.11 FastAPI: maliyet oracle'ı (golden dosyaları üretir) + baseline tahmin modelleri
 android/    Kotlin Android uygulaması (boş; ayrı geliştirilecek)
-docs/       api-contract.md, data-model.md, sync.md, assumptions.md, ml-data.md, HANDOFF.md, golden/
+docs/       api-contract.md, data-model.md, sync.md, assumptions.md, ml-data.md, android-integration.md, HANDOFF.md, golden/
 docker/     MySQL ilk kurulum betiği (test veritabanı)
 ```
 
@@ -57,9 +57,9 @@ Backend testleri `TEST_DATABASE_URL` ile Docker'daki ayrı `avatar_test` veritab
 ## Bilinen sınırlamalar
 
 - **Kimlik doğrulama yok.** API herkese açıktır ve CORS `CORS_ORIGINS=*` ile her origin'e izin verir. Yarışma demosu içindir; üretimde kimlik doğrulama eklenmeli ve CORS daraltılmalıdır.
-- **`POST /sync/push` stub.** `op_id` kaydedilir, tekrarında `duplicate` döner; payload henüz işlenmez, bu yüzden ilk gönderim `applied` değil `flagged` döner. Pull (`item`, `customer`, `warehouse`, `lot`) tamdır. Ayrıntı: [`docs/sync.md`](docs/sync.md).
+- **`POST /sync/push` gerçek işler** (`sales_order`/`create`, `customer_return`/`create`); offline kuralı satışı reddetmez, kaydeder ve ihlalleri `flagged` ile işaretler. Ayrıntı: [`docs/sync.md`](docs/sync.md).
 - **MySQL `log_bin_trust_function_creators=1` gerekir.** MySQL 8.4'te binlog açıkken `CREATE TRIGGER` SUPER yetkisi ister; uygulama kullanıcısı SUPER değildir. Değiştirilemez `stock_movement` defteri trigger'larla korunduğu için bu ayar compose'ta (`mysqld` bayrağı) ve CI'da (`SET GLOBAL`) açıktır. Yönetilen bir MySQL'de aynı parametreyi açın veya migration'ı yetkili kullanıcıyla çalıştırın.
-- Dış üretim, parçalama, satış, izlenebilirlik ve geri çağırma servisleri henüz yok (şema ve hesap kuralları hazır); bkz. [`docs/HANDOFF.md`](docs/HANDOFF.md).
+- Parçalama, izlenebilirlik sorguları ve geri çağırma servisleri henüz yok (şema, hesap kuralları ve bloke lot mekanizması hazır); dış üretim ve satış/sevkiyat/iade tamamlandı. Bkz. [`docs/HANDOFF.md`](docs/HANDOFF.md).
 
 ## Dokümanlar
 
@@ -69,3 +69,4 @@ Backend testleri `TEST_DATABASE_URL` ile Docker'daki ayrı `avatar_test` veritab
 - [`docs/sync.md`](docs/sync.md) — çevrimdışı senkron sözleşmesi
 - [`docs/assumptions.md`](docs/assumptions.md) — **Varsayımlar ve Tespitler** (yuvarlama kuralları, VKP 24,90 € varsayımı, KZ-2026-001 tutarsızlığı)
 - [`docs/ml-data.md`](docs/ml-data.md) — ML sentetik verisi; `docs/golden/` — hesap doğruluk referansları
+- [`docs/android-integration.md`](docs/android-integration.md) — Kotlin geliştirici için: kullanılacak uç noktalar, örnek gövdeler, sync sonuç durumlarına göre istemci davranışı

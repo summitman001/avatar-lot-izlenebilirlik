@@ -268,6 +268,58 @@ Kurallar: bir hareket **en fazla bir kez** geri alınır (tekrar → `409`); bir
 
 ---
 
+## Satış / Sevkiyat / İade
+
+Ayrıntılı: [`backend/api/openapi.yaml`](../backend/api/openapi.yaml) (`sales` tag'i).
+
+### `POST /sales-orders` — satış oluştur
+
+Online (REST) kurallar: lot `active` olmalı (aksi halde `422`, mesajda `LOT_BLOCKED`), belirtilen depoda
+bakiye yeterli olmalı (aksi halde `409`, mesajda `INSUFFICIENT_STOCK`). Aynı istemci `id`'siyle tekrar
+gelen istek mevcut siparişi döner (idempotent). `/sync/push`'un `sales_order/create` işlemesiyle **aynı
+servis fonksiyonu** kullanılır (bkz. `docs/sync.md`).
+
+```json
+{
+  "customer_id": "01a1...",
+  "warehouse_id": "01a1...",
+  "sold_at": "2026-03-10T09:00:00Z",
+  "create_shipment": true,
+  "lines": [
+    { "item_id": "01a1...", "lot_id": "01a1...", "qty": "30.000", "unit_price": "24.9000" }
+  ]
+}
+```
+
+`201` yanıtı satırları (`lines`, her birinde `lot_no`, `line_total`, `stock_movement_id`,
+`recall_violation`) ve `create_shipment=true` ise oluşan sevkiyatı (`shipments`, her birinde lot/miktar
+satırları) içerir. `order_no` boşsa `SAT-<yıl>-NNN` atomik üretilir; sevkiyat `SHP-<yıl>-NNN`.
+
+### `GET /sales-orders` / `GET /sales-orders/{id}`
+
+Liste filtreleri: `customer_id`, `lot_id`, `from`/`to` (sold_at, `YYYY-MM-DD`). Detay satırları +
+sevkiyatları içerir; liste yalnızca `has_violation` (en az bir satırda `recall_violation=true`) bayrağını taşır.
+
+### `POST /customer-returns` — müşteri iadesi
+
+`sales_line_id` veya `lot_id`'den en az biri verilmeli. `return_in` hareketi (+qty) aynı lota geri girer.
+Satılan miktarın üstünde iade `422`: `sales_line_id` verilmişse o satırın `qty`'sine, verilmemişse lotun
+toplam satışına (tüm `sale_out` hareketleri) göre kontrol edilir. `lot_id`'den depo türetimi: o lotun en
+son `sale_out` hareketinin deposu (bu lot hiç satılmadıysa `422`).
+
+```json
+{ "customer_id": "01a1...", "sales_line_id": "01a1...", "qty": "4.000", "reason": "musteri memnun degil" }
+```
+
+## Bloke lot mekanizması
+
+### `POST /lots/{id}/block` / `POST /lots/{id}/unblock`
+
+`block`: gövdede `{"reason": "..."}` zorunlu; `lot.status='blocked'`, `blocked_reason` güncellenir.
+`unblock`: gövde yok; `status='active'`, `blocked_reason=null`. İkisi de `change_log`'a yazar (pull'daki
+`blocked_lot_ids` her çekmede güncel tam listedir). Geri çağırma servisi (Görev 3) bu uç noktaları
+yeniden kullanacaktır.
+
 ## Senkron
 
 Ayrıntılı akış ve çakışma kuralları: [`docs/sync.md`](sync.md).
@@ -282,7 +334,10 @@ Ayrıntılı akış ve çakışma kuralları: [`docs/sync.md`](sync.md).
       "op_id": "0192f6c2-8a00-7000-8000-000000000001",
       "entity": "sales_order",
       "action": "create",
-      "payload": { "order_no": "S-0001" },
+      "payload": {
+        "customer_id": "01a1...", "warehouse_id": "01a1...", "sold_at": "2026-03-02T10:00:00Z",
+        "lines": [{ "item_id": "01a1...", "lot_id": "01a1...", "qty": "2.000", "unit_price": "24.9000" }]
+      },
       "client_created_at": "2026-03-02T10:00:00Z"
     }
   ]
@@ -294,15 +349,16 @@ Yanıt (`200`):
 ```json
 {
   "results": [
-    { "op_id": "0192f6c2-8a00-7000-8000-000000000001", "status": "flagged", "message": "TODO: payload isleme henuz uygulanmadi; op_id kaydedildi, islem uygulanmadi" }
+    { "op_id": "0192f6c2-8a00-7000-8000-000000000001", "status": "applied", "message": "satis kaydedildi: SAT-2026-001" }
   ],
   "server_seq": 23
 }
 ```
 
-Aynı `op_id` tekrar gönderilirse: `"status": "duplicate", "message": "op_id daha once islendi (ilk sonuc: flagged)"`. `status` ∈ `applied | duplicate | flagged | rejected`.
-
-> **Bugün stub:** `op_id` kaydedilir, payload işlenmez; bu yüzden ilk gönderim `applied` değil `flagged` döner. Sözleşme (istek/yanıt biçimi, durumlar) kesindir.
+Aynı `op_id` tekrar gönderilirse: `"status": "duplicate", "message": "op_id daha once islendi (ilk sonuc: applied)"`.
+`status` ∈ `applied | duplicate | flagged | rejected`. Desteklenen `entity`/`action`: `sales_order`/`create`,
+`customer_return`/`create`. Payload işleme gerçektir (stub değil): ayrıntılı offline kurallar, `flagged`/`rejected`
+anlamları ve örnek akış `docs/sync.md`'dedir.
 
 ### `GET /sync/pull?since_seq=0&device_id=...&limit=500`
 
@@ -426,4 +482,7 @@ Bu siparişe ait tüm stok hareketlerini (`send_to_producer`, `transfer_in/out`,
 
 ## Henüz uygulanmamış (sözleşme taslağı yok)
 
-Parçalama, satış/sevkiyat/iade, izlenebilirlik sorguları, geri çağırma, uyarı uç noktaları ve cihaz kaydı sonraki işlerdir (bkz. [`docs/HANDOFF.md`](HANDOFF.md)). Şemaları `backend/migrations/000001_init.up.sql` içinde hazırdır; hesap kuralları Go'da `backend/internal/domain` içinde (`AllocateCutting`) golden testlerle doğrulanmıştır.
+Parçalama, izlenebilirlik sorguları, geri çağırma (lot bazlı), uyarı listesi uç noktaları ve cihaz kaydı
+sonraki işlerdir (bkz. [`docs/HANDOFF.md`](HANDOFF.md)). Satış/sevkiyat/iade ve bloke lot mekanizması bu
+görevle tamamlandı. Şemaları `backend/migrations/000001_init.up.sql` içinde hazırdır; parçalama hesap
+kuralları Go'da `backend/internal/domain` içinde (`AllocateCutting`) golden testlerle doğrulanmıştır.
