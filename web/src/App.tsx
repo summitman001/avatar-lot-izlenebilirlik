@@ -7,8 +7,11 @@ import Lots from './pages/Lots'
 import ProductionOrderDetail from './pages/ProductionOrderDetail'
 import ProductionOrders from './pages/ProductionOrders'
 import Products from './pages/Products'
+import RecallDetail from './pages/RecallDetail'
+import Recalls from './pages/Recalls'
 import SalesOrderDetail from './pages/SalesOrderDetail'
 import SalesOrders from './pages/SalesOrders'
+import Traceability from './pages/Traceability'
 
 // Sol menu. `ready: false` olanlar "Yakında" placeholder'ıdır (docs/HANDOFF.md sıradaki işler).
 const MENU = [
@@ -19,8 +22,8 @@ const MENU = [
   { path: '/dis-uretim', label: 'Dış Üretim', ready: true },
   { path: '/parcalama', label: 'Parçalama', ready: false },
   { path: '/satis-sevkiyat', label: 'Satış/Sevkiyat', ready: true },
-  { path: '/izlenebilirlik', label: 'İzlenebilirlik', ready: false },
-  { path: '/geri-cagirma', label: 'Geri Çağırma', ready: false },
+  { path: '/izlenebilirlik', label: 'İzlenebilirlik', ready: true },
+  { path: '/geri-cagirma', label: 'Geri Çağırma', ready: true },
   { path: '/tahminler', label: 'Tahminler', ready: false },
   { path: '/uyarilar', label: 'Uyarılar', ready: false },
 ]
@@ -71,6 +74,9 @@ export default function App() {
           <Route path="/dis-uretim/:id" element={<ProductionOrderDetail />} />
           <Route path="/satis-sevkiyat" element={<SalesOrders />} />
           <Route path="/satis-sevkiyat/:id" element={<SalesOrderDetail />} />
+          <Route path="/izlenebilirlik" element={<Traceability />} />
+          <Route path="/geri-cagirma" element={<Recalls />} />
+          <Route path="/geri-cagirma/:id" element={<RecallDetail />} />
           <Route path="*" element={<ComingSoon title="Sayfa bulunamadı" />} />
         </Routes>
       </AppShell.Main>

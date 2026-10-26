@@ -35,8 +35,8 @@ export async function apiGet<T>(path: string, params?: Record<string, string | u
   return body as T
 }
 
-// apiSend POST istekleri icin (govde opsiyonel). Status, body yoksa (reverse/close gibi) atlanir.
-export async function apiSend<T>(method: 'POST' | 'PUT', path: string, body?: unknown): Promise<T> {
+// apiSend POST/PUT/PATCH istekleri icin (govde opsiyonel). Status, body yoksa (reverse/close gibi) atlanir.
+export async function apiSend<T>(method: 'POST' | 'PUT' | 'PATCH', path: string, body?: unknown): Promise<T> {
   let res: Response
   try {
     res = await fetch(API_URL + path, {
@@ -56,6 +56,7 @@ export async function apiSend<T>(method: 'POST' | 'PUT', path: string, body?: un
 }
 
 export const apiPost = <T>(path: string, body?: unknown) => apiSend<T>('POST', path, body)
+export const apiPatch = <T>(path: string, body?: unknown) => apiSend<T>('PATCH', path, body)
 
 export interface Item {
   id: string
@@ -322,4 +323,169 @@ export interface Warehouse {
   code: string
   name: string
   warehouse_type: string
+}
+
+// ---------------------------------------------------------------------------
+// İzlenebilirlik + Geri Çağırma (Görev 3)
+// ---------------------------------------------------------------------------
+
+export interface LotBalanceEntry {
+  warehouse_id: string
+  warehouse_code: string
+  qty_on_hand: Decimal
+}
+
+export interface TraceShipmentLine {
+  shipment_no: string
+  customer_id: string
+  customer_name: string
+  qty: Decimal
+  shipped_at: string
+}
+
+export interface TraceSaleLine {
+  order_no: string
+  customer_id: string
+  customer_name: string
+  qty: Decimal
+  sold_at: string
+  recall_violation: boolean
+}
+
+export interface TraceForwardNode {
+  lot_id: string
+  lot_no: string
+  item_id: string
+  item_name: string
+  uom: 'kg' | 'adet'
+  status: Lot['status']
+  depth: number
+  path: string
+  parent_lot_id: string | null
+  qty_from_parent: Decimal | null
+  process_type: string | null
+  process_id: string | null
+  total_produced_qty: Decimal
+  ratio_from_parent: Decimal | null
+  current_stock: LotBalanceEntry[]
+  qty_on_hand_total: Decimal
+  shipments: TraceShipmentLine[]
+  sales: TraceSaleLine[]
+  returned_qty: Decimal
+}
+
+export interface TraceForwardCustomerSummary {
+  customer_id: string
+  customer_name: string
+  qty_shipped: Decimal
+  qty_returned: Decimal
+  downstream_known: boolean
+  downstream_note?: string
+}
+
+export interface TraceForwardResponse {
+  root_lot_id: string
+  root_lot_no: string
+  nodes: TraceForwardNode[]
+  summary: {
+    affected_lot_count: number
+    remaining_stock: { uom: string; qty: Decimal }[]
+    customers: TraceForwardCustomerSummary[]
+  }
+}
+
+export interface TraceBackwardNode {
+  lot_id: string
+  lot_no: string
+  item_id: string
+  item_name: string
+  uom: 'kg' | 'adet'
+  supplier_id: string | null
+  supplier_name: string | null
+  supplier_contact_name: string | null
+  supplier_phone: string | null
+  supplier_email: string | null
+  received_or_produced_at: string
+  expiry_date: string | null
+  depth: number
+  path: string
+  child_lot_id: string | null
+  qty_used: Decimal | null
+  process_type: string | null
+  process_id: string | null
+  order_no: string | null
+}
+
+export interface TraceBackwardResponse {
+  root_lot_id: string
+  root_lot_no: string
+  nodes: TraceBackwardNode[]
+  summary: { raw_lot_count: number; supplier_count: number }
+}
+
+export interface GenealogyNode {
+  lot_id: string
+  lot_no: string
+  item_name: string
+  level: number
+  status: Lot['status']
+}
+
+export interface GenealogyEdge {
+  from_lot_id: string
+  to_lot_id: string
+  qty: Decimal
+  uom: string
+  process_type: string
+  process_id: string
+}
+
+export interface GenealogyResponse {
+  root_lot_id: string
+  root_lot_no: string
+  nodes: GenealogyNode[]
+  edges: GenealogyEdge[]
+}
+
+export interface RecallLot {
+  lot_id: string
+  lot_no: string
+  item_name: string
+  depth: number
+  path: string
+  status: Lot['status']
+}
+
+export interface RecallCustomerView {
+  id: string
+  customer_id: string
+  customer_name: string
+  customer_phone: string | null
+  customer_email: string | null
+  lot_id: string
+  lot_no: string
+  qty_shipped: Decimal
+  qty_returned: Decimal
+  remaining_risk_qty: Decimal
+  contact_status: 'pending' | 'contacted' | 'confirmed'
+  notes: string | null
+  downstream_known: boolean
+  downstream_note?: string
+  has_violation: boolean
+}
+
+export interface Recall {
+  id: string
+  recall_no: string
+  root_lot_id: string
+  root_lot_no: string
+  reason: string
+  status: 'open' | 'closed'
+  opened_at: string
+  closed_at: string | null
+  created_at: string
+  affected_lot_count: number
+  pending_customer_count: number
+  affected_lots?: RecallLot[]
+  customers?: RecallCustomerView[]
 }
