@@ -238,6 +238,85 @@ export interface Supplier {
   supplier_type: string
 }
 
+export interface Customer {
+  id: string
+  code: string
+  name: string
+  customer_type: string
+}
+
+// ---------------------------------------------------------------------------
+// Satış / Sevkiyat / İade
+// ---------------------------------------------------------------------------
+
+export interface SalesLine {
+  id: string
+  sales_order_id: string
+  item_id: string
+  item_code: string
+  item_name: string
+  lot_id: string
+  lot_no: string
+  qty: Decimal
+  unit_price: Decimal
+  line_total: Decimal
+  stock_movement_id: string | null
+  recall_violation: boolean
+  created_at: string
+}
+
+export interface ShipmentLine {
+  id: string
+  lot_id: string
+  lot_no: string
+  item_id: string
+  qty: Decimal
+}
+
+export interface Shipment {
+  id: string
+  shipment_no: string
+  customer_id: string
+  customer_name: string
+  sales_order_id: string | null
+  shipped_at: string
+  vehicle: string | null
+  created_at: string
+  lines?: ShipmentLine[]
+}
+
+export interface SalesOrder {
+  id: string
+  order_no: string
+  customer_id: string
+  customer_code: string
+  customer_name: string
+  device_id: string | null
+  warehouse_id: string
+  warehouse_code: string
+  sold_at: string
+  status: 'confirmed'
+  total_amount: Decimal
+  has_violation: boolean
+  created_at: string
+  lines?: SalesLine[]
+  shipments?: Shipment[]
+}
+
+export interface CustomerReturn {
+  id: string
+  return_no: string
+  customer_id: string
+  customer_name: string
+  sales_line_id: string | null
+  lot_id: string
+  lot_no: string
+  qty: Decimal
+  reason: string
+  returned_at: string
+  created_at: string
+}
+
 export interface Warehouse {
   id: string
   code: string
