@@ -117,9 +117,16 @@ func NewRouter(d Deps) nethttp.Handler {
 		r.Get("/lots", h.listLots)
 		r.Post("/lots", h.createLot)
 		r.Get("/lots/{id}", h.getLot)
+		r.Post("/lots/{id}/block", h.blockLot)
+		r.Post("/lots/{id}/unblock", h.unblockLot)
 
 		r.Get("/stock-movements", h.listMovements)
 		r.Post("/stock-movements/{id}/reverse", h.reverseMovement)
+
+		r.Get("/sales-orders", h.listSalesOrders)
+		r.Post("/sales-orders", h.createSalesOrder)
+		r.Get("/sales-orders/{id}", h.getSalesOrder)
+		r.Post("/customer-returns", h.createCustomerReturn)
 
 		r.Post("/sync/push", h.syncPush)
 		r.Get("/sync/pull", h.syncPull)

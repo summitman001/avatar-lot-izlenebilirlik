@@ -138,6 +138,34 @@ func (h *handlers) createLot(w nethttp.ResponseWriter, r *nethttp.Request) {
 	writeJSON(w, nethttp.StatusCreated, lot)
 }
 
+// blockLot / unblockLot: bloke lot mekanizmasi (gorev 3'un geri cagirma servisi bunu yeniden kullanacak).
+func (h *handlers) blockLot(w nethttp.ResponseWriter, r *nethttp.Request) {
+	var req domain.BlockLotRequest
+	if err := decodeBody(w, r, &req); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	if err := req.Validate(); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	lot, err := h.store.SetLotBlocked(r.Context(), chi.URLParam(r, "id"), true, &req.Reason)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, nethttp.StatusOK, lot)
+}
+
+func (h *handlers) unblockLot(w nethttp.ResponseWriter, r *nethttp.Request) {
+	lot, err := h.store.SetLotBlocked(r.Context(), chi.URLParam(r, "id"), false, nil)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, nethttp.StatusOK, lot)
+}
+
 // ---------------------------------------------------------------------------
 // stock movements
 // ---------------------------------------------------------------------------
@@ -303,6 +331,72 @@ func (h *handlers) productionMovements(w nethttp.ResponseWriter, r *nethttp.Requ
 		return
 	}
 	writeJSON(w, nethttp.StatusOK, map[string]any{"items": items})
+}
+
+// ---------------------------------------------------------------------------
+// satis / sevkiyat / iade
+// ---------------------------------------------------------------------------
+
+func (h *handlers) listSalesOrders(w nethttp.ResponseWriter, r *nethttp.Request) {
+	p, err := pageFrom(r)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	q := r.URL.Query()
+	items, err := h.store.ListSalesOrders(r.Context(), repo.SalesOrderFilter{
+		CustomerID: q.Get("customer_id"), LotID: q.Get("lot_id"), From: q.Get("from"), To: q.Get("to"), Page: p,
+	})
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, nethttp.StatusOK, map[string]any{"items": items})
+}
+
+func (h *handlers) createSalesOrder(w nethttp.ResponseWriter, r *nethttp.Request) {
+	var req domain.CreateSalesOrderRequest
+	if err := decodeBody(w, r, &req); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	if err := req.Validate(); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	out, _, err := h.store.CreateSalesOrder(r.Context(), req, repo.SaleOptions{Online: true})
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, nethttp.StatusCreated, out)
+}
+
+func (h *handlers) getSalesOrder(w nethttp.ResponseWriter, r *nethttp.Request) {
+	out, err := h.store.GetSalesOrder(r.Context(), chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, nethttp.StatusOK, out)
+}
+
+func (h *handlers) createCustomerReturn(w nethttp.ResponseWriter, r *nethttp.Request) {
+	var req domain.CreateCustomerReturnRequest
+	if err := decodeBody(w, r, &req); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	if err := req.Validate(); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	out, err := h.store.CreateCustomerReturn(r.Context(), req)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, nethttp.StatusCreated, out)
 }
 
 // ---------------------------------------------------------------------------
