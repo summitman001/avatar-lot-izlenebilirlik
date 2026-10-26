@@ -1,0 +1,17 @@
+{
+  "items": [
+    {
+      "id": "01a17000-0000-7000-8000-000000000201", "lot_no": "SUC-2026-045", "item_id": "01a17000-0000-7000-8000-000000000001",
+      "status": "active", "expiry_date": "2026-12-15", "unit_cost": "18.1588", "blocked_reason": null, "qty_on_hand": "85.000"
+    },
+    {
+      "id": "01a17000-0000-7000-8000-000000000203", "lot_no": "SUC-2026-040", "item_id": "01a17000-0000-7000-8000-000000000001",
+      "status": "active", "expiry_date": "2026-11-20", "unit_cost": "18.4639", "blocked_reason": null, "qty_on_hand": "20.000"
+    },
+    {
+      "id": "01a17000-0000-7000-8000-000000000202", "lot_no": "SUC-2026-099", "item_id": "01a17000-0000-7000-8000-000000000001",
+      "status": "blocked", "expiry_date": "2026-11-30", "unit_cost": "18.2000", "blocked_reason": "Geri çağırma RC-2026-001",
+      "qty_on_hand": "40.000"
+    }
+  ]
+}
