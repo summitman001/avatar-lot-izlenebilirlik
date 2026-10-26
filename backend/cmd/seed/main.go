@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/shopspring/decimal"
 
@@ -66,6 +67,9 @@ func run(ctx context.Context) error {
 		return err
 	}
 	if err := s.externalProduction(ctx); err != nil {
+		return err
+	}
+	if err := s.salesAndShipments(ctx); err != nil {
 		return err
 	}
 	slog.Info("seed tamam", "olusturulan", s.created, "atlanan", s.skipped)
@@ -401,5 +405,47 @@ func (s *seeder) externalProduction(ctx context.Context) error {
 		return err
 	}
 	slog.Info("dis uretim siparisi kapandi", "order_no", order.OrderNo, "status", order.Status)
+	return nil
+}
+
+// salesAndShipments URT-2026-045'in ciktisi SUC-2026-045'i ucuncu bir senaryoda satar: MKT-A'ya 30,
+// MKT-B'ye 25, MKT-C'ye 30 paket (unit_price 24.90, create_shipment true). Sonuc: SUC-2026-045
+// bakiyesi 0, uc sevkiyat, toplam ciro 85 x 24.90 = 2116.50. Servisler uzerinden (CreateSalesOrder,
+// online=true) olusturulur; idempotency lotun sales_line sayisina bakilarak saglanir.
+func (s *seeder) salesAndShipments(ctx context.Context) error {
+	outputLot, err := s.store.LotByNo(ctx, "SUC-2026-045")
+	if err != nil {
+		return fmt.Errorf("satis senaryosu icin cikti lotu bulunamadi: %w", err)
+	}
+	var lineCount int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sales_line WHERE lot_id = ?`, outputLot.ID).Scan(&lineCount); err != nil {
+		return err
+	}
+	if lineCount >= 3 {
+		s.skipped++
+		return nil
+	}
+
+	warehouseID := s.must(ctx, "warehouse", "WH-MAIN")
+	for _, v := range []struct {
+		customer string
+		qty      string
+	}{
+		{"MKT-A", "30"}, {"MKT-B", "25"}, {"MKT-C", "30"},
+	} {
+		order, _, err := s.store.CreateSalesOrder(ctx, domain.CreateSalesOrderRequest{
+			CustomerID:  s.must(ctx, "customer", v.customer),
+			WarehouseID: warehouseID,
+			SoldAt:      time.Now().UTC(),
+			Lines: []domain.CreateSalesOrderLine{
+				{ItemID: outputLot.ItemID, LotID: outputLot.ID, Qty: qty(v.qty), UnitPrice: amt("24.9000")},
+			},
+		}, repo.SaleOptions{Online: true})
+		if err != nil {
+			return fmt.Errorf("satis olusturulamadi (%s): %w", v.customer, err)
+		}
+		s.created++
+		slog.Info("satis olusturuldu", "order_no", order.OrderNo, "musteri", v.customer, "qty", v.qty)
+	}
 	return nil
 }
