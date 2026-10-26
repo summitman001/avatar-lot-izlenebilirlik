@@ -20,6 +20,8 @@ tags:
   - name: production
   - name: sales
   - name: sync
+  - name: traceability
+  - name: recalls
 paths:
   /health:
     get:
@@ -450,6 +452,125 @@ paths:
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 1000, default: 500 } }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SyncPullResponse" } } } }
+
+  /lots/{id}/trace-forward:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [traceability]
+      summary: Kok lottan tureyen TUM alt lotlar (coklu seviyeli, coklu yollu), stok/sevkiyat/satis/iade ile
+      description: |
+        lot_link uzerinde recursive CTE (MySQL 8 WITH RECURSIVE), parent->child yonunde. Kok dahil, her
+        dugum icin guncel depo bakiyesi, sevkiyatlar, satislar (recall_violation bayragiyla) ve iade edilen
+        miktar doner. Ozet: etkilenen lot sayisi, depo bazinda stokta kalan miktar, musteri bazinda sevk/
+        iade toplami (downstream_known HER ZAMAN false'dur -- sistem ikinci kademe dagitimi modellemez).
+        Dongu korumasi: path sutunu + FIND_IN_SET ile ayni lot ayni dalda ikinci kez ziyaret edilmez. ML
+        cagrisi YOKTUR; sonuc tamamen lot_link kayitlarindan hesaplanir.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TraceForwardResponse" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+  /lots/{id}/trace-backward:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [traceability]
+      summary: Verilen lottan yukari, kullanilan TUM hammadde lotlari (coklu seviyeli), tedarikci iletisimiyle
+      description: |
+        lot_link uzerinde recursive CTE, child->parent yonunde. Her dugum: tedarikci adi+iletisim, parti
+        tarihi, SKT, bu lottan kullanilan miktar, hangi islemle (process_type/process_id) ve -- production/
+        cutting ise -- hangi siparis numarasiyla baglandigi. Ozet: farkli hammadde lotu sayisi, farkli
+        tedarikci sayisi.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TraceBackwardResponse" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+  /lots/{id}/genealogy:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [traceability]
+      summary: Tek cagrida yukari + asagi (graf gorselleştirmesi icin nodes/edges)
+      description: |
+        trace-forward ve trace-backward'in birlestirilmis, grafik-dostu gorunumu. level negatifse yukari
+        (hammadde), 0 kok, pozitifse asagi (mamul).
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/GenealogyResponse" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /recalls:
+    get:
+      tags: [recalls]
+      summary: Geri cagirma listesi (etkilenen lot/bekleyen musteri sayaclariyla)
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/RecallList" } } } }
+    post:
+      tags: [recalls]
+      summary: Yeni geri cagirma ac (trace-forward'daki TUM lotlar bloke edilir)
+      description: |
+        Tek transaction: trace-forward calistirilir; kok ve tureyen TUM lotlar recall_lot'a yazilir (depth+
+        path dahil) ve status='recalled' yapilir (mevcut bloke mekanizmasi -- POST /lots/{id}/block ile AYNI
+        change_log deseni -- yeniden kullanilir). Her etkilenen lot icin musteri x lot bazinda
+        recall_customer satiri (qty_shipped = sales_line + siparissiz shipment_line birlesiminden,
+        qty_returned = customer_return'den) olusur, contact_status='pending'. Ayni kok lot icin ACIK bir
+        geri cagirma zaten varsa 409 (mesajda mevcut recall_no).
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreateRecallRequest" } } } }
+      responses:
+        "201": { description: Olusturuldu, content: { application/json: { schema: { $ref: "#/components/schemas/Recall" } } } }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /recalls/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [recalls]
+      summary: Geri cagirma detayi (etkilenen lotlar + musteri/market tablosu)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Recall" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+  /recalls/{id}/customers/{recall_customer_id}:
+    parameters:
+      - { $ref: "#/components/parameters/Id" }
+      - { name: recall_customer_id, in: path, required: true, schema: { $ref: "#/components/schemas/Id" } }
+    patch:
+      tags: [recalls]
+      summary: Musteri iletisim durumunu guncelle (pending -> contacted -> confirmed) ve/veya not ekle
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PatchRecallCustomerRequest" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Recall" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /recalls/{id}/close:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [recalls]
+      summary: Geri cagirmayi kapat
+      description: Tum musteriler contact_status=confirmed degilse 422 (mesajda eksik musteri/lot listesi).
+      requestBody: { required: false }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Recall" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /recalls/{id}/reopen:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [recalls]
+      summary: Kapatilmis geri cagirmayi tekrar ac
+      requestBody: { required: false }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Recall" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+  /recalls/{id}/contact-list:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [recalls]
+      summary: Market bazli iletisim listesi (varsayilan JSON; format=csv ise CSV indirir)
+      parameters:
+        - { name: format, in: query, schema: { enum: [json, csv] } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json: { schema: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/RecallCustomer" } } } } }
+            text/csv: { schema: { type: string } }
+        "404": { $ref: "#/components/responses/Error" }
 
 components:
   parameters:
@@ -909,3 +1030,179 @@ components:
         reason: { type: string }
         returned_at: { $ref: "#/components/schemas/DateTime" }
         created_at: { $ref: "#/components/schemas/DateTime" }
+
+    TraceShipmentLine:
+      type: object
+      properties:
+        shipment_no: { type: string }
+        customer_id: { $ref: "#/components/schemas/Id" }
+        customer_name: { type: string }
+        qty: { $ref: "#/components/schemas/Qty" }
+        shipped_at: { $ref: "#/components/schemas/DateTime" }
+    TraceSaleLine:
+      type: object
+      properties:
+        order_no: { type: string }
+        customer_id: { $ref: "#/components/schemas/Id" }
+        customer_name: { type: string }
+        qty: { $ref: "#/components/schemas/Qty" }
+        sold_at: { $ref: "#/components/schemas/DateTime" }
+        recall_violation: { type: boolean }
+    TraceForwardNode:
+      type: object
+      description: "Kok dahil tek bir dugum (asama); depth=0 kok, parent_lot_id/qty_from_parent/process_* kokte null."
+      properties:
+        lot_id: { $ref: "#/components/schemas/Id" }
+        lot_no: { type: string }
+        item_id: { $ref: "#/components/schemas/Id" }
+        item_name: { type: string }
+        uom: { $ref: "#/components/schemas/Uom" }
+        status: { $ref: "#/components/schemas/LotStatus" }
+        depth: { type: integer }
+        path: { type: string, description: "Virgulle ayrilmis lot id listesi (kokten bu dugume)" }
+        parent_lot_id: { oneOf: [{ $ref: "#/components/schemas/Id" }, { type: "null" }] }
+        qty_from_parent: { oneOf: [{ $ref: "#/components/schemas/Qty" }, { type: "null" }] }
+        process_type: { oneOf: [{ enum: [production, cutting, reprocess, repack] }, { type: "null" }] }
+        process_id: { oneOf: [{ $ref: "#/components/schemas/Id" }, { type: "null" }] }
+        total_produced_qty: { $ref: "#/components/schemas/Qty" }
+        ratio_from_parent: { type: [string, "null"], description: "qty_from_parent / total_produced_qty, 4 ondalik" }
+        current_stock: { type: array, items: { $ref: "#/components/schemas/LotBalance" } }
+        qty_on_hand_total: { $ref: "#/components/schemas/Qty" }
+        shipments: { type: array, items: { $ref: "#/components/schemas/TraceShipmentLine" } }
+        sales: { type: array, items: { $ref: "#/components/schemas/TraceSaleLine" } }
+        returned_qty: { $ref: "#/components/schemas/Qty" }
+    TraceForwardCustomerSummary:
+      type: object
+      properties:
+        customer_id: { $ref: "#/components/schemas/Id" }
+        customer_name: { type: string }
+        qty_shipped: { $ref: "#/components/schemas/Qty" }
+        qty_returned: { $ref: "#/components/schemas/Qty" }
+        downstream_known:
+          type: boolean
+          description: "HER ZAMAN false: sistem marketin kendi musterisine sattigi miktari (ikinci kademe) hic kaydetmez; uydurma rakam donmez."
+        downstream_note: { type: string }
+    TraceForwardResponse:
+      type: object
+      properties:
+        root_lot_id: { $ref: "#/components/schemas/Id" }
+        root_lot_no: { type: string }
+        nodes: { type: array, items: { $ref: "#/components/schemas/TraceForwardNode" } }
+        summary:
+          type: object
+          properties:
+            affected_lot_count: { type: integer }
+            remaining_stock: { type: array, items: { type: object, properties: { uom: { $ref: "#/components/schemas/Uom" }, qty: { $ref: "#/components/schemas/Qty" } } } }
+            customers: { type: array, items: { $ref: "#/components/schemas/TraceForwardCustomerSummary" } }
+    TraceBackwardNode:
+      type: object
+      properties:
+        lot_id: { $ref: "#/components/schemas/Id" }
+        lot_no: { type: string }
+        item_id: { $ref: "#/components/schemas/Id" }
+        item_name: { type: string }
+        uom: { $ref: "#/components/schemas/Uom" }
+        supplier_id: { oneOf: [{ $ref: "#/components/schemas/Id" }, { type: "null" }] }
+        supplier_name: { type: [string, "null"] }
+        supplier_contact_name: { type: [string, "null"] }
+        supplier_phone: { type: [string, "null"] }
+        supplier_email: { type: [string, "null"] }
+        received_or_produced_at: { $ref: "#/components/schemas/Date" }
+        expiry_date: { oneOf: [{ $ref: "#/components/schemas/Date" }, { type: "null" }] }
+        depth: { type: integer }
+        path: { type: string }
+        child_lot_id: { oneOf: [{ $ref: "#/components/schemas/Id" }, { type: "null" }] }
+        qty_used: { oneOf: [{ $ref: "#/components/schemas/Qty" }, { type: "null" }] }
+        process_type: { oneOf: [{ enum: [production, cutting, reprocess, repack] }, { type: "null" }] }
+        process_id: { oneOf: [{ $ref: "#/components/schemas/Id" }, { type: "null" }] }
+        order_no: { type: [string, "null"], description: "production_order.order_no veya cutting_order.order_no (coziluyorsa)" }
+    TraceBackwardResponse:
+      type: object
+      properties:
+        root_lot_id: { $ref: "#/components/schemas/Id" }
+        root_lot_no: { type: string }
+        nodes: { type: array, items: { $ref: "#/components/schemas/TraceBackwardNode" } }
+        summary:
+          type: object
+          properties: { raw_lot_count: { type: integer }, supplier_count: { type: integer } }
+    GenealogyNode:
+      type: object
+      properties:
+        lot_id: { $ref: "#/components/schemas/Id" }
+        lot_no: { type: string }
+        item_name: { type: string }
+        level: { type: integer, description: "negatif=yukari, 0=kok, pozitif=asagi" }
+        status: { $ref: "#/components/schemas/LotStatus" }
+    GenealogyEdge:
+      type: object
+      properties:
+        from_lot_id: { $ref: "#/components/schemas/Id" }
+        to_lot_id: { $ref: "#/components/schemas/Id" }
+        qty: { $ref: "#/components/schemas/Qty" }
+        uom: { $ref: "#/components/schemas/Uom" }
+        process_type: { enum: [production, cutting, reprocess, repack] }
+        process_id: { $ref: "#/components/schemas/Id" }
+    GenealogyResponse:
+      type: object
+      properties:
+        root_lot_id: { $ref: "#/components/schemas/Id" }
+        root_lot_no: { type: string }
+        nodes: { type: array, items: { $ref: "#/components/schemas/GenealogyNode" } }
+        edges: { type: array, items: { $ref: "#/components/schemas/GenealogyEdge" } }
+
+    CreateRecallRequest:
+      type: object
+      required: [root_lot_id, reason]
+      properties:
+        root_lot_id: { $ref: "#/components/schemas/Id" }
+        reason: { type: string, maxLength: 400 }
+    PatchRecallCustomerRequest:
+      type: object
+      description: "contact_status ve/veya notes'tan en az biri verilmeli."
+      properties:
+        contact_status: { enum: [pending, contacted, confirmed] }
+        notes: { type: [string, "null"], maxLength: 400 }
+    RecallLot:
+      type: object
+      properties:
+        lot_id: { $ref: "#/components/schemas/Id" }
+        lot_no: { type: string }
+        item_name: { type: string }
+        depth: { type: integer }
+        path: { type: string }
+        status: { $ref: "#/components/schemas/LotStatus" }
+    RecallCustomer:
+      type: object
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        customer_id: { $ref: "#/components/schemas/Id" }
+        customer_name: { type: string }
+        customer_phone: { type: [string, "null"] }
+        customer_email: { type: [string, "null"] }
+        lot_id: { $ref: "#/components/schemas/Id" }
+        lot_no: { type: string }
+        qty_shipped: { $ref: "#/components/schemas/Qty" }
+        qty_returned: { $ref: "#/components/schemas/Qty" }
+        remaining_risk_qty: { $ref: "#/components/schemas/Qty", description: "qty_shipped - qty_returned" }
+        contact_status: { enum: [pending, contacted, confirmed] }
+        notes: { type: [string, "null"] }
+        downstream_known: { type: boolean, description: "HER ZAMAN false, bkz. TraceForwardCustomerSummary" }
+        downstream_note: { type: string }
+        has_violation: { type: boolean, description: "Bu lotta en az bir sales_line.recall_violation=true (offline ihlal)" }
+    Recall:
+      type: object
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        recall_no: { type: string }
+        root_lot_id: { $ref: "#/components/schemas/Id" }
+        root_lot_no: { type: string }
+        reason: { type: string }
+        status: { enum: [open, closed] }
+        opened_at: { $ref: "#/components/schemas/DateTime" }
+        closed_at: { oneOf: [{ $ref: "#/components/schemas/DateTime" }, { type: "null" }] }
+        created_at: { $ref: "#/components/schemas/DateTime" }
+        affected_lot_count: { type: integer }
+        pending_customer_count: { type: integer, description: "contact_status <> confirmed olan musteri sayisi" }
+        affected_lots: { type: array, items: { $ref: "#/components/schemas/RecallLot" }, description: "Yalniz GET /recalls/{id}" }
+        customers: { type: array, items: { $ref: "#/components/schemas/RecallCustomer" }, description: "Yalniz GET /recalls/{id}" }
+    RecallList: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/Recall" } } } }

@@ -480,9 +480,88 @@ Bu siparişe ait tüm stok hareketlerini (`send_to_producer`, `transfer_in/out`,
 
 ---
 
+## İzlenebilirlik (Görev 3)
+
+Ayrıntılı veri modeli, recursive CTE mantığı ve adım adım senaryo: [`docs/traceability.md`](traceability.md).
+KRİTİK: bu bölümdeki hiçbir uç nokta ML'e dayanmaz; tüm sonuçlar `lot_link` (kesin kayıt ilişkileri)
+üzerinden MySQL 8 `WITH RECURSIVE` ile hesaplanır.
+
+### `GET /lots/{id}/trace-forward` — ileri izleme
+
+Kök lottan türeyen TÜM alt lotları (çok seviyeli, çok yollu) döner. Kök dahil her düğüm için: `lot_no`,
+`item_name`, `depth`, `path`, `parent_lot_id`/`qty_from_parent`/`process_type`/`process_id` (kökte null),
+`total_produced_qty`, `ratio_from_parent`, güncel depo bakiyesi (`current_stock`/`qty_on_hand_total`),
+sevkiyatlar (`shipments`), satışlar (`sales`, `recall_violation` bayraklı) ve `returned_qty`. `summary`:
+`affected_lot_count`, depo UOM bazında `remaining_stock`, müşteri bazında `customers`
+(`qty_shipped`/`qty_returned`). `downstream_known` her zaman `false`'dur: sistem marketin kendi
+müşterisine sattığı miktarı (ikinci kademe dağıtım) hiç kaydetmez; `downstream_note` bunu açıklar.
+
+```json
+{
+  "root_lot_id": "01a1...", "root_lot_no": "ET-2026-001",
+  "nodes": [
+    { "lot_id": "01a1...", "lot_no": "SUC-2026-045", "depth": 1, "qty_from_parent": "100.000", "returned_qty": "2.000", "sales": [ { "order_no": "SAT-2026-002", "customer_name": "Market B", "qty": "25.000", "recall_violation": false } ] }
+  ],
+  "summary": { "affected_lot_count": 3, "customers": [ { "customer_name": "Market A", "qty_shipped": "40.000", "downstream_known": false, "downstream_note": "İkinci kademe dağıtım kaydı yok, market ile iletişime geçilmeli" } ] }
+}
+```
+
+### `GET /lots/{id}/trace-backward` — geri izleme
+
+Verilen lottan yukarı, kullanılan TÜM hammadde lotlarını (çok seviyeli) döner: `supplier_name` +
+iletişim (`supplier_phone`/`supplier_email`), parti tarihi, SKT, `qty_used`, `process_type`/`process_id`
+ve çözülebiliyorsa `order_no` (production/cutting). `summary`: `raw_lot_count`, `supplier_count`.
+
+### `GET /lots/{id}/genealogy`
+
+Tek çağrıda yukarı + aşağı: `nodes` (`level`: negatif=yukarı, 0=kök, pozitif=aşağı) ve `edges`
+(`from_lot_id`/`to_lot_id`/`qty`/`uom`/`process_type`/`process_id`) — web'de grafik görselleştirmesi için.
+
+## Geri çağırma (Görev 3)
+
+### `POST /recalls` — geri çağırma başlat
+
+```json
+{ "root_lot_id": "01a1...", "reason": "kalite sikayeti" }
+```
+
+Tek transaction: `trace-forward` çalıştırılır; kök ve türeyen TÜM lotlar `recall_lot`'a yazılır
+(`depth`+`path` dahil) ve `status='recalled'` yapılır (mevcut bloke mekanizması — `POST /lots/{id}/block`
+ile AYNI `change_log` deseni — yeniden kullanılır, bkz. `blocked_reason = "<recall_no>: <reason>"`). Her
+etkilenen lot için müşteri×lot bazında `recall_customer` satırı oluşur (`qty_shipped` = satış satırları +
+siparişsiz sevkiyatların birleşiminden, `qty_returned` = `customer_return`'den), `contact_status='pending'`.
+Aynı kök lot için AÇIK bir geri çağırma zaten varsa `409` (mesajda mevcut `recall_no`).
+
+`201` yanıtı `GET /recalls/{id}` ile aynıdır (`affected_lots`, `customers` dahil).
+
+### `GET /recalls` / `GET /recalls/{id}`
+
+Liste: `recall_no`, kök lot, sebep, durum, `affected_lot_count`, `pending_customer_count`. Detay:
+yukarıdakilere ek `affected_lots` (lot_no, item_name, depth, status) ve `customers`
+(`qty_shipped`/`qty_returned`/`remaining_risk_qty`/`contact_status`/`has_violation`/`downstream_known`).
+
+### `PATCH /recalls/{id}/customers/{recall_customer_id}`
+
+```json
+{ "contact_status": "confirmed", "notes": "telefonla ulasildi" }
+```
+
+`contact_status` ∈ `pending|contacted|confirmed` ve/veya `notes`; en az biri zorunlu.
+
+### `POST /recalls/{id}/close` / `POST /recalls/{id}/reopen`
+
+`close`: tüm müşteriler `confirmed` değilse `422` (mesajda eksik müşteri/lot listesi); aksi halde
+`status='closed'`. `reopen`: kapatılmış geri çağırmayı tekrar `open` yapar (lotların bloke durumu
+BUNDAN etkilenmez; kaldırmak için ayrı `POST /lots/{id}/unblock` kullanılır).
+
+### `GET /recalls/{id}/contact-list?format=csv`
+
+Varsayılan JSON (`{"items": [...]}`, `GET /recalls/{id}`'in `customers` alanıyla aynı biçim); `format=csv`
+ise market bazlı iletişim listesini CSV olarak indirir (müşteri, telefon, mail, lot, sevk miktarı, iade
+miktarı, kalan risk, durum) — jüri demosunda kullanılan uç nokta.
+
 ## Henüz uygulanmamış (sözleşme taslağı yok)
 
-Parçalama, izlenebilirlik sorguları, geri çağırma (lot bazlı), uyarı listesi uç noktaları ve cihaz kaydı
-sonraki işlerdir (bkz. [`docs/HANDOFF.md`](HANDOFF.md)). Satış/sevkiyat/iade ve bloke lot mekanizması bu
-görevle tamamlandı. Şemaları `backend/migrations/000001_init.up.sql` içinde hazırdır; parçalama hesap
-kuralları Go'da `backend/internal/domain` içinde (`AllocateCutting`) golden testlerle doğrulanmıştır.
+Parçalama servisi (hesap kuralları `AllocateCutting` ile hazır, uç nokta yok) ve cihaz kaydı sonraki
+işlerdir (bkz. [`docs/HANDOFF.md`](HANDOFF.md)). Satış/sevkiyat/iade, bloke lot mekanizması ve
+izlenebilirlik/geri çağırma (Görev 3) bu görevlerle tamamlandı.

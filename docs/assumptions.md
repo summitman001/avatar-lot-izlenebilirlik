@@ -193,3 +193,50 @@ gerçek işleme), `backend/internal/domain/sales.go` (istek/varlık tipleri). Do
     gerçek `status`/`message` ile `UPDATE` edilip commit edilir. Bu, önceki "stub" sürümünün basit
     `INSERT ... ON DUPLICATE` desenini (yalnızca `processed_request`'i yazan, iş mantığı eklenince
     atomiklik garantisi kalmayan) değiştirir.
+
+## İzlenebilirlik ve geri çağırma (Görev 3) servisine ilişkin varsayımlar ve tespitler
+
+Uygulama: `backend/internal/repo/traceability.go`, istek/varlık tipleri
+`backend/internal/domain/traceability.go`. Veri modeli ve recursive CTE mantığı ayrıntılı olarak
+`docs/traceability.md`'dedir; burada yalnızca BİLİNÇLİ kararlar özetlenir.
+
+1. **ET-2026-001'in miktarı 112 kg'dır (100 kg değil).** Yarışma dokümanı 100 kg der; izlenebilirlik
+   grafının ÇOK YOLLU (bir hammadde lotunun birden fazla mamul lotuna dağıldığı) çalıştığını kanıtlamak
+   için kasıtlı olarak eklenen bir senaryo gereği 12 kg daha seed'lendi: 100 kg `URT-2026-045`'te,
+   kalan 12 kg ikinci bir üretim emrinde (`URT-2026-046`, 10 adet `SUC-2026-046`) kullanılır. Bu, görev
+   talimatının açıkça istediği bir varsayımdır; gerçek değer netleşince yalnızca seed'deki miktar
+   güncellenir.
+2. **`downstream_known` HER ZAMAN `false`'dur.** Şema, bir marketin (müşterinin) kendi müşterisine ne
+   kadar sattığını (ikinci kademe dağıtım) hiçbir yerde modellemez/kaydetmez -- bu tür bir kayıt hiçbir
+   zaman var olmayacağı için `downstream_known=true` dönecek bir kod yolu YOKTUR (uydurma rakam riskini
+   yapısal olarak ortadan kaldırır). Sabit `downstream_note` metni (`domain.DownstreamNoteText`) her
+   zaman eşlik eder. Web bunu kesin veriden (satış/sevkiyat miktarı) görsel olarak AYRI bir rozetle
+   (dolgu yeşil = kesin, çerçeveli gri = bilinmiyor) gösterir; aynı renk kullanılmaz.
+3. **Geri çağırma, bloke lot mekanizmasını `setLotStatusInTx` ortak yardımcısıyla yeniden kullanır.**
+   `SetLotBlocked`'ın (Görev 2) iç mantığı `setLotStatusInTx(tx, lotID, status, reason)`'a çıkarıldı;
+   hem `POST /lots/{id}/block` (`status='blocked'`) hem `CreateRecall` (`status='recalled'`) AYNI
+   fonksiyonu (aynı `change_log` tam-lot-görünümü deseni) kullanır. `GET /sync/pull`'daki
+   `blocked_lot_ids` (`status IN ('blocked','recalled')`) bu sayede HİÇBİR ek değişiklik gerektirmeden
+   etkilenen lotları otomatik içerir.
+4. **`recall_no` deseni `RCL-<yıl>-NNN`, atomik `number_sequence` ile** (`SAT`/`SHP`/`IAD`/`URT`/`SUC`
+   ile aynı desen, bkz. "Dış üretim" bölümü madde 7).
+5. **Aynı kök lot için AÇIK bir geri çağırma varsa `CreateRecall` 409 döner** (mesajda mevcut
+   `recall_no`); `SELECT ... FOR UPDATE` ile kontrol edilip aynı transaction'da yeni kayıt yazılır, bu
+   yüzden eş zamanlı iki çağrı birbirini geçemez. Kapatılmış (eski) bir recall aynı kök lot için YENİ bir
+   recall açılmasını ENGELLEMEZ.
+6. **`qty_shipped` kaynağı: `sales_line` (sipariş → müşteri) BİRLEŞİMİ siparişe bağlı olmayan
+   `shipment_line`'dır** (`shipment.sales_order_id IS NULL`). Bu kod tabanında her satış zaten bir
+   sevkiyat doğurduğu için (Görev 2) pratikte kaynak her zaman `sales_line`'dır; birleşim yalnızca
+   ileride "siparişsiz sevkiyat" eklenirse veri kaybını önleyen bir güvenlik payıdır.
+7. **`CloseRecall`/`ReopenRecall` lotların `recalled` durumunu DEĞİŞTİRMEZ.** Kapatma yalnızca
+   `recall.status`'u günceller (tüm müşteriler `confirmed` olmadan `422`); lotları tekrar `active` yapmak
+   için AYRI `POST /lots/{id}/unblock` (Görev 2'den beri var) kullanılır -- bir recall'ın idari olarak
+   kapanması ile ürünün fiilen piyasaya geri dönmesi (karantina kararı) BİLEREK ayrı işlemlerdir.
+8. **Parçalama/yeniden işleme servisi henüz yok**, bu yüzden "çok seviyeli izleme" ve "döngü koruması"
+   testleri (`TestTraceForwardThreeLevelsDeep`, `TestTraceForwardCycleGuard`) `lot_link` satırlarını
+   DOĞRUDAN (ham SQL ile) oluşturur. Gerçek parçalama servisi eklenince bu testler değişmeden
+   geçerliliğini korur (yalnızca `lot_link` kaynağı değişir, sorgu mantığı aynıdır).
+9. **İzlenebilirlik/geri çağırma sorgularının HİÇBİRİ ML çağrısı yapmaz.** `repo/traceability.go`
+   dosyasında `s.ml`'e (ML istemcisi) hiçbir referans yoktur; tüm entegrasyon testleri (`newEnv`) ML
+   istemcisi BAĞLANMADAN (nil) çalışır ve geçer -- bu, sonuçların ML'in açık/kapalı olmasından bağımsız,
+   tamamen kesin kayıtlara dayandığını kanıtlar.

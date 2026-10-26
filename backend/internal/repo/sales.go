@@ -580,30 +580,40 @@ func (s *Store) createCustomerReturnInTx(ctx context.Context, tx *sql.Tx, req do
 // ---------------------------------------------------------------------------
 
 // SetLotBlocked lot.status'u (blocked|active) ve blocked_reason'ı günceller, change_log'a yazar.
-// Geri çağırma servisinin kendisi (Görev 3) bu fonksiyonu yeniden kullanacaktır.
 func (s *Store) SetLotBlocked(ctx context.Context, lotID string, blocked bool, reason *string) (*domain.Lot, error) {
+	status := "active"
+	var blockedReason *string
+	if blocked {
+		status = "blocked"
+		blockedReason = reason
+	}
 	var out *domain.Lot
 	err := s.InTx(ctx, func(tx *sql.Tx) error {
-		var tmp string
-		if err := tx.QueryRowContext(ctx, `SELECT id FROM lot WHERE id = ? FOR UPDATE`, lotID).Scan(&tmp); err != nil {
-			return mapErr(err)
-		}
-		status := "active"
-		var blockedReason *string
-		if blocked {
-			status = "blocked"
-			blockedReason = reason
-		}
-		if _, err := tx.ExecContext(ctx, `UPDATE lot SET status = ?, blocked_reason = ? WHERE id = ?`,
-			status, blockedReason, lotID); err != nil {
-			return mapErr(err)
-		}
-		var err error
-		out, err = getLot(ctx, tx, lotID, true)
-		if err != nil {
-			return err
-		}
-		return appendChange(ctx, tx, "lot", lotID, "upsert", out)
+		o, err := setLotStatusInTx(ctx, tx, lotID, status, blockedReason)
+		out = o
+		return err
 	})
 	return out, err
+}
+
+// setLotStatusInTx: lot.status + blocked_reason'ı GÜNCELLER ve change_log'a yazar; çağıran tx'i
+// açmaz/kapatmaz. SetLotBlocked (bloke/aç) ve CreateRecall (status='recalled') tarafından ortak
+// kullanılır -- Görev 3'ün geri çağırma servisi bu bloke mekanizmasını yeniden kullanır.
+func setLotStatusInTx(ctx context.Context, tx *sql.Tx, lotID, status string, reason *string) (*domain.Lot, error) {
+	var tmp string
+	if err := tx.QueryRowContext(ctx, `SELECT id FROM lot WHERE id = ? FOR UPDATE`, lotID).Scan(&tmp); err != nil {
+		return nil, mapErr(err)
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE lot SET status = ?, blocked_reason = ? WHERE id = ?`,
+		status, reason, lotID); err != nil {
+		return nil, mapErr(err)
+	}
+	out, err := getLot(ctx, tx, lotID, true)
+	if err != nil {
+		return nil, err
+	}
+	if err := appendChange(ctx, tx, "lot", lotID, "upsert", out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
