@@ -1,0 +1,1 @@
+-- 000006 geri alinamaz: silinen stub kayitlari yeniden uretilemez (zaten anlamsizdi). No-op.
