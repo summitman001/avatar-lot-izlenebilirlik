@@ -264,7 +264,7 @@ Hareketi ters kayıtla geri alır: aynı lot/depo/birim maliyet, işareti ters `
 }
 ```
 
-Kurallar: bir hareket **en fazla bir kez** geri alınır (tekrar → `409`); bir `reversal` geri alınamaz (`422`); geri alma stoğu **negatife düşürüyorsa** `409` ("geri alma stogu negatife dusurur"); olmayan hareket `404`. İstekte `id` verilip aynı `id` ile tekrar gönderilirse mevcut ters kayıt döner (idempotent).
+Kurallar: yalnızca tek hareketli belgelerin hareketleri geri alınabilir (bugün `ref_type = purchase_receipt`); çok hareketli bir belgeye bağlı hareket (ör. `production_order` sevk/teslim hareketleri) tek başına geri alınamaz (`422`) — transferin yarısı geri alınırsa stok yoktan oluşur ve belge defterden ayrışır. Bir hareket **en fazla bir kez** geri alınır (tekrar → `409`); bir `reversal` geri alınamaz (`422`); geri alma stoğu **negatife düşürüyorsa** `409` ("geri alma stogu negatife dusurur"); olmayan hareket `404`. İstekte `id` verilip aynı `id` ile tekrar gönderilirse mevcut ters kayıt döner (idempotent).
 
 ---
 
@@ -352,7 +352,7 @@ Opsiyonel: `id`, `order_no` (boşsa `URT-<yıl>-NNN` **atomik** üretilir — e�
 ]}
 ```
 
-Her satır için `send_to_producer` (−) + `transfer_in` (+) hareket çifti ve bir `production_input` satırı oluşur; durum `materials_sent` olur. Başarılı her çağrıdan sonra (en iyi gayret) ML'e GERÇEK sevk edilen et miktarıyla tekrar sorulup yeni bir tahmin satırı eklenir — artık kesin malzeme maliyeti bilindiği için bu satırda `predicted_ekp_unit` doludur (bkz. `GET .../cost-report` örneği). Hatalar: lot aktif değilse (`blocked`/`recalled`/`consumed`) `422`; lotun tek bir depoda yeterli bakiyesi yoksa `409`; aynı lot bu siparişe ikinci kez gönderilirse `409` (bir lot, bir siparişe en fazla bir kez sevk edilir).
+Her satır için `send_to_producer` (−) + `transfer_in` (+) hareket çifti ve bir `production_input` satırı oluşur; durum `materials_sent` olur. Başarılı her çağrıdan sonra (en iyi gayret) ML'e GERÇEK sevk edilen et miktarıyla tekrar sorulup yeni bir tahmin satırı eklenir — artık kesin malzeme maliyeti bilindiği için bu satırda `predicted_ekp_unit` doludur (bkz. `GET .../cost-report` örneği). Hatalar: lot aktif değilse (`blocked`/`recalled`/`consumed`) `422`; lotun ürününde `material_category` yoksa `422` (ör. `KUZU-BUTUN`); lotun tek bir depoda yeterli bakiyesi yoksa `409`; aynı lot bu siparişe ikinci kez gönderilirse `409` (bir lot, bir siparişe en fazla bir kez sevk edilir).
 
 ### `POST /production-orders/{id}/receive` — mamulü teslim al
 

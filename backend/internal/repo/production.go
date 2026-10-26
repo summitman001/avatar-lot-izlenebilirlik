@@ -596,6 +596,15 @@ func (s *Store) SendMaterials(ctx context.Context, orderID string, req domain.Se
 			if lot.Status != "active" {
 				return domain.Invalid("lot %s aktif degil (durum: %s), sevk edilemez", lot.LotNo, lot.Status)
 			}
+			// receive kategorisiz satiri reddeder; burada yakalanmazsa siparis materials_sent'te kilitli kalir.
+			lotItem, err := getItem(ctx, tx, lot.ItemID)
+			if err != nil {
+				return err
+			}
+			if lotItem.MaterialCategory == nil {
+				return domain.Invalid("lot %s: urun %s icin hammadde kategorisi tanimli degil (item.material_category), sevk edilemez",
+					lot.LotNo, lotItem.Code)
+			}
 			srcWh, err := s.lotSourceWarehouse(ctx, tx, line.LotID, line.Qty.Decimal)
 			if err != nil {
 				return err
@@ -778,6 +787,13 @@ func (s *Store) ReceiveProduction(ctx context.Context, orderID string, req domai
 			outputLotID, lotNo, productItemID, producerSupplierID, orderID,
 			domain.Today(), req.ExpiryDate, req.ReceivedQty, product.BaseUOM, domain.NewAmount(ekp)); err != nil {
 			return mapErr(err)
+		}
+		outLot, err := getLot(ctx, tx, outputLotID, false)
+		if err != nil {
+			return err
+		}
+		if err := appendChange(ctx, tx, "lot", outputLotID, "upsert", outLot); err != nil {
+			return err
 		}
 		if _, err := insertMovement(ctx, tx, domain.StockMovement{
 			LotID: outputLotID, WarehouseID: mainWarehouseID, MovementType: "production_in",

@@ -379,6 +379,10 @@ func TestProductionOrderFullLifecycle(t *testing.T) {
 	if bal := lotWarehouseBalance(t, outputLotID, f.mainWh); bal != "85.000" {
 		t.Fatalf("cikti lotu WH-MAIN'de 85 olmali: %s", bal)
 	}
+	// cikti lotu cihazlara sync pull ile gitmeli (Android satis bu lotu bilmeli)
+	if n := count(t, `SELECT COUNT(*) FROM change_log WHERE entity = 'lot' AND entity_id = ?`, outputLotID); n != 1 {
+		t.Fatalf("cikti lotu change_log'a 1 kez yazilmali: %d", n)
+	}
 
 	// Hammadde degeri mamule aktarilir: hammadde girdisinin tam degeri (material_cost=1076.00)
 	// ciktinin toplam maliyetine (total_cost=1543.50) dahildir; aradaki fark (467.50) hizmet
@@ -428,6 +432,16 @@ func TestProductionOrderFullLifecycle(t *testing.T) {
 	if len(items) != 10 { // 3x(send_to_producer+transfer_in) + 3x production_consume + 1x production_in
 		t.Fatalf("10 hareket beklenirdi, %d geldi: %s", len(items), moves.Raw)
 	}
+	// siparise bagli hareketin tek basina geri alinmasi 422 (transferin yarisi geri alinirsa stok yoktan olusur)
+	for _, it := range items {
+		mv := it.(map[string]any)
+		if r := e.do("POST", "/api/v1/stock-movements/"+mv["id"].(string)+"/reverse", nil); r.Status != 422 {
+			t.Errorf("%s geri alma 422 beklenirdi: %d %s", mv["movement_type"], r.Status, r.Raw)
+		}
+	}
+	if n := count(t, `SELECT COUNT(*) FROM stock_movement WHERE movement_type = 'reversal'`); n != 0 {
+		t.Fatalf("reddedilen geri alma kayit birakmamali: %d", n)
+	}
 
 	// cost-report kapandiktan sonra da erisilebilir
 	report := e.must(e.do("GET", "/api/v1/production-orders/"+orderID+"/cost-report", nil), 200)
@@ -452,6 +466,33 @@ func TestProductionBlockedLotCannotBeShipped(t *testing.T) {
 		map[string]any{"lines": []map[string]any{{"lot_id": lot, "qty": "5.000"}}})
 	if r.Status != 422 {
 		t.Fatalf("bloke lot icin 422 beklenirdi: %d %s", r.Status, r.Raw)
+	}
+}
+
+// Kategorisiz hammadde (ör. seed'deki KUZU-BUTUN) sevkte reddedilmeli; aksi halde receive 422 verir ve
+// siparis materials_sent'te, stok dis depoda kilitli kalir.
+func TestProductionUncategorizedLotCannotBeShipped(t *testing.T) {
+	e := newEnv(t)
+	f := e.prodFixture()
+	kuzu := e.must(e.do("POST", "/api/v1/items", map[string]any{
+		"code": "KUZU-BUTUN", "name": "Bütün Kuzu", "item_type": "raw", "base_uom": "kg"}), 201).str("id")
+	lot := e.must(e.do("POST", "/api/v1/lots", map[string]any{
+		"lot_no": "KZ-2026-001", "item_id": kuzu, "supplier_id": f.supplier, "warehouse_id": f.mainWh,
+		"received_at": "2026-03-02", "qty": "25.000", "unit_price": "11.5000"}), 201).str("id")
+	order := e.must(e.do("POST", "/api/v1/production-orders", map[string]any{
+		"product_item_id": f.product, "producer_supplier_id": f.producer, "external_warehouse_id": f.extWh,
+		"planned_qty": "1", "service_unit_price": "1.0000",
+	}), 201).str("id")
+	r := e.do("POST", "/api/v1/production-orders/"+order+"/send-materials",
+		map[string]any{"lines": []map[string]any{{"lot_id": lot, "qty": "5.000"}}})
+	if r.Status != 422 || !strings.Contains(r.str("error", "message"), "kategorisi") {
+		t.Fatalf("kategorisiz lot icin 422 beklenirdi: %d %s", r.Status, r.Raw)
+	}
+	if n := count(t, `SELECT COUNT(*) FROM stock_movement WHERE ref_type = 'production_order' AND ref_id = ?`, order); n != 0 {
+		t.Fatalf("reddedilen sevk hareket birakmamali: %d", n)
+	}
+	if st := e.must(e.do("GET", "/api/v1/production-orders/"+order, nil), 200).str("status"); st != "draft" {
+		t.Fatalf("siparis draft kalmali: %s", st)
 	}
 }
 

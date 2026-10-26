@@ -228,7 +228,9 @@ paths:
       tags: [stock]
       summary: Hareketi ters kayitla geri al
       description: |
-        Ayni lot/depo icin isareti ters bir 'reversal' hareketi ekler. Ters kayit tekrar geri alinamaz (422),
+        Ayni lot/depo icin isareti ters bir 'reversal' hareketi ekler. Yalnizca tek hareketli belgelerin
+        (ref_type=purchase_receipt) hareketleri geri alinabilir; cok hareketli belgeye (ör. production_order)
+        bagli hareket 422 ile reddedilir. Ters kayit tekrar geri alinamaz (422),
         hareket zaten geri alinmissa (409) veya geri alma stogu negatife dusururse (409) reddedilir.
         Govde opsiyoneldir; `id` verilirse (UUIDv7) ayni id ile tekrar gonderim idempotenttir.
       requestBody:
@@ -283,7 +285,7 @@ paths:
         Basarili her cagridan sonra (en iyi gayret) ML'e GERCEK sevk edilen et miktariyla tekrar
         sorulup yeni bir tahmin satiri eklenir (stage=materials_sent); artik kesin malzeme maliyeti
         bilindigi icin bu satirda predicted_ekp_unit doludur (hibrit EKP tahmini).
-        Bloke/aktif-olmayan lot (422), yetersiz veya birden fazla depoya bolunmus stok (409), zaten
+        Bloke/aktif-olmayan lot (422), urununde material_category olmayan lot (422), yetersiz veya birden fazla depoya bolunmus stok (409), zaten
         bu siparise sevk edilmis lot (409, UNIQUE) reddedilir.
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SendMaterialsRequest" } } } }
       responses:
