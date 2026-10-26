@@ -98,9 +98,16 @@ func (s *Store) ListMovements(ctx context.Context, f MovementFilter) ([]domain.S
 	return out, rows.Err()
 }
 
+// reversibleRefTypes: tek basina geri alinabilen hareketlerin belge tipleri. Cok hareketli belgelerin
+// (ör. production_order'in send_to_producer/transfer_in cifti) tek hareketi geri alinirsa belge ile
+// defter ayrisir ve transferin yarisi geri alininca stok yoktan olusur. Yeni belge tipi buraya ancak
+// tek hareketliyse eklenir.
+var reversibleRefTypes = map[string]bool{"purchase_receipt": true}
+
 // ReverseMovement bir hareketi ters kayitla geri alir: ayni lot/depo/birim maliyet, isareti ters qty.
 //
 // Kurallar:
+//   - yalnizca reversibleRefTypes belgelerinin hareketleri geri alinabilir (422);
 //   - bir ters kayit tekrar geri alinamaz;
 //   - bir hareket en fazla bir kez geri alinabilir (UNIQUE reverses_movement_id; 409);
 //   - geri alma stogu negatife dusuruyorsa reddedilir (409). Lot satiri kilitlenir (FOR UPDATE),
@@ -124,6 +131,9 @@ func (s *Store) ReverseMovement(ctx context.Context, id string, req domain.Rever
 		}
 		if orig.MovementType == "reversal" {
 			return domain.Invalid("ters kayit tekrar geri alinamaz")
+		}
+		if !reversibleRefTypes[orig.RefType] {
+			return domain.Invalid("%s belgesine bagli hareket tek basina geri alinamaz; belgenin kendi akisiyla duzeltin", orig.RefType)
 		}
 		// Lot satirini kilitle, sonra bakiyeyi oku.
 		var lotID string
