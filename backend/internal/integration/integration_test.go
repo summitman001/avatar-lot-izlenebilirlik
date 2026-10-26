@@ -504,28 +504,39 @@ func TestReverseRefusesNegativeStock(t *testing.T) {
 	}
 }
 
-func syncOp(opID string) map[string]any {
+// salesSyncOp gecerli bir sales_order/create push operasyonu olusturur.
+func salesSyncOp(opID, customerID, warehouseID, itemID, lotID string) map[string]any {
 	return map[string]any{
 		"op_id": opID, "entity": "sales_order", "action": "create",
-		"payload":           map[string]any{"order_no": "S-1"},
+		"payload": map[string]any{
+			"customer_id": customerID, "warehouse_id": warehouseID, "sold_at": "2026-03-02T10:00:00Z",
+			"lines": []any{map[string]any{"item_id": itemID, "lot_id": lotID, "qty": "1.000", "unit_price": "24.9000"}},
+		},
 		"client_created_at": "2026-03-02T10:00:00Z",
 	}
 }
 
-// Ayni op_id iki kez gelirse ikincisi "duplicate".
+// Ayni op_id iki kez gelirse ikincisi "duplicate"; ikinci kez stok DUSMEZ (bkz. TestSyncPushSalesOrder).
 func TestSyncPushDuplicateOpID(t *testing.T) {
 	e := newEnv(t)
+	f := e.fixture()
+	cust := e.must(e.do("POST", "/api/v1/customers", map[string]any{"code": "MKT-A", "name": "Market A", "customer_type": "market"}), 201)
+	lot := e.must(e.do("POST", "/api/v1/lots", f.lotBody("ET-2026-001", "100.000", "9.7000", nil)), 201)
+
 	device, op := domain.NewID(), domain.NewID()
-	push := func() resp {
+	syncOp := func(opID string) map[string]any {
+		return salesSyncOp(opID, cust.str("id"), f.warehouse, f.item, lot.str("id"))
+	}
+	push := func(opID string) resp {
 		return e.must(e.do("POST", "/api/v1/sync/push", map[string]any{
-			"device_id": device, "operations": []any{syncOp(op)}}), 200)
+			"device_id": device, "operations": []any{syncOp(opID)}}), 200)
 	}
 	status := func(r resp) string {
 		return r.JSON["results"].([]any)[0].(map[string]any)["status"].(string)
 	}
-	first, second := push(), push()
-	if status(first) == "duplicate" || status(first) == "rejected" {
-		t.Fatalf("ilk gonderim kabul edilmeli: %s", first.Raw)
+	first, second := push(op), push(op)
+	if status(first) != "applied" {
+		t.Fatalf("ilk gonderim applied olmali: %s", first.Raw)
 	}
 	if status(second) != "duplicate" {
 		t.Fatalf("ikinci gonderim duplicate olmali: %s", second.Raw)
@@ -535,6 +546,10 @@ func TestSyncPushDuplicateOpID(t *testing.T) {
 	}
 	if n := count(t, `SELECT COUNT(*) FROM processed_request WHERE op_id = ?`, op); n != 1 {
 		t.Fatalf("processed_request'te tek kayit olmali: %d", n)
+	}
+	// ikinci kez (duplicate) stok dusmedi: tek sale_out hareketi var, bakiye tek dusus kadar.
+	if n := count(t, `SELECT COUNT(*) FROM stock_movement WHERE lot_id = ? AND movement_type = 'sale_out'`, lot.str("id")); n != 1 {
+		t.Fatalf("duplicate op_id ikinci kez stok dusurmemeli: %d sale_out hareketi var", n)
 	}
 
 	// ayni istekte iki kez ayni op_id

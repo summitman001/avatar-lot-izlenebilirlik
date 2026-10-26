@@ -118,3 +118,78 @@ Durum makinesi: `draft → materials_sent → received → closed`. Uygulama: `b
 
     `receive` sırasında (`recordPredictionActual`) gerçekleşen `received_qty` ve hesaplanan `ekp_unit`, en güncel tahminle karşılaştırılıp AYNI satıra `actual_json`/`error_json` olarak yazılır: `actual_ekp_unit`, `ekp_error_abs` (işaretli: `actual − predicted`), `ekp_error_pct` (`round2(|fark| / predicted × 100)`). En güncel tahmin `draft` ise (yani `materials_sent`'te ML kapalıydı) `predicted_ekp_unit` yoktur; bu durumda yalnızca adet sapması yazılır, EKP sapma alanları boş kalır — var olmayan bir tahminle sahte bir karşılaştırma uydurulmaz. `TestProductionHybridEkpPrediction` (mock ML sunucusu, sabit `predicted_qty=84,87`) formülün API'de **elle hesaplanan değerle birebir aynı** sonucu verdiğini ve sapmanın doğru işaretle yazıldığını doğrular.
 13. **ML "en iyi gayret"tir, her iki aşamada da.** `ML_URL` erişilemezse (servis kapalı, zaman aşımı) ne sipariş oluşturma ne de hammadde sevki **başarısız olur**; uyarı loglanır ve o aşamanın tahmini atlanır (`predictOnCreate`, `predictOnMaterialsSent`). `TestProductionMLUnreachableStillCreatesOrder` bunu gerçek bir ağ hatasıyla (sahte değil, dinlemeyen bir porta bağlanarak) doğrular.
+
+## Satış/sevkiyat/iade + senkron (Görev 2) servisine ilişkin varsayımlar ve tespitler
+
+Uygulama: `backend/internal/repo/sales.go` (servis), `backend/internal/repo/sync.go` (`/sync/push`
+gerçek işleme), `backend/internal/domain/sales.go` (istek/varlık tipleri). Doğruluk referansı
+`backend/internal/integration/sales_test.go` (gerçek HTTP uç noktaları + gerçek MySQL ile).
+
+1. **Tek servis fonksiyonu, "online"/"offline" bayrağıyla dallanır.** `Store.createSalesOrderInTx`
+   hem `POST /sales-orders` (REST, `SaleOptions{Online: true}`) hem `/sync/push`'un `sales_order/create`
+   işlemesi (`SaleOptions{Online: false}`) tarafından çağrılır — iş mantığı tek yerde, tekrar yok.
+   `Store.CreateSalesOrder` (REST) kendi transaction'ını açar; sync katmanı (`repo/sync.go`) ZATEN açık
+   olan transaction'ı (processed_request rezervasyonuyla birlikte) kullanır — bu yüzden iç fonksiyon
+   (`createSalesOrderInTx`) bir `*sql.Tx` alır, kendi açmaz/kapatmaz. Aynı desen `customer_return` için
+   `createCustomerReturnInTx`'tedir.
+2. **`sales_order` satırı, satırlardan (`sales_line`) ÖNCE yazılır.** `sales_line.sales_order_id` FK'si
+   olduğu için ilk sürümde satırlar döngü içinde yazılıp `sales_order` döngüden SONRA ekleniyordu — bu,
+   her satışta FK ihlaliyle (`referans verilen kayit bulunamadi`) başarısız oluyordu (entegrasyon
+   testleriyle yakalandı). Düzeltme: `sales_order` `total_amount=0` yer tutucuyla ÖNCE yazılır, döngü
+   biter bitmez gerçek toplamla `UPDATE` edilir.
+3. **`device_id` push zarfından sipariş satırına OTOMATİK kopyalanmaz.** `/sync/push` isteğinin üst
+   seviye `device_id`'si yalnızca `processed_request`/`device.last_sync_at` bakımı içindir ve `device`
+   tablosunda kayıtlı olması ZORUNLU DEĞİLDİR (cihaz kayıt uç noktası henüz yok, bkz. HANDOFF TODO).
+   `sales_order.device_id` ise şemada `device` tablosuna FK'lidir — kayıtsız bir id buraya yazılırsa FK
+   ihlaliyle reddedilir. Bu yüzden `payload.device_id` yalnızca PAYLOAD'UN KENDİSİ açıkça verdiyse (ve
+   o cihaz kayıtlıysa) kullanılır; push zarfının device_id'si asla sızdırılmaz. Bu da entegrasyon
+   testleriyle yakalanan gerçek bir hataydı (ilk sürüm otomatik kopyalıyordu).
+4. **Satır içi sorgu, dışarıdaki açık `rows` kapanmadan çalıştırılamaz (`*sql.Tx` tek bağlantıdır).**
+   `loadShipmentsForOrder` ilk sürümde her sevkiyat satırını, DIŞARIDAKİ sevkiyat `rows`'u hâlâ açıkken
+   (`for rows.Next()` içinde) `loadShipmentLines` ile sorguluyordu; bu `*sql.DB` havuzuyla sorunsuzdu
+   ama `*sql.Tx` TEK bir bağlantıya bağlı olduğu için sürücü `invalid connection` hatası veriyordu
+   (yalnızca gerçek MySQL'e karşı entegrasyon testinde ortaya çıktı, birim testlerinde görünmez).
+   Düzeltme: önce TÜM sevkiyat satırları okunup `rows` kapatılır, SONRA her biri için ayrı sorgu atılır.
+   Yeni bir repo fonksiyonu yazarken aynı tx üzerinde iç içe açık `*sql.Rows` kullanmayın.
+5. **Online kurallar sert hata, offline kurallar bayrak.** `opts.Online=true` (REST) iken bloke lot
+   `422` (mesajda `LOT_BLOCKED`), yetersiz stok `409` (mesajda `INSUFFICIENT_STOCK`) — hiçbir kayıt
+   kalmaz (transaction geri alınır). `opts.Online=false` (sync) iken aynı durumlar satışı
+   REDDETMEZ: `sales_line.recall_violation=true` / stok negatife düşer + `anomaly_alert`, sonuç
+   `violations` listesiyle döner, sync katmanı bunu `flagged` yapar (bkz. `docs/sync.md`, "OFFLINE
+   KURALI"). Mesaj kodu tam olarak `LOT_BLOCKED_AT_SALE` / `NEGATIVE_STOCK_OFFLINE`'dır (birden fazlaysa
+   virgülle birleştirilir) — Android istemcisi bu sabit string'lere göre dallanabilir.
+6. **`sales_order.status` her zaman `'confirmed'`dir.** Şemadaki `draft`/`cancelled` değerleri bu
+   görevde kullanılmaz (taslak/iptal akışı kapsam dışı); bir satış oluştuğu anda stok hareketi zaten
+   postalanmıştır, geri alınamaz bir "taslak" durumu anlamsızdır.
+7. **`customer_return` depo türetimi: `sales_line_id` → siparişin deposu; yalnız `lot_id` → lotun en
+   son `sale_out` hareketinin deposu.** Şema `customer_return`'e `warehouse_id` eklemez (görev tanımı
+   da istemez); `sales_line_id` verilmişse ilişkili `sales_order.warehouse_id` kullanılır, yalnız
+   `lot_id` verilmişse (satış satırı referansı yoksa) lotun en güncel `sale_out` hareketinin deposuna
+   `return_in` yazılır (bu lot hiç satılmadıysa `422`).
+8. **İade numarası öneki `IAD-<yıl>-NNN`'dir** (atomik, `number_sequence`, aynı desen `SAT`/`SHP`
+   gibi) — görev tanımı bu öneki açıkça belirtmediği için seçilen bir varsayımdır.
+9. **İade için offline tolerans YOKTUR.** Satış fiziksel olarak zaten gerçekleştiği için offline modda
+   hiçbir zaman reddedilmez (en fazla `flagged`); ama iade bir STOK GERİ ALMA işlemidir, fiziksel bir
+   zorunluluk taşımaz — satılandan fazla iade her zaman (online veya `/sync/push` üzerinden) `422`/
+   `rejected` ile reddedilir, hiçbir kayıt yazılmaz.
+10. **Lot `change_log` payload'ı artık bakiye İÇERİR.** Önceki sözleşme "lot payload'ı bakiye içermez"
+    diyordu (ana veri değişikliklerinde doğru); ama bir satış/iade/bloke-açma lotun durumunu veya
+    (dolaylı olarak) bakiyesini değiştirdiğinde, o lot için YENİDEN `getLot(..., withDetail=true)` ile
+    okunan TAM görünüm (`qty_on_hand`/`balances` dahil) `change_log`'a yazılır — Android'in kendi
+    offline hesapladığı bakiyeyi sunucunun otoriter değeriyle karşılaştırıp düzeltebilmesi için
+    (`docs/sync.md`, "Pull" bölümü). Ayrı bir `qty_on_hand_server` alanı EKLENMEDİ: mevcut `qty_on_hand`
+    alanı zaten bu amaca hizmet eder, şema/sözleşme basitliği için aynı alan yeniden kullanıldı.
+11. **Bloke lot mekanizması `POST /lots/{id}/block`+`unblock` ile minimaldir.** Durum makinesi yok
+    (herhangi bir durumdan `blocked`/`active`'e geçilebilir); Görev 3'ün geri çağırma servisi bu iki
+    fonksiyonu (`Store.SetLotBlocked`) olduğu gibi yeniden kullanacaktır. `GET /sync/pull`'daki
+    `blocked_lot_ids` zaten her çekimde `status IN ('blocked','recalled')` tam listesini döndüğü için
+    (önceki görevden beri) bu uç noktalar için ayrı bir sync değişikliği gerekmedi.
+12. **`/sync/push` idempotency + "rejected hiçbir kayıt yazmaz" tek bir desenle sağlanır:**
+    `processed_request` satırı önce `'processing'` durumuyla REZERVE edilir (aynı transaction'ın İLK
+    adımı); `op_id` PRIMARY KEY olduğu için eş zamanlı aynı `op_id`'ler burada serileşir (ikincisi
+    UNIQUE ihlaliyle anında `duplicate` olur, hiçbir yan etkisi commit edilmeden geri alınır). Payload
+    işlenirken bir `domain.ValidationError`/`ConflictError` dönerse TÜM transaction (rezervasyon dahil)
+    geri alınır → `rejected`, hiçbir iz kalmaz. Başarılıysa rezervasyon satırı aynı transaction'da
+    gerçek `status`/`message` ile `UPDATE` edilip commit edilir. Bu, önceki "stub" sürümünün basit
+    `INSERT ... ON DUPLICATE` desenini (yalnızca `processed_request`'i yazan, iş mantığı eklenince
+    atomiklik garantisi kalmayan) değiştirir.

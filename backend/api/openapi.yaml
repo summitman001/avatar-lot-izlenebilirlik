@@ -18,6 +18,7 @@ tags:
   - name: lots
   - name: stock
   - name: production
+  - name: sales
   - name: sync
 paths:
   /health:
@@ -208,6 +209,29 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Lot" } } } }
         "404": { $ref: "#/components/responses/Error" }
+  /lots/{id}/block:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [lots]
+      summary: Lotu blokla (status=blocked, blocked_reason)
+      description: |
+        Gecici bir mekanizmadir (Gorev 3'un geri cagirma servisi bunu yeniden kullanacak). change_log'a
+        yazilir; bloke/geri cagrilmis lotlar her /sync/pull cekiminde blocked_lot_ids'te tam liste olarak
+        donmeye devam eder.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BlockLotRequest" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Lot" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /lots/{id}/unblock:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [lots]
+      summary: Lotu ac (status=active, blocked_reason=null)
+      requestBody: { required: false }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Lot" } } } }
+        "404": { $ref: "#/components/responses/Error" }
 
   /stock-movements:
     get:
@@ -347,13 +371,71 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MovementList" } } } }
         "404": { $ref: "#/components/responses/Error" }
 
+  /sales-orders:
+    get:
+      tags: [sales]
+      summary: Satis siparisi listesi (satirlar/sevkiyat icermez)
+      parameters:
+        - { name: customer_id, in: query, schema: { $ref: "#/components/schemas/Id" } }
+        - { name: lot_id, in: query, schema: { $ref: "#/components/schemas/Id" } }
+        - { name: from, in: query, schema: { $ref: "#/components/schemas/Date" }, description: "sold_at >= from" }
+        - { name: to, in: query, schema: { $ref: "#/components/schemas/Date" }, description: "sold_at < to+1gun" }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SalesOrderList" } } } }
+    post:
+      tags: [sales]
+      summary: Satis olustur (REST, online kurallar; sync/push ile AYNI servis fonksiyonu)
+      description: |
+        Tek transaction: her satir icin lot FOR UPDATE kilitlenir, sale_out hareketi + sales_line yazilir.
+        Lot aktif olmali (aksi halde 422, mesajda LOT_BLOCKED); belirtilen depoda bakiye yeterli olmali
+        (aksi halde 409, mesajda INSUFFICIENT_STOCK). `create_shipment` (varsayilan true) ise ayni
+        satirlardan bir sevkiyat da olusur. Ayni istemci `id`'siyle tekrar gelen istek mevcut siparisi
+        doner (idempotent, yeniden islenmez).
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreateSalesOrderRequest" } } } }
+      responses:
+        "201": { description: Olusturuldu, content: { application/json: { schema: { $ref: "#/components/schemas/SalesOrder" } } } }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /sales-orders/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [sales]
+      summary: Siparis detayi (satirlar + sevkiyatlar dahil)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SalesOrder" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+  /customer-returns:
+    post:
+      tags: [sales]
+      summary: Musteri iadesi olustur (lota return_in ile geri girer)
+      description: |
+        `sales_line_id` veya `lot_id`'den en az biri verilmelidir. Satilan miktarin ustunde iade 422
+        (sales_line_id verilmisse o satirin qty'sine, verilmemisse lotun toplam satisina gore kontrol
+        edilir). lot_id'den depo turetimi: o lotun en son sale_out hareketinin deposu.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreateCustomerReturnRequest" } } } }
+      responses:
+        "201": { description: Olusturuldu, content: { application/json: { schema: { $ref: "#/components/schemas/CustomerReturn" } } } }
+        "422": { $ref: "#/components/responses/Error" }
+
   /sync/push:
     post:
       tags: [sync]
-      summary: Cihazdan islem gonder (idempotent, op_id ile)
+      summary: Cihazdan islem gonder (idempotent, op_id ile; sales_order/create ve customer_return/create gercek islenir)
       description: |
-        BUGUN STUB: op_id kaydedilir, ayni op_id tekrar gelirse `duplicate` doner. Payload isleme TODO;
-        bu yuzden ilk gonderim `flagged` doner (uygulanmadi). Sozlesme kesindir.
+        Her operasyon kendi transaction'indadir (bir operasyonun hatasi digerlerini etkilemez), sirayla
+        islenir. Desteklenen entity/action: `sales_order`/`create`, `customer_return`/`create`.
+
+        OFFLINE KURALI: satis cihazda fiziksel olarak zaten gerceklesmistir; sunucu reddetmez, kaydeder,
+        kurallari sonradan degerlendirir:
+        - Lot sunucuda blocked/recalled ise: satis YINE kaydedilir, `sales_line.recall_violation=true`,
+          sonuc `flagged`, message `LOT_BLOCKED_AT_SALE`.
+        - Bakiye yetersizse: satis YINE kaydedilir, stok negatife duser, bir `anomaly_alert`
+          (severity critical, alert_type NEGATIVE_STOCK_OFFLINE) acilir, sonuc `flagged`.
+        - Bozuk payload veya bilinmeyen lot/musteri/urun: `rejected`, HICBIR KAYIT YAZILMAZ (ayni op_id
+          tekrar gonderilebilir, dedup uygulanmaz).
+        - Hepsi sorunsuzsa `applied`. Ayni `op_id` tekrar gelirse `duplicate` (ikinci kez islenmez).
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SyncPushRequest" } } } }
       responses:
         "200": { description: Islem basina sonuc, content: { application/json: { schema: { $ref: "#/components/schemas/SyncPushResponse" } } } }
@@ -566,7 +648,7 @@ components:
         entity: { enum: [item, customer, warehouse, lot] }
         entity_id: { $ref: "#/components/schemas/Id" }
         action: { enum: [upsert, delete] }
-        payload: { type: object, description: "Ilgili varligin API JSON'u (item / customer / warehouse / lot, bakiyesiz)" }
+        payload: { type: object, description: "Ilgili varligin API JSON'u (item/customer/warehouse/lot). Lot payload'inda qty_on_hand/balances DOLUDUR: satis/iade sonrasi guncel bakiyeyi tasimasi icin lota yazan her islem (satis, iade, bloke/ac) change_log'a bu DETAYLI goruntuyle yazar." }
     SyncPullResponse:
       type: object
       properties:
@@ -720,3 +802,110 @@ components:
         margin_pct: { oneOf: [{ type: string }, { type: "null" }] }
         warnings: { type: array, items: { enum: [INVOICED_QTY_MISMATCH, QTY_VARIANCE] } }
         prediction: { oneOf: [{ $ref: "#/components/schemas/ProductionPrediction" }, { type: "null" }] }
+
+    BlockLotRequest:
+      type: object
+      required: [reason]
+      properties: { reason: { type: string, maxLength: 400 } }
+    SalesLine:
+      type: object
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        sales_order_id: { $ref: "#/components/schemas/Id" }
+        item_id: { $ref: "#/components/schemas/Id" }
+        item_code: { type: string }
+        item_name: { type: string }
+        lot_id: { $ref: "#/components/schemas/Id" }
+        lot_no: { type: string }
+        qty: { $ref: "#/components/schemas/Qty" }
+        unit_price: { $ref: "#/components/schemas/Amount" }
+        line_total: { $ref: "#/components/schemas/Amount" }
+        stock_movement_id: { oneOf: [{ $ref: "#/components/schemas/Id" }, { type: "null" }] }
+        recall_violation: { type: boolean, description: "true: offline satis aninda lot sunucuda blocked/recalled idi" }
+        created_at: { $ref: "#/components/schemas/DateTime" }
+    ShipmentLine:
+      type: object
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        lot_id: { $ref: "#/components/schemas/Id" }
+        lot_no: { type: string }
+        item_id: { $ref: "#/components/schemas/Id" }
+        qty: { $ref: "#/components/schemas/Qty" }
+    Shipment:
+      type: object
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        shipment_no: { type: string }
+        customer_id: { $ref: "#/components/schemas/Id" }
+        customer_name: { type: string }
+        sales_order_id: { oneOf: [{ $ref: "#/components/schemas/Id" }, { type: "null" }] }
+        shipped_at: { $ref: "#/components/schemas/DateTime" }
+        vehicle: { type: [string, "null"] }
+        created_at: { $ref: "#/components/schemas/DateTime" }
+        lines: { type: array, items: { $ref: "#/components/schemas/ShipmentLine" } }
+    CreateSalesOrderLine:
+      type: object
+      required: [item_id, lot_id, qty, unit_price]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        item_id: { $ref: "#/components/schemas/Id" }
+        lot_id: { $ref: "#/components/schemas/Id" }
+        qty: { $ref: "#/components/schemas/Qty" }
+        unit_price: { $ref: "#/components/schemas/Amount" }
+    CreateSalesOrderRequest:
+      type: object
+      required: [customer_id, warehouse_id, sold_at, lines]
+      properties:
+        id: { $ref: "#/components/schemas/Id", description: "Opsiyonel istemci UUIDv7'si; REST'te idempotency anahtari" }
+        order_no: { type: [string, "null"], description: "Bos ise SAT-<yil>-NNN atomik uretilir" }
+        customer_id: { $ref: "#/components/schemas/Id" }
+        warehouse_id: { $ref: "#/components/schemas/Id" }
+        device_id: { oneOf: [{ $ref: "#/components/schemas/Id" }, { type: "null" }], description: "Opsiyonel; kayitli bir device.id olmali (FK)" }
+        sold_at: { $ref: "#/components/schemas/DateTime" }
+        lines: { type: array, minItems: 1, items: { $ref: "#/components/schemas/CreateSalesOrderLine" } }
+        create_shipment: { type: boolean, default: true }
+    SalesOrder:
+      type: object
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        order_no: { type: string }
+        customer_id: { $ref: "#/components/schemas/Id" }
+        customer_code: { type: string }
+        customer_name: { type: string }
+        device_id: { oneOf: [{ $ref: "#/components/schemas/Id" }, { type: "null" }] }
+        warehouse_id: { $ref: "#/components/schemas/Id" }
+        warehouse_code: { type: string }
+        sold_at: { $ref: "#/components/schemas/DateTime" }
+        status: { const: confirmed }
+        total_amount: { $ref: "#/components/schemas/Amount" }
+        has_violation: { type: boolean, description: "en az bir satirda recall_violation=true" }
+        created_at: { $ref: "#/components/schemas/DateTime" }
+        lines: { type: array, items: { $ref: "#/components/schemas/SalesLine" } }
+        shipments: { type: array, items: { $ref: "#/components/schemas/Shipment" } }
+    SalesOrderList: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/SalesOrder" } } } }
+    CreateCustomerReturnRequest:
+      type: object
+      required: [customer_id, qty, reason]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        return_no: { type: [string, "null"], description: "Bos ise IAD-<yil>-NNN atomik uretilir" }
+        customer_id: { $ref: "#/components/schemas/Id" }
+        sales_line_id: { oneOf: [{ $ref: "#/components/schemas/Id" }, { type: "null" }], description: "sales_line_id veya lot_id'den en az biri verilmeli" }
+        lot_id: { oneOf: [{ $ref: "#/components/schemas/Id" }, { type: "null" }] }
+        qty: { $ref: "#/components/schemas/Qty" }
+        reason: { type: string, maxLength: 400 }
+        returned_at: { oneOf: [{ $ref: "#/components/schemas/DateTime" }, { type: "null" }], description: "Bos ise sunucu aninda (now)" }
+    CustomerReturn:
+      type: object
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        return_no: { type: string }
+        customer_id: { $ref: "#/components/schemas/Id" }
+        customer_name: { type: string }
+        sales_line_id: { oneOf: [{ $ref: "#/components/schemas/Id" }, { type: "null" }] }
+        lot_id: { $ref: "#/components/schemas/Id" }
+        lot_no: { type: string }
+        qty: { $ref: "#/components/schemas/Qty" }
+        reason: { type: string }
+        returned_at: { $ref: "#/components/schemas/DateTime" }
+        created_at: { $ref: "#/components/schemas/DateTime" }
