@@ -156,13 +156,78 @@ func sum(ds []decimal.Decimal) decimal.Decimal {
 	return s
 }
 
+// CostBasisResolution: hesaplanan ve beyan edilen toplamdan PARCALAR BILINMEDEN de turetilebilen
+// karar (hangi esas kullanilacak, uyusmazlik var mi, cozumlenmis mi). AllocateCutting bunu dagitim
+// icin kullanir; repo/cutting.go da parcalama siparisi OLUSTURULURKEN (henuz fiili agirlik girilmeden)
+// toplam maliyeti ve PURCHASE_TOTAL_MISMATCH/MISMATCH_RESOLUTION_MISSING uyarisini belirlemek icin
+// AYNI fonksiyonu dogrudan cagirir.
+type CostBasisResolution struct {
+	Computed, Declared *decimal.Decimal
+	TotalCost          decimal.Decimal
+	BasisUsed          string
+	Mismatch           bool
+	Unresolved         bool
+	Note               *string
+	Warnings           []string
+}
+
+func ResolveCostBasis(unitCostPerKg, declaredTotal *decimal.Decimal, inputWeightKg decimal.Decimal, costBasis, resolutionNote *string) (CostBasisResolution, error) {
+	var zero CostBasisResolution
+	if costBasis != nil && *costBasis != BasisComputed && *costBasis != BasisDeclared {
+		return zero, Invalid("gecersiz maliyet esasi: %s", *costBasis)
+	}
+	var computed, declared *decimal.Decimal
+	if unitCostPerKg != nil {
+		c := LineTotal(inputWeightKg, *unitCostPerKg)
+		computed = &c
+	}
+	if declaredTotal != nil {
+		d := Round2(*declaredTotal)
+		declared = &d
+	}
+	if computed == nil && declared == nil {
+		return zero, Invalid("unit_cost_per_kg veya declared_total_cost gerekli")
+	}
+	totals := map[string]*decimal.Decimal{BasisComputed: computed, BasisDeclared: declared}
+
+	mismatch := computed != nil && declared != nil && !computed.Equal(*declared)
+	// Esas verilmemisse gecici olarak hesaplanan tutar (yoksa beyan) kullanilir.
+	basisUsed := BasisDeclared
+	if costBasis != nil {
+		basisUsed = *costBasis
+	} else if computed != nil {
+		basisUsed = BasisComputed
+	}
+	if totals[basisUsed] == nil {
+		return zero, Invalid("%s esasi icin gerekli girdi eksik", basisUsed)
+	}
+
+	var note *string
+	if resolutionNote != nil {
+		if n := strings.TrimSpace(*resolutionNote); n != "" {
+			note = &n
+		}
+	}
+	unresolved := mismatch && (costBasis == nil || note == nil)
+
+	warnings := []string{}
+	if mismatch {
+		warnings = append(warnings, WarnPurchaseTotalMismatch)
+	}
+	if unresolved {
+		warnings = append(warnings, WarnMismatchResolutionMissing)
+	}
+
+	return CostBasisResolution{
+		Computed: computed, Declared: declared, TotalCost: *totals[basisUsed], BasisUsed: basisUsed,
+		Mismatch: mismatch, Unresolved: unresolved, Note: note, Warnings: warnings,
+	}, nil
+}
+
 func AllocateCutting(in CuttingInput) (CuttingResult, error) {
 	var zero CuttingResult
 	if in.Method != MethodQuantity && in.Method != MethodValue {
 		return zero, Invalid("gecersiz yontem: %s", in.Method)
-	}
-	if in.CostBasis != nil && *in.CostBasis != BasisComputed && *in.CostBasis != BasisDeclared {
-		return zero, Invalid("gecersiz maliyet esasi: %s", *in.CostBasis)
 	}
 	if !in.InputWeightKg.IsPositive() {
 		return zero, Invalid("giris agirligi sifirdan buyuk olmali")
@@ -179,48 +244,13 @@ func AllocateCutting(in CuttingInput) (CuttingResult, error) {
 		}
 	}
 
-	var computed, declared *decimal.Decimal
-	if in.UnitCostPerKg != nil {
-		c := LineTotal(in.InputWeightKg, *in.UnitCostPerKg)
-		computed = &c
+	basis, err := ResolveCostBasis(in.UnitCostPerKg, in.DeclaredTotal, in.InputWeightKg, in.CostBasis, in.ResolutionNote)
+	if err != nil {
+		return zero, err
 	}
-	if in.DeclaredTotal != nil {
-		d := Round2(*in.DeclaredTotal)
-		declared = &d
-	}
-	if computed == nil && declared == nil {
-		return zero, Invalid("unit_cost_per_kg veya declared_total_cost gerekli")
-	}
-	totals := map[string]*decimal.Decimal{BasisComputed: computed, BasisDeclared: declared}
-
-	mismatch := computed != nil && declared != nil && !computed.Equal(*declared)
-	// Esas verilmemisse gecici olarak hesaplanan tutar (yoksa beyan) kullanilir.
-	basisUsed := BasisDeclared
-	if in.CostBasis != nil {
-		basisUsed = *in.CostBasis
-	} else if computed != nil {
-		basisUsed = BasisComputed
-	}
-	if totals[basisUsed] == nil {
-		return zero, Invalid("%s esasi icin gerekli girdi eksik", basisUsed)
-	}
-	totalCost := *totals[basisUsed]
-
-	var note *string
-	if in.ResolutionNote != nil {
-		if n := strings.TrimSpace(*in.ResolutionNote); n != "" {
-			note = &n
-		}
-	}
-	unresolved := mismatch && (in.CostBasis == nil || note == nil)
-
-	warnings := []string{}
-	if mismatch {
-		warnings = append(warnings, WarnPurchaseTotalMismatch)
-	}
-	if unresolved {
-		warnings = append(warnings, WarnMismatchResolutionMissing)
-	}
+	totals := map[string]*decimal.Decimal{BasisComputed: basis.Computed, BasisDeclared: basis.Declared}
+	computed, declared := basis.Computed, basis.Declared
+	mismatch, basisUsed, totalCost, note, unresolved, warnings := basis.Mismatch, basis.BasisUsed, basis.TotalCost, basis.Note, basis.Unresolved, basis.Warnings
 
 	partsWeight := decimal.Zero
 	sellable := decimal.Zero
