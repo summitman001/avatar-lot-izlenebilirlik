@@ -560,8 +560,88 @@ Varsayılan JSON (`{"items": [...]}`, `GET /recalls/{id}`'in `customers` alanıy
 ise market bazlı iletişim listesini CSV olarak indirir (müşteri, telefon, mail, lot, sevk miktarı, iade
 miktarı, kalan risk, durum) — jüri demosunda kullanılan uç nokta.
 
-## Henüz uygulanmamış (sözleşme taslağı yok)
+## Parçalama (Görev 2)
 
-Parçalama servisi (hesap kuralları `AllocateCutting` ile hazır, uç nokta yok) ve cihaz kaydı sonraki
-işlerdir (bkz. [`docs/HANDOFF.md`](HANDOFF.md)). Satış/sevkiyat/iade, bloke lot mekanizması ve
-izlenebilirlik/geri çağırma (Görev 3) bu görevlerle tamamlandı.
+Ayrıntılı: [`docs/cutting.md`](cutting.md) (dağıtım yöntemleri, fire/yan ürün muamelesi, kuruş
+yuvarlama, ağırlık dengesi kontrolü, dokümandaki 25 kg/22 kg ve 287,50/351,00 tutarsızlıklarının
+sistemde nasıl yakalandığı).
+
+### `POST /cutting-recipes` / `GET /cutting-recipes` / `GET /cutting-recipes/{id}` / `PUT /cutting-recipes/{id}`
+
+```json
+{
+  "code": "REC-KUZU-01",
+  "name": "Bütün kuzu parçalama",
+  "animal_type": "lamb",
+  "lines": [
+    { "part_item_id": "01a1...", "expected_ratio": "0.3000", "reference_sale_price": "16.0000", "is_by_product": false, "is_waste": false }
+  ]
+}
+```
+
+`lines[].expected_ratio` toplamı 1,0000 (±0,0005 tolerans) değilse `422`. `PUT` tam güncellemedir
+(satırlar silinip yeniden yazılır); var olan parçalama emirlerini etkilemez.
+
+### `POST /cutting-orders` — parçalama emri oluştur (durum `draft`)
+
+```json
+{
+  "recipe_id": "01a1...",
+  "input_lot_id": "01a1...",
+  "input_weight_kg": "25.000",
+  "allocation_method": "value",
+  "cut_at": "2026-03-05T10:00:00Z",
+  "cost_basis": "computed",
+  "resolution_note": "Birim fiyat (11,50 €/kg) ve ağırlık (25 kg) tutarlı; hatalı olan tek alan beyan edilen toplam."
+}
+```
+
+`order_no` boşsa `CUT-<yıl>-NNN` atomik üretilir. Giriş lotu `active` olmalı (`422` aksi halde,
+`LOT_BLOCKED` değil doğrudan mesajda belirtilir) ve yeterli bakiyeye sahip olmalı (`409`). Giriş
+lotunun alış belgesinde tutar uyuşmazlığı varsa (`has_mismatch`), hesaplanan ve beyan edilen toplam
+arasındaki karar — `cost_basis` + `resolution_note` — **BURADA, emir oluşturulurken** sabitlenir;
+sonraki adımlar bunu değiştiremez. Uyuşmazlık çözümlenmezse (`cost_basis`/`resolution_note`
+verilmezse) emir yine oluşur ama `closable=false` kalır (`MISMATCH_RESOLUTION_MISSING`) — düzeltmek
+için aynı lotla yeni bir emir açılmalıdır.
+
+`201` yanıtı (kısaltılmış):
+
+```json
+{
+  "order_no": "CUT-2026-001", "status": "draft", "total_input_cost": "287.5000",
+  "cost_basis_used": "computed", "closable": false,
+  "outputs": [ { "part_item_code": "KUZU-BUT", "expected_weight_kg": "7.500", "predicted_weight_kg": "7.420", "actual_weight_kg": null } ],
+  "warnings": ["PURCHASE_TOTAL_MISMATCH"]
+}
+```
+
+`outputs[].expected_weight_kg` reçeteden (`input_weight_kg × expected_ratio`); `predicted_weight_kg`
+ML'in `/predict/cutting` tahminidir (en iyi gayret; ML kapalıysa `null`).
+
+### `PUT /cutting-orders/{id}/outputs` — fiili ağırlıkları gir/güncelle
+
+```json
+{ "outputs": [ { "part_item_id": "01a1...", "actual_weight_kg": "7.500" } ] }
+```
+
+Yalnız `draft` durumunda kabul edilir (`409` aksi halde); draft iken birden çok kez çağrılabilir
+(UPSERT, her çağrıda üzerine yazılır). Her çağrıda **HER İKİ** dağıtım yöntemi de (`quantity` ve
+`value`) taze hesaplanıp `allocation.quantity`/`allocation.value` altında yan yana döner; seçilen
+yöntemin (`allocation_method`) `closable`/`balance_diff_kg`/`warnings`'i üst seviyeye de yansır.
+`|balance_diff_kg| > 0,05 kg` ⇒ `WEIGHT_IMBALANCE`, `closable=false`.
+
+### `POST /cutting-orders/{id}/close` — kapat
+
+`closable=false` ise `422` (uyarılar mesajda). Tek transaction'da: giriş lotundan `cutting_consume`;
+her çıkan parça (`actual_weight_kg > 0`) için yeni lot (`KUZ-<parça>-<yıl>-NNN`, `unit_cost` = dağıtılan
+tutar/ağırlık) + `cutting_in` hareketi + `lot_link` (`process_type=cutting`; Görev 3 izlemesi bunun
+üzerinden çalışır) + `cutting_output.output_lot_id/allocated_cost/unit_cost` güncellemesi + ML tahmini
+varsa `actual_json`/`error_json`. Fire de (sıfır olmayan ağırlıkta) bir lot ve hareket alır — bu,
+ağırlık dengesinin defterde de görünmesi için bilinçli bir karardır (bkz. `docs/assumptions.md`).
+
+### `GET /cutting-orders` / `GET /cutting-orders/{id}` / `GET /cutting-orders/{id}/movements`
+
+Liste filtreleri: `status`, `input_lot_id`. Liste görünümü `outputs`/`allocation` içermez (performans,
+dış üretim listesiyle aynı desen); detay (`GET /{id}`) ve `PUT .../outputs` yanıtı ikisini de içerir —
+her istekte **taze** hesaplanır (DB'de sadece seçilen yöntemin `closable`/`balance_diff_kg`'si saklanır,
+liste bunu okur). `movements` bu emre ait `cutting_consume`/`cutting_in` hareketlerini kronolojik döner.
