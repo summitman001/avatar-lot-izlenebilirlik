@@ -66,6 +66,9 @@ func run(ctx context.Context) error {
 	if err := s.purchases(ctx); err != nil {
 		return err
 	}
+	if err := s.cuttingDemo(ctx); err != nil {
+		return err
+	}
 	if err := s.externalProduction(ctx); err != nil {
 		return err
 	}
@@ -275,40 +278,43 @@ func loadRecipe(goldenDir string) []recipePart {
 	return doc.Expected.Parts
 }
 
+// recipe REC-KUZU-01 reçetesini SERVİS ÜZERİNDEN (repo.Store.CreateCuttingRecipe/UpdateCuttingRecipe,
+// ham SQL yazmadan) oluşturur; idempotenttir -- tekrar çalıştırmada satırlar golden dosyasındaki
+// oran/fiyatla UpdateCuttingRecipe (tam değiştirme) ile güncellenir.
 func (s *seeder) recipe(ctx context.Context, goldenDir string) error {
 	const code = "REC-KUZU-01"
-	existing, err := s.lookup(ctx, "cutting_recipe", code)
-	if err != nil {
-		return err
-	}
-	recipeID := existing
-	if recipeID == "" {
-		recipeID = domain.NewID()
-		if _, err := s.db.ExecContext(ctx,
-			`INSERT INTO cutting_recipe (id, code, name, animal_type) VALUES (?, ?, ?, 'lamb')`,
-			recipeID, code, "Bütün kuzu parçalama"); err != nil {
-			return err
-		}
-		s.record("cutting_recipe", code, recipeID, false)
-	} else {
-		s.record("cutting_recipe", code, recipeID, true)
-	}
+	lines := make([]domain.CuttingRecipeLine, 0, 7)
 	for _, p := range loadRecipe(goldenDir) {
 		itemCode, ok := recipePartItem[p.Part]
 		if !ok {
 			return errors.New("recete parcasi icin urun kodu tanimsiz: " + p.Part)
 		}
-		// INSERT ... AS: tekrar calistirmada oran/fiyat golden'dan guncellenir (idempotent).
-		if _, err := s.db.ExecContext(ctx,
-			`INSERT INTO cutting_recipe_line (id, recipe_id, part_item_id, expected_ratio, reference_sale_price, is_by_product, is_waste)
-			 VALUES (?, ?, ?, ?, ?, ?, ?) AS new
-			 ON DUPLICATE KEY UPDATE expected_ratio = new.expected_ratio, reference_sale_price = new.reference_sale_price,
-			                         is_by_product = new.is_by_product, is_waste = new.is_waste`,
-			domain.NewID(), recipeID, s.must(ctx, "item", itemCode), p.ExpectedRatio, p.ReferenceSalePrice,
-			p.IsByProduct, p.IsWaste); err != nil {
+		lines = append(lines, domain.CuttingRecipeLine{
+			PartItemID:         s.must(ctx, "item", itemCode),
+			ExpectedRatio:      amt(p.ExpectedRatio),
+			ReferenceSalePrice: amt(p.ReferenceSalePrice),
+			IsByProduct:        p.IsByProduct,
+			IsWaste:            p.IsWaste,
+		})
+	}
+	recipe := domain.CuttingRecipe{Code: code, Name: "Bütün kuzu parçalama", AnimalType: "lamb", Lines: lines}
+
+	existing, err := s.lookup(ctx, "cutting_recipe", code)
+	if err != nil {
+		return err
+	}
+	if existing == "" {
+		out, err := s.store.CreateCuttingRecipe(ctx, recipe)
+		if err != nil {
 			return err
 		}
+		s.record("cutting_recipe", code, out.ID, false)
+		return nil
 	}
+	if _, err := s.store.UpdateCuttingRecipe(ctx, existing, recipe); err != nil {
+		return err
+	}
+	s.record("cutting_recipe", code, existing, true)
 	return nil
 }
 
@@ -329,6 +335,8 @@ func (s *seeder) purchases(ctx context.Context) error {
 		{"BGR-2026-001", "BAGIRSAK", "SUP-BGR", "5.000", "11.6000", nil, "BG-F-0001"},
 		// Dokümandaki KASITLI tutarsızlık: 25 kg x 11.50 = 287.50 hesaplanan, belgede 351.00 yazıyor => has_mismatch.
 		{"KZ-2026-001", "KUZU-BUTUN", "SUP-HAY", "25.000", "11.5000", amtP("351.0000"), "HY-F-0001"},
+		// Parçalama demosu (Görev 2) için ikinci kuzu: tutarsızlık yok, "dengeli" senaryoları için.
+		{"KZ-2026-002", "KUZU-BUTUN", "SUP-HAY", "22.000", "11.5000", nil, "HY-F-0002"},
 	} {
 		if _, err := s.store.LotByNo(ctx, v.lotNo); err == nil {
 			s.skipped++
@@ -353,6 +361,158 @@ func (s *seeder) purchases(ctx context.Context) error {
 		s.created++
 		slog.Info("alis lotu olusturuldu", "lot_no", lot.LotNo, "has_mismatch", lot.Purchase.HasMismatch)
 	}
+	return nil
+}
+
+// cuttingDemo Görev 2 parçalama demo senaryosu, SERVİSLER ÜZERİNDEN (CreateCuttingOrder/
+// UpdateCuttingOutputs/CloseCuttingOrder, ham SQL yazmadan):
+//   - CUT-2026-001: KZ-2026-001 (25 kg, mismatch'li) üzerinde "value" yöntemiyle, cost_basis=computed +
+//     resolution_note ile tam dengeli parçalama + kapanış; çıkan KUZU-BUT lotundan MKT-A'ya satış
+//     (parçalama -> satış zincirinin de izlemede görünmesi için).
+//   - CUT-2026-002: KZ-2026-002 (22 kg, tutarsızlık yok) üzerinde reçeteyle TAM orantılı (dengeli)
+//     ağırlıklar girilir ama BİLEREK KAPATILMAZ (draft kalır) -- "kapanmaya hazır ama kapatılmamış
+//     sipariş" durumunu gösterir.
+//   - CUT-2026-003: AYNI lot (KZ-2026-002, henüz tüketilmedi) üzerinde yeni bir emir; fire BİLEREK
+//     girilmez, 2,64 kg fark (>0,05 kg tolerans) WEIGHT_IMBALANCE + closable=false üretir, draft kalır
+//     -- "denge tutmuyorsa kapatılamaz" demosu.
+func (s *seeder) cuttingDemo(ctx context.Context) error {
+	recipeID := s.must(ctx, "cutting_recipe", "REC-KUZU-01")
+	parts := func(but, kol, sirt, kaburga, gerdan, kiyma string, fire *string) []domain.UpdateCuttingOutputsLine {
+		lines := []domain.UpdateCuttingOutputsLine{
+			{PartItemID: s.must(ctx, "item", "KUZU-BUT"), ActualWeightKg: qty(but)},
+			{PartItemID: s.must(ctx, "item", "KUZU-KOL"), ActualWeightKg: qty(kol)},
+			{PartItemID: s.must(ctx, "item", "KUZU-SIRT"), ActualWeightKg: qty(sirt)},
+			{PartItemID: s.must(ctx, "item", "KUZU-KABURGA"), ActualWeightKg: qty(kaburga)},
+			{PartItemID: s.must(ctx, "item", "KUZU-GERDAN"), ActualWeightKg: qty(gerdan)},
+			{PartItemID: s.must(ctx, "item", "KUZU-KIYMA"), ActualWeightKg: qty(kiyma)},
+		}
+		if fire != nil {
+			lines = append(lines, domain.UpdateCuttingOutputsLine{PartItemID: s.must(ctx, "item", "KUZU-FIRE"), ActualWeightKg: qty(*fire)})
+		}
+		return lines
+	}
+
+	const orderNo1 = "CUT-2026-001"
+	var existingID string
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM cutting_order WHERE order_no = ?`, orderNo1).Scan(&existingID)
+	switch {
+	case err == nil:
+		s.skipped++
+	case !errors.Is(err, sql.ErrNoRows):
+		return err
+	default:
+		kz001, err := s.store.LotByNo(ctx, "KZ-2026-001")
+		if err != nil {
+			return fmt.Errorf("CUT-2026-001 icin KZ-2026-001 bulunamadi: %w", err)
+		}
+		note := "Birim fiyat (11,50 €/kg) ve ağırlık (25 kg) tutarlı; hatalı olan tek alan beyan edilen toplam (351.00 €)."
+		order, err := s.store.CreateCuttingOrder(ctx, domain.CreateCuttingOrderRequest{
+			OrderNo: str(orderNo1), RecipeID: recipeID, InputLotID: kz001.ID, InputWeightKg: qty("25.000"),
+			AllocationMethod: "value", CutAt: time.Now().UTC(), CostBasis: str("computed"), ResolutionNote: str(note),
+		})
+		if err != nil {
+			return fmt.Errorf("CUT-2026-001 olusturulamadi: %w", err)
+		}
+		s.created++
+		slog.Info("parcalama siparisi olusturuldu", "order_no", order.OrderNo, "total_input_cost", order.TotalInputCost)
+
+		fire := "3.0"
+		order, err = s.store.UpdateCuttingOutputs(ctx, order.ID, domain.UpdateCuttingOutputsRequest{
+			Outputs: parts("7.5", "4.5", "2.5", "3.0", "2.0", "2.5", &fire),
+		})
+		if err != nil {
+			return fmt.Errorf("CUT-2026-001 fiili agirliklar yazilamadi: %w", err)
+		}
+		slog.Info("parcalama fiili agirliklar girildi", "order_no", order.OrderNo, "closable", order.Closable)
+
+		order, err = s.store.CloseCuttingOrder(ctx, order.ID)
+		if err != nil {
+			return fmt.Errorf("CUT-2026-001 kapatilamadi: %w", err)
+		}
+		s.created++
+		slog.Info("parcalama siparisi kapandi", "order_no", order.OrderNo, "status", order.Status)
+
+		var butLotID string
+		for _, o := range order.Outputs {
+			if o.PartItemCode == "KUZU-BUT" && o.OutputLotID != nil {
+				butLotID = *o.OutputLotID
+			}
+		}
+		if butLotID == "" {
+			return errors.New("KUZU-BUT cikti lotu olusmadi")
+		}
+		saleOrder, _, err := s.store.CreateSalesOrder(ctx, domain.CreateSalesOrderRequest{
+			CustomerID: s.must(ctx, "customer", "MKT-A"), WarehouseID: s.must(ctx, "warehouse", "WH-MAIN"),
+			SoldAt: time.Now().UTC(),
+			Lines: []domain.CreateSalesOrderLine{
+				{ItemID: s.must(ctx, "item", "KUZU-BUT"), LotID: butLotID, Qty: qty("5"), UnitPrice: amt("16.0000")},
+			},
+		}, repo.SaleOptions{Online: true})
+		if err != nil {
+			return fmt.Errorf("KUZU-BUT satisi olusturulamadi: %w", err)
+		}
+		s.created++
+		slog.Info("parcalanmis urun satisi olusturuldu", "order_no", saleOrder.OrderNo, "musteri", "MKT-A")
+	}
+
+	kz002, err := s.store.LotByNo(ctx, "KZ-2026-002")
+	if err != nil {
+		return fmt.Errorf("KZ-2026-002 bulunamadi: %w", err)
+	}
+
+	const orderNo2 = "CUT-2026-002"
+	err = s.db.QueryRowContext(ctx, `SELECT id FROM cutting_order WHERE order_no = ?`, orderNo2).Scan(&existingID)
+	switch {
+	case err == nil:
+		s.skipped++
+	case !errors.Is(err, sql.ErrNoRows):
+		return err
+	default:
+		order, err := s.store.CreateCuttingOrder(ctx, domain.CreateCuttingOrderRequest{
+			OrderNo: str(orderNo2), RecipeID: recipeID, InputLotID: kz002.ID, InputWeightKg: qty("22.000"),
+			AllocationMethod: "quantity", CutAt: time.Now().UTC(),
+		})
+		if err != nil {
+			return fmt.Errorf("CUT-2026-002 olusturulamadi: %w", err)
+		}
+		s.created++
+		fire := "2.64"
+		order, err = s.store.UpdateCuttingOutputs(ctx, order.ID, domain.UpdateCuttingOutputsRequest{
+			Outputs: parts("6.6", "3.96", "2.2", "2.64", "1.76", "2.2", &fire),
+		})
+		if err != nil {
+			return fmt.Errorf("CUT-2026-002 fiili agirliklar yazilamadi: %w", err)
+		}
+		slog.Info("parcalama siparisi olusturuldu (dengeli, bilerek draft birakildi)",
+			"order_no", order.OrderNo, "closable", order.Closable)
+	}
+
+	const orderNo3 = "CUT-2026-003"
+	err = s.db.QueryRowContext(ctx, `SELECT id FROM cutting_order WHERE order_no = ?`, orderNo3).Scan(&existingID)
+	if err == nil {
+		s.skipped++
+		return nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	order, err := s.store.CreateCuttingOrder(ctx, domain.CreateCuttingOrderRequest{
+		OrderNo: str(orderNo3), RecipeID: recipeID, InputLotID: kz002.ID, InputWeightKg: qty("22.000"),
+		AllocationMethod: "quantity", CutAt: time.Now().UTC(),
+	})
+	if err != nil {
+		return fmt.Errorf("CUT-2026-003 olusturulamadi: %w", err)
+	}
+	s.created++
+	// Fire KASITLI girilmez: denge 2.64 kg tutmaz (> 0.05 kg tolerans) -> WEIGHT_IMBALANCE, closable=false.
+	order, err = s.store.UpdateCuttingOutputs(ctx, order.ID, domain.UpdateCuttingOutputsRequest{
+		Outputs: parts("6.6", "3.96", "2.2", "2.64", "1.76", "2.2", nil),
+	})
+	if err != nil {
+		return fmt.Errorf("CUT-2026-003 fiili agirliklar yazilamadi: %w", err)
+	}
+	slog.Info("parcalama siparisi olusturuldu (dengesiz, draft)",
+		"order_no", order.OrderNo, "closable", order.Closable, "balance_diff_kg", order.BalanceDiffKg)
 	return nil
 }
 

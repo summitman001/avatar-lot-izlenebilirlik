@@ -17,6 +17,7 @@ tags:
   - name: master
   - name: lots
   - name: stock
+  - name: cutting
   - name: production
   - name: sales
   - name: sync
@@ -267,6 +268,112 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+
+  /cutting-recipes:
+    get:
+      tags: [cutting]
+      summary: Parcalama recete listesi
+      parameters: [{ $ref: "#/components/parameters/Limit" }, { $ref: "#/components/parameters/Offset" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CuttingRecipeList" } } } }
+    post:
+      tags: [cutting]
+      summary: Parcalama recetesi olustur
+      description: |
+        `lines[].expected_ratio` toplami 1.0000 (+-0.0005 tolerans) degilse 422.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CuttingRecipe" } } } }
+      responses:
+        "201": { description: Olusturuldu, content: { application/json: { schema: { $ref: "#/components/schemas/CuttingRecipe" } } } }
+        "422": { $ref: "#/components/responses/Error" }
+  /cutting-recipes/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [cutting]
+      summary: Recete detayi
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CuttingRecipe" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+    put:
+      tags: [cutting]
+      summary: Receteyi tam guncelle (satirlar silinip yeniden yazilir)
+      description: |
+        Var olan parcalama emirlerini ETKILEMEZ (toplam maliyet/dagitim siparis olusturulurken sabitlenir).
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CuttingRecipe" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CuttingRecipe" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /cutting-orders:
+    get:
+      tags: [cutting]
+      summary: Parcalama emri listesi (fiili agirlik/dagitim onizlemesi icermez)
+      parameters:
+        - { name: status, in: query, schema: { $ref: "#/components/schemas/CuttingOrderStatus" } }
+        - { name: input_lot_id, in: query, schema: { $ref: "#/components/schemas/Id" } }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CuttingOrderList" } } } }
+    post:
+      tags: [cutting]
+      summary: Parcalama emri olustur (durum draft)
+      description: |
+        `order_no` verilmezse `CUT-<yil>-NNN` ATOMIK uretilir. Giris lotu `active` olmali (422 aksi
+        halde) ve yeterli bakiyeye sahip olmali (409 aksi halde). Toplam maliyet VE alis belgesi
+        uyusmazligi (PURCHASE_TOTAL_MISMATCH/MISMATCH_RESOLUTION_MISSING) BURADA sabitlenir:
+        uyusmazlik varsa `cost_basis`+`resolution_note` ZORUNLUDUR (verilmezse emir yine olusur ama
+        closable=false kalir, duzeltilemez -- yeniden olusturulmali). ML servisi erisilebilirse
+        (bkz. `ML_URL`) en iyi gayretle `/predict/cutting` cagrilir.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreateCuttingOrderRequest" } } } }
+      responses:
+        "201": { description: Olusturuldu, content: { application/json: { schema: { $ref: "#/components/schemas/CuttingOrder" } } } }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /cutting-orders/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [cutting]
+      summary: Emir detayi (beklenen/ML/fiili agirliklar + her iki yontemle dagitim onizlemesi)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CuttingOrder" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+  /cutting-orders/{id}/outputs:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    put:
+      tags: [cutting]
+      summary: Fiili agirliklari gir/guncelle (draft iken birden cok kez)
+      description: |
+        Her cagrida HEM `quantity` HEM `value` yontemiyle taze onizleme hesaplanir (`allocation.quantity`/
+        `allocation.value`); secilen yontemin `closable`/`balance_diff_kg`/`warnings`'i doner.
+        `|balance_diff_kg| > 0.05 kg` ise WEIGHT_IMBALANCE, closable=false.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/UpdateCuttingOutputsRequest" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CuttingOrder" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { description: "Emir draft degil", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorBody" } } } }
+        "422": { $ref: "#/components/responses/Error" }
+  /cutting-orders/{id}/close:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [cutting]
+      summary: Emri kapat
+      description: |
+        `closable=false` ise 422 (uyarilar mesajda). Tek transaction: giris lotundan `cutting_consume`,
+        her cikan parca (actual_weight_kg > 0) icin yeni lot (`KUZ-{parca}-<yil>-NNN`) + `cutting_in` +
+        `lot_link` (Gorev 3 izlemesi bunun uzerinden calisir) + `cutting_output` guncellemesi.
+      responses:
+        "200": { description: OK (durum closed), content: { application/json: { schema: { $ref: "#/components/schemas/CuttingOrder" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { description: "Emir draft degil", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorBody" } } } }
+        "422": { $ref: "#/components/responses/Error" }
+  /cutting-orders/{id}/movements:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [cutting]
+      summary: Bu emre ait tum stok hareketleri (kronolojik)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/MovementList" } } } }
+        "404": { $ref: "#/components/responses/Error" }
 
   /production-orders:
     get:
@@ -923,6 +1030,160 @@ components:
         margin_pct: { oneOf: [{ type: string }, { type: "null" }] }
         warnings: { type: array, items: { enum: [INVOICED_QTY_MISMATCH, QTY_VARIANCE] } }
         prediction: { oneOf: [{ $ref: "#/components/schemas/ProductionPrediction" }, { type: "null" }] }
+
+    CuttingOrderStatus: { enum: [draft, closed] }
+    CuttingAllocationMethod: { enum: [quantity, value] }
+    CostBasis: { enum: [computed, declared] }
+    CuttingRecipeLine:
+      type: object
+      required: [part_item_id, expected_ratio, reference_sale_price]
+      properties:
+        part_item_id: { $ref: "#/components/schemas/Id" }
+        part_item_code: { type: string, readOnly: true }
+        part_item_name: { type: string, readOnly: true }
+        expected_ratio: { $ref: "#/components/schemas/Amount" }
+        reference_sale_price: { $ref: "#/components/schemas/Amount" }
+        is_by_product: { type: boolean, default: false }
+        is_waste: { type: boolean, default: false }
+    CuttingRecipe:
+      type: object
+      required: [code, name, animal_type, lines]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        code: { type: string, maxLength: 40 }
+        name: { type: string, maxLength: 160 }
+        animal_type: { type: string, maxLength: 40 }
+        lines: { type: array, items: { $ref: "#/components/schemas/CuttingRecipeLine" } }
+        created_at: { $ref: "#/components/schemas/DateTime" }
+    CuttingRecipeList: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/CuttingRecipe" } } } }
+    CreateCuttingOrderRequest:
+      type: object
+      required: [recipe_id, input_lot_id, input_weight_kg, allocation_method, cut_at]
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        order_no: { type: [string, "null"], description: "bos ise CUT-<yil>-NNN atomik uretilir" }
+        recipe_id: { $ref: "#/components/schemas/Id" }
+        input_lot_id: { $ref: "#/components/schemas/Id" }
+        input_weight_kg: { $ref: "#/components/schemas/Qty" }
+        allocation_method: { $ref: "#/components/schemas/CuttingAllocationMethod" }
+        cut_at: { $ref: "#/components/schemas/DateTime" }
+        cost_basis: { oneOf: [{ $ref: "#/components/schemas/CostBasis" }, { type: "null" }], description: "Alis uyusmazligi varsa ZORUNLU, SIPARIS OLUSTURULURKEN sabitlenir" }
+        resolution_note: { type: [string, "null"] }
+    UpdateCuttingOutputsRequest:
+      type: object
+      required: [outputs]
+      properties:
+        outputs:
+          type: array
+          items:
+            type: object
+            required: [part_item_id, actual_weight_kg]
+            properties:
+              part_item_id: { $ref: "#/components/schemas/Id" }
+              actual_weight_kg: { $ref: "#/components/schemas/Qty" }
+    CuttingResultPart:
+      type: object
+      properties:
+        name: { type: string }
+        role: { enum: [main, waste, by_product] }
+        kg: { $ref: "#/components/schemas/Qty" }
+        yield_pct: { type: string }
+        allocated_cost: { type: string }
+        unit_cost: { type: string }
+    CuttingAlternativeBasis:
+      type: object
+      properties:
+        cost_basis: { $ref: "#/components/schemas/CostBasis" }
+        total_input_cost: { type: string }
+        parts: { type: array, items: { type: object, properties: { name: { type: string }, allocated_cost: { type: string } } } }
+        total_allocated: { type: string }
+    CuttingResult:
+      type: object
+      description: "domain.AllocateCutting ciktisi; docs/golden/cutting_cases.json ile BIREBIR aynidir."
+      properties:
+        method: { $ref: "#/components/schemas/CuttingAllocationMethod" }
+        cost_basis: { oneOf: [{ $ref: "#/components/schemas/CostBasis" }, { type: "null" }] }
+        cost_basis_used: { $ref: "#/components/schemas/CostBasis" }
+        resolution_note: { type: [string, "null"] }
+        input_weight_kg: { $ref: "#/components/schemas/Qty" }
+        computed_total_cost: { oneOf: [{ type: string }, { type: "null" }] }
+        declared_total_cost: { oneOf: [{ type: string }, { type: "null" }] }
+        total_input_cost: { type: string }
+        parts_weight_kg: { $ref: "#/components/schemas/Qty" }
+        balance_diff_kg: { $ref: "#/components/schemas/Qty" }
+        closable: { type: boolean }
+        sellable_kg: { $ref: "#/components/schemas/Qty" }
+        by_product_value: { type: string }
+        allocation_pool: { type: string }
+        parts: { type: array, items: { $ref: "#/components/schemas/CuttingResultPart" } }
+        total_allocated: { type: string, description: "HER ZAMAN total_input_cost'a birebir esit" }
+        alternative_basis: { oneOf: [{ $ref: "#/components/schemas/CuttingAlternativeBasis" }, { type: "null" }] }
+        warnings: { type: array, items: { enum: [PURCHASE_TOTAL_MISMATCH, MISMATCH_RESOLUTION_MISSING, WEIGHT_IMBALANCE] } }
+    CuttingOutputLine:
+      type: object
+      properties:
+        part_item_id: { $ref: "#/components/schemas/Id" }
+        part_item_code: { type: string }
+        part_item_name: { type: string }
+        is_waste: { type: boolean }
+        is_by_product: { type: boolean }
+        expected_ratio: { $ref: "#/components/schemas/Amount" }
+        expected_weight_kg: { $ref: "#/components/schemas/Qty" }
+        reference_sale_price: { $ref: "#/components/schemas/Amount" }
+        predicted_weight_kg: { type: [string, "null"] }
+        actual_weight_kg: { oneOf: [{ $ref: "#/components/schemas/Qty" }, { type: "null" }] }
+        output_lot_id: { oneOf: [{ $ref: "#/components/schemas/Id" }, { type: "null" }] }
+        output_lot_no: { type: [string, "null"] }
+        allocated_cost: { oneOf: [{ $ref: "#/components/schemas/Amount" }, { type: "null" }] }
+        unit_cost: { oneOf: [{ $ref: "#/components/schemas/Amount" }, { type: "null" }] }
+    CuttingAllocationPreview:
+      type: object
+      description: "Her iki yontem (quantity/value) AYNI ANDA hesaplanip yan yana doner."
+      properties:
+        quantity: { oneOf: [{ $ref: "#/components/schemas/CuttingResult" }, { type: "null" }] }
+        value: { oneOf: [{ $ref: "#/components/schemas/CuttingResult" }, { type: "null" }] }
+    CuttingPredictionView:
+      type: object
+      properties:
+        model_name: { type: string }
+        model_version: { type: string }
+        baseline: { type: boolean }
+        breed_used: { type: string }
+        expected_fire_kg: { type: string }
+        expected_fire_ratio: { type: string }
+        parts_kg: { type: object, additionalProperties: { type: string } }
+    CuttingOrder:
+      type: object
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        order_no: { type: string }
+        recipe_id: { $ref: "#/components/schemas/Id" }
+        recipe_code: { type: string }
+        recipe_name: { type: string }
+        input_lot_id: { $ref: "#/components/schemas/Id" }
+        input_lot_no: { type: string }
+        input_item_code: { type: string }
+        input_item_name: { type: string }
+        input_weight_kg: { $ref: "#/components/schemas/Qty" }
+        unit_cost_per_kg: { $ref: "#/components/schemas/Amount" }
+        computed_total_cost: { $ref: "#/components/schemas/Amount" }
+        declared_total_cost: { oneOf: [{ $ref: "#/components/schemas/Amount" }, { type: "null" }] }
+        total_input_cost: { $ref: "#/components/schemas/Amount" }
+        allocation_method: { $ref: "#/components/schemas/CuttingAllocationMethod" }
+        cost_basis: { oneOf: [{ $ref: "#/components/schemas/CostBasis" }, { type: "null" }] }
+        cost_basis_used: { $ref: "#/components/schemas/CostBasis" }
+        resolution_note: { type: [string, "null"] }
+        status: { $ref: "#/components/schemas/CuttingOrderStatus" }
+        cut_at: { $ref: "#/components/schemas/DateTime" }
+        balance_diff_kg: { oneOf: [{ $ref: "#/components/schemas/Qty" }, { type: "null" }] }
+        closable: { type: boolean }
+        warnings: { type: array, items: { enum: [PURCHASE_TOTAL_MISMATCH, MISMATCH_RESOLUTION_MISSING, WEIGHT_IMBALANCE] } }
+        outputs: { type: array, items: { $ref: "#/components/schemas/CuttingOutputLine" }, description: "Yalniz GET /cutting-orders/{id} ve PUT .../outputs" }
+        allocation: { oneOf: [{ $ref: "#/components/schemas/CuttingAllocationPreview" }, { type: "null" }], description: "Yalniz GET /cutting-orders/{id} ve PUT .../outputs" }
+        ml_prediction: { oneOf: [{ $ref: "#/components/schemas/CuttingPredictionView" }, { type: "null" }] }
+        closed_at: { oneOf: [{ $ref: "#/components/schemas/DateTime" }, { type: "null" }] }
+        created_at: { $ref: "#/components/schemas/DateTime" }
+    CuttingOrderList: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/CuttingOrder" } } } }
 
     BlockLotRequest:
       type: object

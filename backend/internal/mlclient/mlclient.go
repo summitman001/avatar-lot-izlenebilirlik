@@ -53,30 +53,72 @@ type ProductionPrediction struct {
 // fiziksel verim (adet/kg) tahmin eder; HTTP yanitinda EKP alani YOKTUR. EKP tahmini (hibrit yaklasim:
 // bu fiziksel tahmin + kesin malzeme maliyeti) cagiran tarafta (repo/production.go) hesaplanir.
 func (c *Client) PredictProduction(ctx context.Context, in ProductionPredictionInput) (*ProductionPrediction, error) {
-	body, err := json.Marshal(in)
-	if err != nil {
+	var out ProductionPrediction
+	if err := c.post(ctx, "/predict/production", in, &out); err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/predict/production", bytes.NewReader(body))
-	if err != nil {
+	return &out, nil
+}
+
+// CuttingPredictionInput ml/app/main.py CuttingRequest ile ayni alanlar.
+type CuttingPredictionInput struct {
+	CarcassKg string  `json:"carcass_kg"`
+	Breed     *string `json:"breed,omitempty"`
+	Sex       *string `json:"sex,omitempty"`
+}
+
+// CuttingPredictionPart ml/app/main.py CuttingPartOut ile ayni alanlar.
+type CuttingPredictionPart struct {
+	Part  string `json:"part"`
+	Kg    string `json:"kg"`
+	Ratio string `json:"ratio"`
+}
+
+// CuttingPrediction ml/app/main.py CuttingResponse ile ayni alanlar.
+type CuttingPrediction struct {
+	ModelName         string                  `json:"model_name"`
+	ModelVersion      string                  `json:"model_version"`
+	Baseline          bool                    `json:"baseline"`
+	BreedUsed         string                  `json:"breed_used"`
+	Fallback          bool                    `json:"fallback"`
+	CarcassKg         string                  `json:"carcass_kg"`
+	SellableKg        string                  `json:"sellable_kg"`
+	ExpectedFireKg    string                  `json:"expected_fire_kg"`
+	ExpectedFireRatio string                  `json:"expected_fire_ratio"`
+	Parts             []CuttingPredictionPart `json:"parts"`
+}
+
+// PredictCutting POST /predict/cutting cagirir: giris karkas agirligindan (ve varsa irk/cinsiyetten)
+// parca basina beklenen agirlik/oran tahmini doner. En iyi gayrettir (bkz. repo/cutting.go).
+func (c *Client) PredictCutting(ctx context.Context, in CuttingPredictionInput) (*CuttingPrediction, error) {
+	var out CuttingPrediction
+	if err := c.post(ctx, "/predict/cutting", in, &out); err != nil {
 		return nil, err
+	}
+	return &out, nil
+}
+
+func (c *Client) post(ctx context.Context, path string, in, out any) error {
+	body, err := json.Marshal(in)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(body))
+	if err != nil {
+		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	res, err := c.http.Do(req)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer res.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(res.Body, 1<<16))
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("ml servisi %d dondu: %s", res.StatusCode, string(raw))
+		return fmt.Errorf("ml servisi %d dondu: %s", res.StatusCode, string(raw))
 	}
-	var out ProductionPrediction
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, err
-	}
-	return &out, nil
+	return json.Unmarshal(raw, out)
 }

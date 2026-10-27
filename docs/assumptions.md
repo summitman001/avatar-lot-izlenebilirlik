@@ -240,3 +240,68 @@ Uygulama: `backend/internal/repo/traceability.go`, istek/varlık tipleri
    dosyasında `s.ml`'e (ML istemcisi) hiçbir referans yoktur; tüm entegrasyon testleri (`newEnv`) ML
    istemcisi BAĞLANMADAN (nil) çalışır ve geçer -- bu, sonuçların ML'in açık/kapalı olmasından bağımsız,
    tamamen kesin kayıtlara dayandığını kanıtlar.
+
+## Parçalama (Görev 2) servisine ilişkin varsayımlar ve tespitler
+
+Uygulama: `backend/internal/repo/cutting.go` (servis), `backend/internal/domain/cutting_order.go`
+(varlıklar/istek gövdeleri), `backend/internal/domain/cutting.go` (`AllocateCutting`/`ResolveCostBasis`,
+saf hesap). Dağıtım yöntemleri, fire/yan ürün muamelesi, yuvarlama ve ağırlık dengesi kuralları
+`docs/cutting.md`'dedir; burada yalnızca BİLİNÇLİ backend kararları özetlenir. Doğruluk referansı
+`backend/internal/integration/cutting_test.go` (`TestCuttingGoldenScenarios` gerçek HTTP uç
+noktalarıyla, `docs/golden/cutting_cases.json`'dan okunan beklenen değerlerle).
+
+1. **`cost_basis`/`resolution_note` SİPARİŞ OLUŞTURULURKEN sabitlenir, sonradan değiştirilemez.**
+   `POST /cutting-orders`, giriş lotunun alış kaydında (`purchase_receipt_line.declared_line_total`)
+   bir uyuşmazlık varsa `domain.ResolveCostBasis`'i O ANDA çağırır ve `total_input_cost`'u kalıcı olarak
+   yazar (`cutting_order.total_input_cost` NOT NULL); `cost_basis`/`resolution_note` verilmemişse emir
+   yine oluşur ama `closable` hiçbir zaman `true` olamaz (`MISMATCH_RESOLUTION_MISSING`) — düzeltmek
+   için aynı lotla yeni bir emir açılmalıdır. Bu, dış üretimdeki "hizmet faturası `close`'da da
+   tamamlanabilir" esnekliğinin tam tersidir; burada uyuşmazlık kaynağı (alış belgesi) emirden önce
+   zaten sabit olduğu ve geriye dönük değişikliğe izin vermenin "kapanmaz dedik, sonra esası
+   değiştirip kapattık" gibi denetim izini bozan bir senaryo açacağı için bilinçli olarak izin
+   verilmemiştir.
+2. **Giriş lotunun beyan edilen tutarı (`declared_total_cost`) PRORATE edilir.** `cutting_order` kısmi
+   bir lotu (lotun tamamından daha az ağırlık) parçalayabilir; bu durumda belgede beyan edilen tutar
+   lotun TAMAMI içindir, parçalanan kısım için `declared_line_total × (input_weight_kg / lot.initial_qty)`
+   ile oranlanır. Demo senaryosunda (`KZ-2026-001`, 25 kg'ın tamamı) oran 1'dir, beyan direkt 351,00 €
+   olarak kullanılır.
+3. **Dağıtım önizlemesi (`allocation.quantity`/`allocation.value`) KALICI DEĞİLDİR, her istekte taze
+   hesaplanır.** `cutting_output.allocated_cost`/`unit_cost` yalnızca KAPANIŞTA (`CloseCuttingOrder`)
+   yazılır (kalıcı, denetim izi); draft iken `GET`/`PUT .../outputs` her çağrıda
+   `domain.AllocateCutting`'i YENİDEN çalıştırır (hem `quantity` hem `value` için). `cutting_order`
+   tablosunda yalnızca SEÇİLEN yöntemin `balance_diff_kg`/`closable`'ı saklanır (liste görünümü —
+   `GET /cutting-orders` — bunu okur, ağır yeniden hesaplamayı GÖRE performans nedeniyle atlar); detay
+   (`GET /{id}`) her zaman taze hesaplanmış değeri döner, DB'deki değerden asla SAPMAZ (aynı girdilerle
+   aynı çıktı, deterministik).
+4. **Hiç fiili ağırlık girilmemiş bir emirde `domain.AllocateCutting` ÇAĞRILMAZ.** Tüm reçete
+   satırlarının ağırlığı `0 kg` olduğunda (henüz `PUT .../outputs` çağrılmadıysa) ana parçaların
+   ağırlık toplamı sıfır olur; `domain.Distribute` bu durumda hata döner (anlamlı bir orantı yok).
+   `repo.buildCuttingPreview` bu durumu özel olarak ele alır: dağıtımı hesaplamadan `allocation=nil`,
+   `closable=false`, `balance_diff_kg=input_weight_kg` (tam fark) ve `WEIGHT_IMBALANCE` uyarısını
+   döner — "taslak, henüz tartılmamış" durumunun doğal ve hatasız bir temsili. (Bu, entegrasyon
+   testleriyle yakalanan gerçek bir hataydı: ilk sürüm `POST /cutting-orders`'ın kendisini `422` ile
+   başarısız kılıyordu, çünkü yanıt oluşturulurken önizleme hemen hesaplanmaya çalışılıyordu.)
+5. **Çıktı lotu numarası `KUZ-<parça>-<yıl>-NNN`, parça kısaltması ürün kodundan türetilir.** Bu görev
+   TEK bir hayvan türüyle (kuzu) sınırlıdır; parça ürün kodları `KUZU-` önekini taşır (`KUZU-BUT` →
+   `BUT`, lot no `KUZ-BUT-2026-001`). Aynı kısaltma (küçük harfle) ML'in `/predict/cutting` yanıtındaki
+   parça anahtarıyla (`ml/app/datasets.py`, `CUTTING_PARTS = ["but","kol",...]`) eşleştirmede de
+   kullanılır (`repo.partMLKey`) — Türkçe karakterli görünen ad (`"Sırt"`) yerine ASCII ürün kodundan
+   (`KUZU-SIRT` → `sirt`) türetilir, bu yüzden Türkçe küçük harfe çevirme (ı/İ gibi) sorunu hiç
+   oluşmaz. Farklı bir hayvan türü eklenirse bu varsayım (tek önek) güncellenmelidir.
+6. **Fire, `waste_out` DEĞİL, normal bir çıktı lotu + `cutting_in` hareketi alır (`unit_cost=0`).**
+   Ayrıntı ve gerekçe `docs/cutting.md` madde 2'dedir (ağırlık dengesinin defterde de doğrulanabilir
+   olması için). Yan ürün de kendi satış değeriyle normal bir lot olarak kaydedilir.
+7. **Giriş lotunun tüketildiği depo, `lotSourceWarehouse`'un (dış üretimle AYNI yardımcı fonksiyon)
+   KAPANIŞTA bulduğu depodur**, oluşturma anında SEÇİLİP saklanmaz. Çoklu depoya bölünmüş bir lotun
+   tek bir depoda yeterli bakiyesi yoksa kapanış `409` ile reddedilir (dış üretimdeki "tek depo"
+   kısıtıyla aynı desen, bkz. "Dış üretim" bölümü madde 5). Oluşturma anında yalnızca TOPLAM bakiye
+   (tüm depolar) `input_weight_kg`'a yeterli mi diye bakılır; bu, aynı lottan birden fazla DRAFT
+   parçalama emri açılabilmesini (henüz hiçbiri kapanmadığı için stok düşmez) kasıtlı olarak mümkün
+   kılar — seed demo senaryosunda (`CUT-2026-002`/`CUT-2026-003`, aynı `KZ-2026-002` lotu) bu durum
+   kullanılır.
+8. **ML "en iyi gayret"tir, tek aşamalıdır (dış üretimin iki aşamalı tahmininin aksine).** Parçalamada
+   malzeme maliyeti girdi anında ZATEN bilinir (lotun `unit_cost`'u); ML'in kendisi de maliyet değil,
+   yalnızca fiziksel ağırlık/oran tahmin eder (`/predict/cutting`, `ml/app/main.py`). Bu yüzden dış
+   üretimdeki "draft → materials_sent" gibi iki aşamalı bir tahmin gerekmez: tek bir tahmin (siparişin
+   OLUŞTURULDUĞU an, `carcass_kg=input_weight_kg` ile) yeterlidir. ML erişilemezse/zaman aşımına
+   uğrarsa sipariş oluşturma **başarısız olmaz**, `ml_prediction` boş kalır.

@@ -105,6 +105,30 @@ func NewRouter(d Deps) nethttp.Handler {
 			},
 		})
 
+		mountCRUD(r, "/cutting-recipes", crudOps[domain.CuttingRecipe]{
+			list: func(ctx context.Context, r *nethttp.Request) (any, error) {
+				p, err := pageFrom(r)
+				if err != nil {
+					return nil, err
+				}
+				return d.Store.ListCuttingRecipes(ctx, p)
+			},
+			get: func(ctx context.Context, id string) (any, error) { return d.Store.GetCuttingRecipe(ctx, id) },
+			create: func(ctx context.Context, v *domain.CuttingRecipe) (any, error) {
+				return d.Store.CreateCuttingRecipe(ctx, *v)
+			},
+			update: func(ctx context.Context, id string, v *domain.CuttingRecipe) (any, error) {
+				return d.Store.UpdateCuttingRecipe(ctx, id, *v)
+			},
+		})
+
+		r.Get("/cutting-orders", h.listCuttingOrders)
+		r.Post("/cutting-orders", h.createCuttingOrder)
+		r.Get("/cutting-orders/{id}", h.getCuttingOrder)
+		r.Put("/cutting-orders/{id}/outputs", h.updateCuttingOutputs)
+		r.Post("/cutting-orders/{id}/close", h.closeCuttingOrder)
+		r.Get("/cutting-orders/{id}/movements", h.cuttingOrderMovements)
+
 		r.Get("/production-orders", h.listProductionOrders)
 		r.Post("/production-orders", h.createProductionOrder)
 		r.Get("/production-orders/{id}", h.getProductionOrder)

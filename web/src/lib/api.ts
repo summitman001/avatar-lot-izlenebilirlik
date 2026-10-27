@@ -326,6 +326,134 @@ export interface Warehouse {
 }
 
 // ---------------------------------------------------------------------------
+// Parçalama (Görev 2)
+// ---------------------------------------------------------------------------
+
+export interface CuttingRecipeLine {
+  part_item_id: string
+  part_item_code: string
+  part_item_name: string
+  expected_ratio: Decimal
+  reference_sale_price: Decimal
+  is_by_product: boolean
+  is_waste: boolean
+}
+
+export interface CuttingRecipe {
+  id: string
+  code: string
+  name: string
+  animal_type: string
+  lines: CuttingRecipeLine[]
+  created_at: string
+}
+
+export type CuttingAllocationMethod = 'quantity' | 'value'
+export type CuttingOrderStatus = 'draft' | 'closed'
+
+export interface CuttingResultPart {
+  name: string
+  role: 'main' | 'waste' | 'by_product'
+  kg: Decimal
+  yield_pct: Decimal
+  allocated_cost: Decimal
+  unit_cost: Decimal
+}
+
+export interface CuttingAlternativeBasis {
+  cost_basis: 'computed' | 'declared'
+  total_input_cost: Decimal
+  parts: { name: string; allocated_cost: Decimal }[]
+  total_allocated: Decimal
+}
+
+// CuttingResult: domain.AllocateCutting'in ciktisi, hem golden dosyalariyla hem de bu tip ile
+// BIREBIR aynidir (bkz. docs/golden/cutting_cases.json).
+export interface CuttingResult {
+  method: CuttingAllocationMethod
+  cost_basis: 'computed' | 'declared' | null
+  cost_basis_used: 'computed' | 'declared'
+  resolution_note: string | null
+  input_weight_kg: Decimal
+  computed_total_cost: Decimal | null
+  declared_total_cost: Decimal | null
+  total_input_cost: Decimal
+  parts_weight_kg: Decimal
+  balance_diff_kg: Decimal
+  closable: boolean
+  sellable_kg: Decimal
+  by_product_value: Decimal
+  allocation_pool: Decimal
+  parts: CuttingResultPart[]
+  total_allocated: Decimal
+  alternative_basis: CuttingAlternativeBasis | null
+  warnings: string[]
+}
+
+export interface CuttingOutputLine {
+  part_item_id: string
+  part_item_code: string
+  part_item_name: string
+  is_waste: boolean
+  is_by_product: boolean
+  expected_ratio: Decimal
+  expected_weight_kg: Decimal
+  reference_sale_price: Decimal
+  predicted_weight_kg: Decimal | null
+  actual_weight_kg: Decimal | null
+  output_lot_id: string | null
+  output_lot_no: string | null
+  allocated_cost: Decimal | null
+  unit_cost: Decimal | null
+}
+
+export interface CuttingAllocationPreview {
+  quantity: CuttingResult | null
+  value: CuttingResult | null
+}
+
+export interface CuttingPredictionView {
+  model_name: string
+  model_version: string
+  baseline: boolean
+  breed_used: string
+  expected_fire_kg: Decimal
+  expected_fire_ratio: Decimal
+  parts_kg: Record<string, Decimal>
+}
+
+export interface CuttingOrder {
+  id: string
+  order_no: string
+  recipe_id: string
+  recipe_code: string
+  recipe_name: string
+  input_lot_id: string
+  input_lot_no: string
+  input_item_code: string
+  input_item_name: string
+  input_weight_kg: Decimal
+  unit_cost_per_kg: Decimal
+  computed_total_cost: Decimal
+  declared_total_cost: Decimal | null
+  total_input_cost: Decimal
+  allocation_method: CuttingAllocationMethod
+  cost_basis: 'computed' | 'declared' | null
+  cost_basis_used: 'computed' | 'declared'
+  resolution_note: string | null
+  status: CuttingOrderStatus
+  cut_at: string
+  balance_diff_kg: Decimal | null
+  closable: boolean
+  warnings: string[]
+  outputs?: CuttingOutputLine[]
+  allocation?: CuttingAllocationPreview
+  ml_prediction?: CuttingPredictionView | null
+  closed_at: string | null
+  created_at: string
+}
+
+// ---------------------------------------------------------------------------
 // İzlenebilirlik + Geri Çağırma (Görev 3)
 // ---------------------------------------------------------------------------
 
