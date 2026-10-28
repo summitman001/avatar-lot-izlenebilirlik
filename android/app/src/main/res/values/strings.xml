@@ -20,7 +20,13 @@
 
     <string name="lots_search">Ara (lot no / ürün)</string>
     <string name="lots_empty">Lot yok. Senkron sekmesinden senkronlayın.</string>
-    <string name="lot_row">%1$s · SKT: %2$s · Kullanılabilir: %3$s %4$s</string>
+    <string name="lot_row">%1$s · %2$s %3$s</string>
+    <string name="summary_expiring">SKT yakın</string>
+    <string name="expiry_none">SKT yok</string>
+    <string name="expiry_expired">SKT geçti</string>
+    <string name="expiry_today">SKT bugün</string>
+    <string name="expiry_days">SKT %1$d gün</string>
+    <string name="expiry_date">SKT %1$s</string>
     <string name="status_active">Aktif</string>
     <string name="status_blocked">Bloke</string>
     <string name="status_recalled">Geri çağrıldı</string>
@@ -42,10 +48,11 @@
     <string name="conn_online">Bağlantı: çevrimiçi</string>
     <string name="conn_offline">Bağlantı: çevrimdışı</string>
     <string name="device_warehouse">Cihaz deposu (satışın yapıldığı depo)</string>
-    <string name="pending_ops">Bekleyen işlem: %1$d</string>
+    <string name="pending_ops">Bekleyen işlem</string>
     <string name="last_sync">Son başarılı senkron: %1$s</string>
     <string name="last_error">Son hata: %1$s</string>
     <string name="sync_now">Şimdi senkronla</string>
+    <string name="sync_running">Senkronlanıyor…</string>
     <string name="problems_title">İnceleme gerekenler (flagged / rejected)</string>
     <string name="none">Yok</string>
     <string name="ack">Tamam</string>
@@ -63,4 +70,5 @@
     <string name="return_reason">İade nedeni</string>
     <string name="save">Kaydet</string>
     <string name="cancel">Vazgeç</string>
+    <string name="back">Geri</string>
 </resources>

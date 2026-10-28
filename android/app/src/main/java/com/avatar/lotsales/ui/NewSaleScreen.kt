@@ -1,27 +1,43 @@
 package com.avatar.lotsales.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import com.avatar.lotsales.R
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.SavedStateHandle
@@ -29,6 +45,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
+import com.avatar.lotsales.R
 import com.avatar.lotsales.core.Decimals
 import com.avatar.lotsales.data.DraftLine
 import com.avatar.lotsales.data.LotRepository
@@ -97,9 +114,12 @@ class NewSaleViewModel @Inject constructor(
         NewSaleUi(f, customers, items, all.filter { it.lot.itemId == f.itemId }.sortedWith(fefoOrder))
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), NewSaleUi())
 
+    /** Lot listesinden gelindiyse o lot; lot karti daha yuklenmeden secici kartla eslesir (sharedCard). */
+    val initialLotId: String? = savedState.toRoute<NewSaleRoute>().lotId
+
     init {
         // Lot listesinden gelindiyse o lot (ve urunu) secili baslar.
-        savedState.toRoute<NewSaleRoute>().lotId?.let { lotId ->
+        initialLotId?.let { lotId ->
             viewModelScope.launch {
                 val lot = lots.first { l -> l.any { it.lot.id == lotId } }.first { it.lot.id == lotId }
                 items.first { list -> list.any { it.id == lot.lot.itemId } } // varsayilan fiyat urunden gelir
@@ -176,56 +196,123 @@ class NewSaleViewModel @Inject constructor(
 fun NewSaleScreen(vm: NewSaleViewModel = hiltViewModel()) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val f = ui.form
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Text(stringResource(R.string.customer), style = MaterialTheme.typography.labelLarge)
-        Picker(stringResource(R.string.customer), ui.customer?.name, ui.customers, { it.name }, vm::selectCustomer)
-        Text(stringResource(R.string.product), style = MaterialTheme.typography.labelLarge)
-        Picker(stringResource(R.string.product), ui.item?.name, ui.items, { it.name }, vm::selectItem)
-        Text(stringResource(R.string.lot_fefo_label), style = MaterialTheme.typography.labelLarge)
-        val blockedTag = stringResource(R.string.blocked_tag)
-        val fefoTag = stringResource(R.string.fefo_tag)
-        Picker(
-            stringResource(R.string.lot),
-            ui.lot?.let { "${it.lot.lotNo} · SKT ${it.lot.expiryDate ?: "—"}" },
-            ui.itemLots,
-            { lot ->
-                buildString {
-                    append("${lot.lot.lotNo} · SKT ${lot.lot.expiryDate ?: "—"} · ${lot.available.display()} ${lot.baseUom}")
-                    if (!lot.sellable) append(" · $blockedTag")
-                    if (lot == ui.fefoSuggestion) append(" · $fefoTag")
-                }
-            },
-            vm::pickLot,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                f.qty, vm::setQty, label = { Text(stringResource(R.string.qty)) }, singleLine = true, modifier = Modifier.weight(1f),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            )
-            OutlinedTextField(
-                f.price, vm::setPrice, label = { Text(stringResource(R.string.unit_price)) }, singleLine = true, modifier = Modifier.weight(1f),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            )
-        }
-        Button(onClick = vm::addLine, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.add_line)) }
-        f.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-
-        f.lines.forEachIndexed { i, l ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "${l.itemName} · ${l.lotNo} · ${l.line.qty.display()} ${l.uom} × ${l.line.unitPrice.display()} = ${l.lineTotal.toPlainString()}",
-                    modifier = Modifier.weight(1f),
+    val celebrate = rememberCelebration(f.info)
+    // onaydan sonra toplam kutusu kapanirken 0.00'a yuvarlanmasin: son dolu tutar gosterilir
+    val shownTotal = remember { mutableStateOf("") }
+    if (f.lines.isNotEmpty()) shownTotal.value = ui.total.toPlainString()
+    Box(Modifier.fillMaxSize()) {
+        Column(
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            SectionCard {
+                SectionLabel(stringResource(R.string.customer))
+                Picker(stringResource(R.string.customer), ui.customer?.name, ui.customers, { it.name }, vm::selectCustomer)
+                SectionLabel(stringResource(R.string.product))
+                Picker(stringResource(R.string.product), ui.item?.name, ui.items, { it.name }, vm::selectItem)
+                SectionLabel(stringResource(R.string.lot_fefo_label))
+                val blockedTag = stringResource(R.string.blocked_tag)
+                val fefoTag = stringResource(R.string.fefo_tag)
+                Picker(
+                    stringResource(R.string.lot),
+                    ui.lot?.let { "${it.lot.lotNo} · ${it.available.display()} ${it.baseUom}" },
+                    ui.itemLots,
+                    { lot ->
+                        buildString {
+                            append("${lot.lot.lotNo} · SKT ${lot.lot.expiryDate ?: "—"} · ${lot.available.display()} ${lot.baseUom}")
+                            if (!lot.sellable) append(" · $blockedTag")
+                            if (lot == ui.fefoSuggestion) append(" · $fefoTag")
+                        }
+                    },
+                    vm::pickLot,
+                    // lot kartindan gelindiyse kart bu secicine donusur
+                    Modifier.sharedCard("lot-${f.lotId ?: vm.initialLotId}", MaterialTheme.shapes.medium),
                 )
-                TextButton(onClick = { vm.removeLine(i) }) { Text(stringResource(R.string.remove)) }
+                AnimatedVisibility(ui.lot != null) {
+                    ui.lot?.let { ExpiryBadge(it.lot.expiryDate) }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        f.qty, vm::setQty, label = { Text(stringResource(R.string.qty)) }, singleLine = true, modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    )
+                    OutlinedTextField(
+                        f.price, vm::setPrice, label = { Text(stringResource(R.string.unit_price)) }, singleLine = true, modifier = Modifier.weight(1f),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    )
+                }
+                BouncyButton(onClick = vm::addLine, modifier = Modifier.fillMaxWidth(), tonal = true) {
+                    Icon(painterResource(R.drawable.ic_add), null, Modifier.size(20.dp))
+                    Text(stringResource(R.string.add_line), Modifier.padding(start = 8.dp))
+                }
+            }
+            MessageBanner(f.error, isError = true)
+
+            f.lines.forEach { l ->
+                // ayni ornek form guncellemelerinde korunur; eklenen satir kayarak girer, silinen kayarak cikar
+                key(System.identityHashCode(l)) {
+                    val visible = remember { MutableTransitionState(false).apply { targetState = true } }
+                    AnimatedVisibility(
+                        visible,
+                        enter = slideInHorizontally { it / 3 } + fadeIn() + expandVertically(),
+                        exit = slideOutHorizontally { -it } + fadeOut() + shrinkVertically(),
+                    ) {
+                        DraftLineCard(l, onRemove = { visible.targetState = false })
+                    }
+                    if (visible.isIdle && !visible.currentState) LaunchedEffect(Unit) { vm.removeLine(f.lines.indexOf(l)) }
+                }
+            }
+            AnimatedVisibility(f.lines.isNotEmpty(), enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.shapes.large)
+                        .padding(horizontal = 18.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        stringResource(R.string.total),
+                        Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                    RollingText(
+                        shownTotal.value,
+                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold),
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
+            }
+            BouncyButton(onClick = vm::confirm, enabled = f.customerId != null && f.lines.isNotEmpty(), modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.confirm))
+            }
+            MessageBanner(f.info, isError = false)
+        }
+        SuccessCheck(celebrate, Modifier.align(Alignment.Center))
+    }
+}
+
+@Composable
+private fun DraftLineCard(l: DraftLineUi, onRemove: () -> Unit) {
+    Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLowest, shadowElevation = 1.dp) {
+        Row(
+            Modifier.padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            InitialsAvatar(l.itemName)
+            Column(Modifier.weight(1f)) {
+                Text(l.itemName, style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "${l.lotNo} · ${l.line.qty.display()} ${l.uom} × ${l.line.unitPrice.display()}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(l.lineTotal.toPlainString(), style = MaterialTheme.typography.titleSmall)
+            IconButton(onClick = onRemove) {
+                Icon(painterResource(R.drawable.ic_delete), stringResource(R.string.remove), tint = MaterialTheme.colorScheme.error)
             }
         }
-        if (f.lines.isNotEmpty()) Text("${stringResource(R.string.total)}: ${ui.total.toPlainString()}", style = MaterialTheme.typography.titleMedium)
-        Button(onClick = vm::confirm, enabled = f.customerId != null && f.lines.isNotEmpty(), modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.confirm))
-        }
-        f.info?.let { Text(it, color = Color(0xFF2E7D32)) }
     }
 }

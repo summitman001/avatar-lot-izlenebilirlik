@@ -1,31 +1,42 @@
 package com.avatar.lotsales.ui
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.ListItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.SavedStateHandle
@@ -73,7 +84,7 @@ class SaleDetailViewModel @Inject constructor(
     private val repo: SalesRepository,
     private val scheduler: SyncScheduler,
 ) : ViewModel() {
-    private val orderId = savedState.toRoute<SaleDetailRoute>().orderId
+    val orderId = savedState.toRoute<SaleDetailRoute>().orderId
     private val message = MutableStateFlow<Pair<String?, String?>>(null to null) // error to info
 
     val ui = combine(repo.observeSale(orderId), repo.observeLines(orderId), repo.observeReturns(orderId), message) { sale, lines, returns, msg ->
@@ -103,62 +114,154 @@ class SaleDetailViewModel @Inject constructor(
 @Composable
 fun SalesScreen(onOpen: (String) -> Unit, vm: SalesViewModel = hiltViewModel()) {
     val sales by vm.sales.collectAsStateWithLifecycle()
-    if (sales.isEmpty()) Text(stringResource(R.string.sales_empty), Modifier.padding(16.dp))
-    LazyColumn(Modifier.fillMaxSize()) {
-        items(sales, key = { it.id }) { sale ->
-            ListItem(
-                headlineContent = { Text("${sale.orderNo} · ${sale.customerName.orEmpty()}") },
-                supportingContent = { Text("${formatInstant(sale.soldAt)} · ${stringResource(R.string.total)}: ${sale.totalAmount.toPlainString()}") },
-                trailingContent = { SaleStatusChip(sale) },
-                modifier = Modifier.clickable { onOpen(sale.id) },
-            )
-            HorizontalDivider()
+    val firstFill = rememberFirstFill(sales.isNotEmpty())
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        if (sales.isEmpty()) item(key = "empty") { EmptyState(R.drawable.ic_receipt_long, stringResource(R.string.sales_empty), Modifier.animateItem()) }
+        itemsIndexed(sales, key = { _, it -> it.id }) { i, sale ->
+            SaleCard(sale, onClick = { onOpen(sale.id) }, Modifier.animateItem().staggeredEnter(i, firstFill))
+        }
+    }
+}
+
+@Composable
+private fun SaleCard(sale: SaleSummary, onClick: () -> Unit, modifier: Modifier) {
+    val shape = MaterialTheme.shapes.large
+    Surface(
+        shape = shape,
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        shadowElevation = 1.dp,
+        modifier = modifier.sharedCard("sale-${sale.id}", shape).clip(shape).clickable(onClick = onClick),
+    ) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            InitialsAvatar(sale.customerName.orEmpty())
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(sale.customerName.orEmpty(), style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    "${sale.orderNo} · ${formatInstant(sale.soldAt)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(sale.totalAmount.toPlainString(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                SaleStatusChip(sale)
+            }
         }
     }
 }
 
 @Composable
 private fun SaleStatusChip(sale: SaleSummary) = when {
-    sale.status == OrderStatus.REJECTED -> Chip(stringResource(R.string.status_rejected), MaterialTheme.colorScheme.error)
-    sale.status == OrderStatus.FLAGGED -> Chip(stringResource(R.string.status_flagged), Color(0xFFF57C00))
-    sale.synced -> Chip(stringResource(R.string.status_synced), Color(0xFF2E7D32))
-    else -> Chip(stringResource(R.string.status_pending), Color(0xFF757575))
+    sale.status == OrderStatus.REJECTED -> Chip(stringResource(R.string.status_rejected), StatusColors.danger, R.drawable.ic_warning)
+    sale.status == OrderStatus.FLAGGED -> Chip(stringResource(R.string.status_flagged), StatusColors.warning, R.drawable.ic_warning)
+    sale.synced -> Chip(stringResource(R.string.status_synced), StatusColors.success, R.drawable.ic_cloud_done)
+    else -> Chip(stringResource(R.string.status_pending), StatusColors.neutral, R.drawable.ic_schedule)
 }
 
 @Composable
 fun SaleDetailScreen(vm: SaleDetailViewModel = hiltViewModel()) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     var returning by remember { mutableStateOf<LineWithReturns?>(null) }
-    val sale = ui.sale ?: return
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("${sale.orderNo} · ${sale.customerName.orEmpty()}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            SaleStatusChip(sale)
-        }
-        Text("${formatInstant(sale.soldAt)} · ${stringResource(R.string.total)}: ${sale.totalAmount.toPlainString()}")
-        ui.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        ui.info?.let { Text(it, color = Color(0xFF2E7D32)) }
-        LazyColumn {
+    var returnsSaved by remember { mutableIntStateOf(0) }
+    val celebrate = rememberCelebration(returnsSaved.takeIf { it > 0 })
+    val sale = ui.sale
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            // baslik karti satis yuklenmeden de cizilir: listedeki kart buna donusur (key rotadan)
+            item(key = "header") { SaleHeader(vm.orderId, sale) }
+            item(key = "messages") {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MessageBanner(ui.error, isError = true)
+                    MessageBanner(ui.info, isError = false)
+                }
+            }
             items(ui.lines, key = { it.line.id }) { l ->
-                ListItem(
-                    headlineContent = { Text("${l.line.itemName.orEmpty()} · ${stringResource(R.string.lot)} ${l.line.lotNo.orEmpty()}") },
-                    supportingContent = {
-                        Text(
-                            "${l.line.qty.display()} × ${l.line.unitPrice.display()} = ${l.line.lineTotal.toPlainString()}" +
-                                if (l.returned.signum() > 0) " · ${stringResource(R.string.returned)}: ${l.returned.display()}" else "",
-                        )
-                    },
-                    trailingContent = {
-                        if (sale.status != OrderStatus.REJECTED && l.returnable.signum() > 0) {
-                            TextButton(onClick = { returning = l }) { Text(stringResource(R.string.take_return)) }
-                        }
-                    },
+                SaleLineCard(l, canReturn = sale != null && sale.status != OrderStatus.REJECTED, onReturn = { returning = l }, Modifier.animateItem())
+            }
+        }
+        SuccessCheck(celebrate, Modifier.align(Alignment.Center), diameter = 88.dp)
+    }
+    returning?.let { line ->
+        ReturnDialog(
+            line,
+            onDismiss = { returning = null },
+            onConfirm = { q, r ->
+                vm.createReturn(line.line.id, q, r) {
+                    returning = null
+                    returnsSaved++
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun SaleHeader(orderId: String, sale: SaleSummary?) {
+    val shape = MaterialTheme.shapes.large
+    Surface(
+        Modifier.fillMaxWidth().sharedCard("sale-$orderId", shape),
+        shape = shape,
+        color = MaterialTheme.colorScheme.primaryContainer,
+    ) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                InitialsAvatar(sale?.customerName.orEmpty(), Modifier.alpha(if (sale == null) 0f else 1f)) // yuklenirken "?" gorunmesin
+                Column(Modifier.weight(1f)) {
+                    Text(sale?.customerName.orEmpty(), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Text(
+                        sale?.let { "${it.orderNo} · ${formatInstant(it.soldAt)}" }.orEmpty(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
+                sale?.let { SaleStatusChip(it) }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(R.string.total),
+                    Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
-                HorizontalDivider()
+                RollingText(
+                    sale?.totalAmount?.toPlainString().orEmpty(),
+                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold),
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
             }
         }
     }
-    returning?.let { line -> ReturnDialog(line, onDismiss = { returning = null }, onConfirm = { q, r -> vm.createReturn(line.line.id, q, r) { returning = null } }) }
+}
+
+@Composable
+private fun SaleLineCard(l: LineWithReturns, canReturn: Boolean, onReturn: () -> Unit, modifier: Modifier) {
+    Surface(modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLowest, shadowElevation = 1.dp) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            InitialsAvatar(l.line.itemName.orEmpty())
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(l.line.itemName.orEmpty(), style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "${stringResource(R.string.lot)} ${l.line.lotNo.orEmpty()} · ${l.line.qty.display()} × ${l.line.unitPrice.display()} = ${l.line.lineTotal.toPlainString()}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                AnimatedVisibility(l.returned.signum() > 0) {
+                    Chip("${stringResource(R.string.returned)}: ${l.returned.display()}", StatusColors.warning, R.drawable.ic_assignment_return)
+                }
+            }
+            AnimatedVisibility(canReturn && l.returnable.signum() > 0) {
+                BouncyButton(onClick = onReturn, tonal = true) { Text(stringResource(R.string.take_return)) }
+            }
+        }
+    }
 }
 
 @Composable
@@ -167,6 +270,7 @@ private fun ReturnDialog(line: LineWithReturns, onDismiss: () -> Unit, onConfirm
     var reason by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
+        icon = { Icon(painterResource(R.drawable.ic_assignment_return), null, Modifier.size(28.dp)) },
         title = { Text(stringResource(R.string.return_title, line.line.lotNo.orEmpty())) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -180,5 +284,6 @@ private fun ReturnDialog(line: LineWithReturns, onDismiss: () -> Unit, onConfirm
         },
         confirmButton = { TextButton(onClick = { onConfirm(qty, reason) }) { Text(stringResource(R.string.save)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
     )
 }

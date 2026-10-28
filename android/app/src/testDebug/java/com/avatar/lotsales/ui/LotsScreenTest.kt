@@ -49,8 +49,10 @@ class LotsScreenTest {
         val opened = mutableListOf<String>()
         compose.setContent { LotsScreen(onSell = { opened += it }, vm = LotsViewModel(LotRepository(db))) }
 
-        // Room Flow'u kendi executor'unda calisir; compose kurali onu beklemez
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("Bloke").fetchSemanticsNodes().isNotEmpty() }
+        // Room Flow'u kendi executor'unda calisir; compose kurali onu beklemez.
+        // (Ozet basligi veri gelmeden de "Bloke" etiketi tasir; bu yuzden lot no beklenir.)
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("SUC-2026-099", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onAllNodesWithText("Bloke").fetchSemanticsNodes().let { check(it.size >= 2) { "rozet + ozet etiketi bekleniyor" } }
         compose.onNodeWithText("SUC-2026-099", substring = true).assertHasNoClickAction()
         compose.onNodeWithText("SUC-2026-045", substring = true).assertHasClickAction().performClick()
 

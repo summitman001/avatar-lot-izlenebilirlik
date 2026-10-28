@@ -92,9 +92,16 @@ Bu değerler verilmezse release imzasız derlenir.
 
 Üst barda her zaman bir gösterge vardır: `Çevrimdışı` / `Bekleyen N` / `Güncel`. Gerekirse ek olarak kırmızı `Depo seçilmedi` ve `İnceleme N` görünür. Arayüz metinleri `res/values/strings.xml`'dedir; iş kuralı mesajları ise saf JVM testlerinde doğrulandığı için `domain/SaleValidator.kt`'de durur.
 
+## Tasarım
+
+- Tema `ui/Theme.kt`: marka yeşili `#2E7D32`, krem yüzeyler, yalnız açık tema; durum renkleri `StatusColors` (tonlu rozet zemininde ≥4.8:1 kontrast).
+- Font: Plus Jakarta Sans (variable, `res/font/`), lisansı `assets/licenses/OFL-PlusJakartaSans.txt`. İkonlar: Material Symbols Rounded vector drawable'ları (`res/drawable/ic_*.xml`).
+- Animasyon yardımcıları `ui/Motion.kt`: ekranlar arası paylaşılan kart (`sharedCard`), sıralı liste girişi, odometre sayaç (`RollingText`), sallanma + titreşim, başarı tiki. Açılış: `core-splashscreen` (API 31+ animasyonlu ikon).
+- Sistem ayarında animasyonlar kapalıysa Compose bunlara uyar; ek kod yok.
+
 ## Testler
 
-`./gradlew test` (AGP 9'da varsayılan olarak yalnız debug varyantı), toplam 28 test:
+`./gradlew test` (AGP 9'da varsayılan olarak yalnız debug varyantı), toplam 31 test:
 
 - `Uuid7Test`, `DecimalsTest`, `SaleValidatorTest`: UUIDv7 sırası/geçerliliği, TypeConverter round-trip, yuvarlama, satış ve iade kuralları, ihlal kodu metinleri, FEFO.
 - `SalesRepositoryTest` (Robolectric): onay 4 tabloya birlikte yazar, transaction ortasında hata olursa hiçbiri yazılmaz; depo zorunlu; iade satılanı aşamaz; reddedilen satıştan vazgeçince stok geri gelir.
@@ -108,6 +115,7 @@ Bu değerler verilmezse release imzasız derlenir.
   - sözleşme dışı alan `rejected` döner
   - bekleyen işlem varken depo değişmez
 - `LotsScreenTest` (Compose, Robolectric): bloke lot tıklanamaz, aktif lot satışı açar.
+- `LotVisualsTest`: SKT aciliyet eşikleri (geçti / ≤7 / ≤30 gün) ve Türkçe baş harf avatarı.
 - `RealBackendSyncTest`: **gerçek Go API'ye karşı** uçtan uca test (pull bakiyesi, satış, iade, geri çağırma, duplicate, sözleşme dışı alan). Yalnızca `E2E_API_URL` verilince koşar; CI'da atlanır:
 
   ```bash
