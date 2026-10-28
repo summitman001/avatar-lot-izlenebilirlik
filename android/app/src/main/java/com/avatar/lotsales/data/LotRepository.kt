@@ -58,4 +58,6 @@ class LotRepository @Inject constructor(private val db: AppDatabase) {
     fun observeItems() = db.master().observeItems()
 
     fun observeCustomers() = db.master().observeCustomers()
+
+    fun observeWarehouses() = db.master().observeWarehouses()
 }

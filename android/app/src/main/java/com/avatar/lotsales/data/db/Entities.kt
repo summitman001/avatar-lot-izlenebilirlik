@@ -86,6 +86,27 @@ data class SalesLineEntity(
     @ColumnInfo(name = "stock_movement_id") val stockMovementId: String,
 )
 
+@Entity(tableName = "warehouses")
+data class WarehouseEntity(
+    @PrimaryKey val id: String,
+    val code: String,
+    val name: String,
+    @ColumnInfo(name = "warehouse_type") val warehouseType: String,
+)
+
+/** Musteri iadesi; return_in hareketi (+) ile yerel stoga geri eklenir. */
+@Entity(tableName = "customer_returns", indices = [Index("sales_line_id")])
+data class CustomerReturnEntity(
+    @PrimaryKey val id: String,
+    @ColumnInfo(name = "customer_id") val customerId: String,
+    @ColumnInfo(name = "sales_line_id") val salesLineId: String,
+    @ColumnInfo(name = "lot_id") val lotId: String,
+    val qty: BigDecimal,
+    val reason: String,
+    @ColumnInfo(name = "returned_at") val returnedAt: String,
+    val synced: Boolean,
+)
+
 @Entity(tableName = "blocked_lots")
 data class BlockedLotEntity(
     @PrimaryKey @ColumnInfo(name = "lot_id") val lotId: String,
@@ -125,4 +146,14 @@ object SyncKeys {
     const val LAST_SYNC_AT = "last_sync_at"
     const val DEVICE_ID = "device_id"
     const val LAST_ERROR = "last_error"
+
+    /** Satisin yapildigi depo (arac); qty_on_hand_server bu deponun bakiyesidir. */
+    const val DEVICE_WAREHOUSE_ID = "device_warehouse_id"
+}
+
+/** sales_orders.status: confirmed (sunucuda temiz), flagged (kaydedildi, incelemede), rejected (kaydedilmedi). */
+object OrderStatus {
+    const val CONFIRMED = "confirmed"
+    const val FLAGGED = "flagged"
+    const val REJECTED = "rejected"
 }

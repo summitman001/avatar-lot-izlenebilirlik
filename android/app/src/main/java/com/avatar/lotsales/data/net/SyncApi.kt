@@ -25,10 +25,6 @@ interface SyncApi {
         @Query("device_id") deviceId: String,
         @Query("limit") limit: Int,
     ): PullResponse
-
-    /** Lot bakiyesi pull payload'inda yok (sync.md); qty_on_hand buradan okunur. */
-    @GET("lots")
-    suspend fun lots(@Query("limit") limit: Int, @Query("offset") offset: Int): LotListResponse
 }
 
 @Serializable
@@ -98,6 +94,15 @@ data class CustomerDto(
 )
 
 @Serializable
+data class WarehouseDto(
+    val id: String,
+    val code: String,
+    val name: String,
+    @SerialName("warehouse_type") val warehouseType: String,
+)
+
+/** balances yalnizca bakiyeli lot kayitlarinda gelir (olusturma, satis, iade, bloke); yoksa null. */
+@Serializable
 data class LotDto(
     val id: String,
     @SerialName("lot_no") val lotNo: String,
@@ -106,18 +111,26 @@ data class LotDto(
     @SerialName("expiry_date") val expiryDate: String? = null,
     @SerialName("unit_cost") val unitCost: String,
     @SerialName("blocked_reason") val blockedReason: String? = null,
-    @SerialName("qty_on_hand") val qtyOnHand: String? = null,
+    val balances: List<LotBalanceDto>? = null,
 )
 
 @Serializable
-data class LotListResponse(val items: List<LotDto>)
+data class LotBalanceDto(
+    @SerialName("warehouse_id") val warehouseId: String,
+    @SerialName("qty_on_hand") val qtyOnHand: String,
+)
 
-/** push'ta entity=sales_order, action=create govdesi. */
+/**
+ * push sales_order/create govdesi = sunucunun CreateSalesOrderRequest'i (backend/internal/domain/sales.go).
+ * Sunucu bilinmeyen alani REDDEDER: buraya sozlesme disi alan eklemeyin. device_id gonderilmez (cihaz
+ * kayit uc noktasi yok, FK'ya takilir); create_shipment varsayilan true.
+ */
 @Serializable
 data class SalesOrderPayload(
     val id: String,
     @SerialName("order_no") val orderNo: String,
     @SerialName("customer_id") val customerId: String,
+    @SerialName("warehouse_id") val warehouseId: String,
     @SerialName("sold_at") val soldAt: String,
     val lines: List<SalesLinePayload>,
 )
@@ -129,6 +142,16 @@ data class SalesLinePayload(
     @SerialName("lot_id") val lotId: String,
     val qty: String,
     @SerialName("unit_price") val unitPrice: String,
-    @SerialName("line_total") val lineTotal: String,
-    @SerialName("stock_movement_id") val stockMovementId: String,
+)
+
+/** push customer_return/create govdesi = sunucunun CreateCustomerReturnRequest'i. */
+@Serializable
+data class CustomerReturnPayload(
+    val id: String,
+    @SerialName("customer_id") val customerId: String,
+    @SerialName("sales_line_id") val salesLineId: String,
+    @SerialName("lot_id") val lotId: String,
+    val qty: String,
+    val reason: String,
+    @SerialName("returned_at") val returnedAt: String,
 )

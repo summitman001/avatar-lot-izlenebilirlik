@@ -1,7 +1,10 @@
 package com.avatar.lotsales.ui
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
@@ -19,19 +22,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.avatar.lotsales.R
 import java.math.BigDecimal
 import java.time.Instant
 import java.time.ZoneId
@@ -45,7 +49,22 @@ object LotsRoute
 data class NewSaleRoute(val lotId: String? = null)
 
 @Serializable
+object SalesRoute
+
+@Serializable
+data class SaleDetailRoute(val orderId: String)
+
+@Serializable
 object SyncRoute
+
+private data class Tab(@StringRes val label: Int, val route: Any, val isCurrent: (NavDestination) -> Boolean)
+
+private val tabs = listOf(
+    Tab(R.string.tab_lots, LotsRoute) { it.hasRoute<LotsRoute>() },
+    Tab(R.string.tab_new_sale, NewSaleRoute()) { it.hasRoute<NewSaleRoute>() },
+    Tab(R.string.tab_sales, SalesRoute) { it.hasRoute<SalesRoute>() || it.hasRoute<SaleDetailRoute>() },
+    Tab(R.string.tab_sync, SyncRoute) { it.hasRoute<SyncRoute>() },
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,27 +73,22 @@ fun AppRoot() {
     val syncVm: SyncViewModel = hiltViewModel()
     val sync by syncVm.ui.collectAsStateWithLifecycle()
     val destination = nav.currentBackStackEntryAsState().value?.destination
-    val tabs = listOf<Triple<String, Any, Boolean>>(
-        Triple("Lotlar", LotsRoute, destination?.hasRoute(LotsRoute::class) == true),
-        Triple("Yeni satış", NewSaleRoute(), destination?.hasRoute(NewSaleRoute::class) == true),
-        Triple("Senkron", SyncRoute, destination?.hasRoute(SyncRoute::class) == true),
-    )
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Lot Satış") }, actions = { SyncIndicator(sync) }) },
+        topBar = { TopAppBar(title = { Text(stringResource(R.string.app_name)) }, actions = { SyncIndicator(sync) }) },
         bottomBar = {
             NavigationBar {
-                tabs.forEach { (label, route, selected) ->
+                tabs.forEach { tab ->
                     NavigationBarItem(
-                        selected = selected,
+                        selected = destination?.let(tab.isCurrent) == true,
                         onClick = {
-                            nav.navigate(route) {
+                            nav.navigate(tab.route) {
                                 popUpTo(nav.graph.findStartDestination().id) { saveState = true }
                                 launchSingleTop = true
                                 restoreState = true
                             }
                         },
                         icon = {},
-                        label = { Text(label) },
+                        label = { Text(stringResource(tab.label)) },
                     )
                 }
             }
@@ -83,23 +97,27 @@ fun AppRoot() {
         NavHost(nav, startDestination = LotsRoute, modifier = Modifier.padding(padding)) {
             composable<LotsRoute> { LotsScreen(onSell = { lotId -> nav.navigate(NewSaleRoute(lotId)) }) }
             composable<NewSaleRoute> { NewSaleScreen() }
+            composable<SalesRoute> { SalesScreen(onOpen = { id -> nav.navigate(SaleDetailRoute(id)) }) }
+            composable<SaleDetailRoute> { SaleDetailScreen() }
             composable<SyncRoute> { SyncScreen(syncVm) }
         }
     }
 }
 
-/** Ust bar: cevrimdisi / bekleyen N / guncel; inceleme bekleyen (flagged/rejected) varsa kirmizi uyari. */
+/** Ust bar: cevrimdisi / bekleyen N / guncel; depo secilmediyse veya inceleme bekleyen kayit varsa uyari. */
 @Composable
 fun SyncIndicator(ui: SyncUi) {
     val pending = ui.status.pending
     val (text, color) = when {
-        !ui.online -> (if (pending > 0) "Çevrimdışı · bekleyen $pending" else "Çevrimdışı") to Color(0xFF757575)
-        pending > 0 -> "Bekleyen $pending" to Color(0xFFF57C00)
-        else -> "Güncel" to Color(0xFF2E7D32)
+        !ui.online && pending > 0 -> stringResource(R.string.indicator_offline_pending, pending) to Color(0xFF757575)
+        !ui.online -> stringResource(R.string.indicator_offline) to Color(0xFF757575)
+        pending > 0 -> stringResource(R.string.indicator_pending, pending) to Color(0xFFF57C00)
+        else -> stringResource(R.string.indicator_ok) to Color(0xFF2E7D32)
     }
     Row {
+        if (ui.status.warehouseId == null) Chip(stringResource(R.string.indicator_no_warehouse), MaterialTheme.colorScheme.error)
         Chip(text, color)
-        if (ui.status.problems.isNotEmpty()) Chip("İnceleme ${ui.status.problems.size}", MaterialTheme.colorScheme.error)
+        if (ui.status.problems.isNotEmpty()) Chip(stringResource(R.string.indicator_problems, ui.status.problems.size), MaterialTheme.colorScheme.error)
     }
 }
 
@@ -122,10 +140,10 @@ fun <T> Picker(label: String, selected: String?, options: List<T>, optionText: (
     var open by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxWidth()) {
         OutlinedButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth()) {
-            Text(selected ?: "$label seçin")
+            Text(selected ?: stringResource(R.string.picker_choose, label))
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            if (options.isEmpty()) DropdownMenuItem(text = { Text("Kayıt yok (senkron bekleniyor)") }, onClick = { open = false })
+            if (options.isEmpty()) DropdownMenuItem(text = { Text(stringResource(R.string.picker_empty)) }, onClick = { open = false })
             options.forEach { option ->
                 DropdownMenuItem(text = { Text(optionText(option)) }, onClick = {
                     open = false

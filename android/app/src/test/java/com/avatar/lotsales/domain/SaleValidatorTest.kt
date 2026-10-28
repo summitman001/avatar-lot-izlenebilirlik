@@ -46,6 +46,25 @@ class SaleValidatorTest {
     }
 
     @Test
+    fun returnCannotExceedSoldMinusAlreadyReturnedAndNeedsReason() {
+        assertNull(SaleValidator.validateReturn(d("3.000"), d("1.000"), d("2.000"), "bozuk"))
+        assertTrue(SaleValidator.validateReturn(d("3.000"), d("1.000"), d("2.001"), "bozuk") is SaleError.ReturnExceedsSold)
+        assertEquals(SaleError.InvalidQty, SaleValidator.validateReturn(d("3.000"), d("0"), d("0"), "bozuk"))
+        assertEquals(SaleError.ReasonRequired, SaleValidator.validateReturn(d("3.000"), d("0"), d("1"), "   "))
+        assertEquals(SaleError.ReasonRequired, SaleValidator.validateReturn(d("3.000"), d("0"), d("1"), "x".repeat(401)))
+    }
+
+    @Test
+    fun violationCodesFromServerBecomeReadableText() {
+        val text = violationText("LOT_BLOCKED_AT_SALE,NEGATIVE_STOCK_OFFLINE")
+        assertEquals(2, text.lines().size)
+        assertTrue(text.contains("geri çağrılmış"))
+        assertTrue(text.contains("negatif bakiye"))
+        assertEquals("BILINMEYEN_KOD", violationText("BILINMEYEN_KOD"))
+        assertEquals("", violationText(null))
+    }
+
+    @Test
     fun lotViewAvailableIsServerQtyPlusUnsyncedMovementsAndBlockedIsNotSellable() {
         val item = ItemEntity("i1", "SUCUK", "Narin Sucuk", "finished", "adet", d("1.000"), d("24.9000"))
         fun lot(id: String, expiry: String?, status: String = "active") =

@@ -8,10 +8,12 @@ import com.avatar.lotsales.data.db.BlockedLotEntity
 import com.avatar.lotsales.data.db.CustomerEntity
 import com.avatar.lotsales.data.db.ItemEntity
 import com.avatar.lotsales.data.db.LotEntity
+import com.avatar.lotsales.data.db.OrderStatus
 import com.avatar.lotsales.data.db.OutboxEntity
 import com.avatar.lotsales.data.db.OutboxStatus
 import com.avatar.lotsales.data.db.SyncKeys
 import com.avatar.lotsales.data.db.SyncStateEntity
+import com.avatar.lotsales.data.db.WarehouseEntity
 import com.avatar.lotsales.data.net.AppJson
 import com.avatar.lotsales.data.net.Change
 import com.avatar.lotsales.data.net.CustomerDto
@@ -20,6 +22,7 @@ import com.avatar.lotsales.data.net.LotDto
 import com.avatar.lotsales.data.net.PushOperation
 import com.avatar.lotsales.data.net.PushRequest
 import com.avatar.lotsales.data.net.SyncApi
+import com.avatar.lotsales.data.net.WarehouseDto
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -35,12 +38,16 @@ data class SyncStatus(
     val pending: Int = 0,
     val lastSyncAt: String? = null,
     val lastError: String? = null,
+    val warehouseId: String? = null,
     val problems: List<OutboxEntity> = emptyList(),
 )
 
+class WarehouseChangeBlocked : Exception("Bekleyen işlem varken cihaz deposu değiştirilemez; önce senkronlayın")
+
 /**
- * Senkron sirasi (docs/sync.md): PUSH (outbox sirayla, 500'luk) -> PULL (since_seq, has_more bitene kadar)
- * -> bakiye yenileme (GET /lots). Sunucu hakemdir; Room tek dogruluk kaynagidir, UI agi hic gormez.
+ * Senkron sirasi (docs/sync.md, docs/android-integration.md): PUSH (outbox sirayla, 500'luk) -> PULL
+ * (since_seq, has_more bitene kadar). Lot bakiyesi pull'daki lot payload'inin cihaz deposu kirilimidir.
+ * Sunucu hakemdir; Room tek dogruluk kaynagidir, UI agi hic gormez.
  */
 @Singleton
 class SyncRepository @Inject constructor(private val db: AppDatabase, private val api: SyncApi) {
@@ -52,7 +59,10 @@ class SyncRepository @Inject constructor(private val db: AppDatabase, private va
         db.sync().observeProblems(),
     ) { pending, state, problems ->
         val kv = state.associate { it.key to it.value }
-        SyncStatus(pending, kv[SyncKeys.LAST_SYNC_AT], kv[SyncKeys.LAST_ERROR]?.takeIf { it.isNotEmpty() }, problems)
+        SyncStatus(
+            pending, kv[SyncKeys.LAST_SYNC_AT], kv[SyncKeys.LAST_ERROR]?.takeIf { it.isNotEmpty() },
+            kv[SyncKeys.DEVICE_WAREHOUSE_ID], problems,
+        )
     }
 
     suspend fun sync() = mutex.withLock {
@@ -60,7 +70,6 @@ class SyncRepository @Inject constructor(private val db: AppDatabase, private va
             val deviceId = deviceId()
             push(deviceId)
             pull(deviceId)
-            refreshBalances()
             putState(SyncKeys.LAST_SYNC_AT, now())
             putState(SyncKeys.LAST_ERROR, "")
         } catch (e: CancellationException) {
@@ -73,6 +82,18 @@ class SyncRepository @Inject constructor(private val db: AppDatabase, private va
 
     suspend fun deviceId(): String =
         db.sync().state(SyncKeys.DEVICE_ID) ?: Uuid7.generate().also { putState(SyncKeys.DEVICE_ID, it) }
+
+    /**
+     * Cihazin satis yaptigi depo. Bakiye depoya gore tutuldugu icin degisince bakiyeler sifirlanir ve
+     * imlec 0'a cekilir: sonraki senkron tum lotlari yeni deponun bakiyesiyle yeniden yazar.
+     */
+    suspend fun setDeviceWarehouse(warehouseId: String) = db.withTransaction {
+        if (db.sync().state(SyncKeys.DEVICE_WAREHOUSE_ID) == warehouseId) return@withTransaction
+        if (db.sync().pendingCount() > 0) throw WarehouseChangeBlocked()
+        putState(SyncKeys.DEVICE_WAREHOUSE_ID, warehouseId)
+        putState(SyncKeys.LAST_PULL_SEQ, "0")
+        db.master().resetAllLotQty(Decimals.ZERO_QTY)
+    }
 
     internal suspend fun push(deviceId: String) {
         while (true) {
@@ -95,24 +116,40 @@ class SyncRepository @Inject constructor(private val db: AppDatabase, private va
                 for (r in response.results) {
                     val op = db.sync().outbox(r.opId) ?: continue
                     db.sync().setResult(r.opId, r.status, r.message.ifEmpty { null })
-                    // duplicate = daha once islendi (basari); flagged = sunucu kaydetti ama inceleme istiyor
-                    val reachedServer = r.status in setOf(OutboxStatus.APPLIED, OutboxStatus.DUPLICATE, OutboxStatus.FLAGGED)
-                    if (reachedServer && op.entity == "sales_order") {
-                        db.sales().markOrderSynced(AppJson.decodeFromString(OrderRef.serializer(), op.payloadJson).id)
-                    }
+                    applyResult(op, r.status)
                 }
             }
             if (batch.size < PUSH_BATCH) return
         }
     }
 
+    /** applied/duplicate/flagged = sunucuda kayitli; rejected = hic yazilmadi, outbox'ta kalir. */
+    private suspend fun applyResult(op: OutboxEntity, status: String) {
+        val id = AppJson.decodeFromString(PayloadRef.serializer(), op.payloadJson).id
+        when (op.entity) {
+            "sales_order" -> when (status) {
+                OutboxStatus.APPLIED, OutboxStatus.DUPLICATE -> db.sales().markOrderSynced(id, OrderStatus.CONFIRMED)
+                OutboxStatus.FLAGGED -> db.sales().markOrderSynced(id, OrderStatus.FLAGGED)
+                OutboxStatus.REJECTED -> db.sales().setOrderStatus(id, OrderStatus.REJECTED)
+            }
+            "customer_return" -> if (status in REACHED_SERVER) db.sales().markReturnSynced(id)
+        }
+    }
+
+    /**
+     * Pull ile gelen lot bakiyesi sunucuya ulasmis kayitlari zaten icerir; onlarin yerel hareketleri ANCAK
+     * pull basarili olunca yerel toplamdan cikarilir (synced=1). Aksi halde stok iki kez dusulur: hata hep
+     * "eksik goster" yonundedir, fazla satis olmaz. Liste pull'dan ONCE alinir.
+     */
     internal suspend fun pull(deviceId: String) {
+        val reachedServer = db.sales().reachedServerRefIds()
+        val warehouseId = db.sync().state(SyncKeys.DEVICE_WAREHOUSE_ID)
         var since = db.sync().state(SyncKeys.LAST_PULL_SEQ)?.toLong() ?: 0L
         do {
             val page = api.pull(since, deviceId, PULL_LIMIT)
             db.withTransaction {
                 val reasons = mutableMapOf<String, String?>()
-                page.changes.forEach { applyChange(it, reasons) }
+                page.changes.forEach { applyChange(it, warehouseId, reasons) }
                 // blocked_lot_ids her cekmede TAM liste: listede olmayanlar kaldirilir
                 db.master().deleteBlockedNotIn(page.blockedLotIds)
                 db.master().insertBlocked(page.blockedLotIds.map { BlockedLotEntity(it, reasons[it], now()) })
@@ -120,9 +157,10 @@ class SyncRepository @Inject constructor(private val db: AppDatabase, private va
             }
             since = page.nextSeq
         } while (page.hasMore)
+        if (reachedServer.isNotEmpty()) db.sales().markMovementsSynced(reachedServer)
     }
 
-    private suspend fun applyChange(change: Change, blockedReasons: MutableMap<String, String?>) {
+    private suspend fun applyChange(change: Change, warehouseId: String?, blockedReasons: MutableMap<String, String?>) {
         val delete = change.action == "delete"
         when (change.entity) {
             "item" -> if (delete) db.master().deleteItem(change.entityId) else {
@@ -135,49 +173,33 @@ class SyncRepository @Inject constructor(private val db: AppDatabase, private va
                 val d = AppJson.decodeFromJsonElement(CustomerDto.serializer(), change.payload)
                 db.master().upsertCustomer(CustomerEntity(d.id, d.code, d.name, d.customerType, d.contactName, d.phone))
             }
+            "warehouse" -> if (delete) db.master().deleteWarehouse(change.entityId) else {
+                val d = AppJson.decodeFromJsonElement(WarehouseDto.serializer(), change.payload)
+                db.master().upsertWarehouse(WarehouseEntity(d.id, d.code, d.name, d.warehouseType))
+            }
             "lot" -> if (delete) db.master().deleteLot(change.entityId) else {
                 val d = AppJson.decodeFromJsonElement(LotDto.serializer(), change.payload)
                 blockedReasons[d.id] = d.blockedReason
                 val cost = BigDecimal(d.unitCost)
                 if (db.master().updateLotMeta(d.id, d.lotNo, d.itemId, d.status, d.expiryDate, cost, change.seq) == 0) {
-                    // Bakiye bilinmeden satilamaz: refreshBalances gercek degeri yazana kadar 0.
                     db.master().insertLot(LotEntity(d.id, d.lotNo, d.itemId, d.status, d.expiryDate, cost, Decimals.ZERO_QTY, change.seq))
                 }
+                // Bakiyesiz kayit (eski sunucu) mevcut degeri korur; bakiyeli kayitta yalniz cihaz deposu sayilir.
+                d.balances?.let { balances ->
+                    val qty = balances.firstOrNull { it.warehouseId == warehouseId }?.qtyOnHand?.let(::BigDecimal) ?: Decimals.ZERO_QTY
+                    db.master().updateLotQty(d.id, qty)
+                }
             }
-            else -> Unit // warehouse: bugun Room'da tablosu yok
         }
-    }
-
-    /**
-     * qty_on_hand_server'i sunucudan yeniler. Sunucuya ulasmis siparislerin hareketleri ANCAK bu yenileme
-     * basarili olunca yerel toplamdan cikarilir (synced=1); aksi halde stok iki kez dusulur, yani hata
-     * hep "eksik goster" yonundedir, fazla satis olmaz. Yenilemeden ONCE alinan liste kullanilir:
-     * sunucu bakiyesi bu siparisleri zaten icerir.
-     */
-    internal suspend fun refreshBalances() {
-        val reachedServer = db.sales().syncedOrderIdsWithLocalMovements()
-        var offset = 0
-        while (true) {
-            val items = api.lots(LOTS_PAGE, offset).items
-            db.withTransaction {
-                items.forEach { lot -> lot.qtyOnHand?.let { db.master().updateLotQty(lot.id, BigDecimal(it)) } }
-            }
-            if (items.size < LOTS_PAGE) break
-            offset += items.size
-        }
-        if (reachedServer.isNotEmpty()) db.sales().markMovementsSynced(reachedServer)
     }
 
     private suspend fun putState(key: String, value: String) = db.sync().putState(SyncStateEntity(key, value))
 
     private fun now() = Instant.now().truncatedTo(ChronoUnit.MILLIS).toString()
 
-    @kotlinx.serialization.Serializable
-    private data class OrderRef(val id: String)
-
     private companion object {
         const val PUSH_BATCH = 500
         const val PULL_LIMIT = 500
-        const val LOTS_PAGE = 1000
+        val REACHED_SERVER = setOf(OutboxStatus.APPLIED, OutboxStatus.DUPLICATE, OutboxStatus.FLAGGED)
     }
 }

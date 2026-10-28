@@ -16,6 +16,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
+import com.avatar.lotsales.R
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -48,11 +50,11 @@ fun LotsScreen(onSell: (String) -> Unit, vm: LotsViewModel = hiltViewModel()) {
         OutlinedTextField(
             value = query,
             onValueChange = { vm.query.value = it },
-            label = { Text("Ara (lot no / ürün)") },
+            label = { Text(stringResource(R.string.lots_search)) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth().padding(12.dp),
         )
-        if (lots.isEmpty()) Text("Lot yok. Senkron sekmesinden senkronlayın.", Modifier.padding(16.dp))
+        if (lots.isEmpty()) Text(stringResource(R.string.lots_empty), Modifier.padding(16.dp))
         LazyColumn {
             items(lots, key = { it.lot.id }) { lot ->
                 LotRow(lot, onClick = { onSell(lot.lot.id) })
@@ -68,10 +70,10 @@ private fun LotRow(lot: LotView, onClick: () -> Unit) {
     ListItem(
         headlineContent = { Text(lot.itemName) },
         supportingContent = {
-            Text("${lot.lot.lotNo} · SKT: ${lot.lot.expiryDate ?: "—"} · Kullanılabilir: ${lot.available.display()} ${lot.baseUom}")
+            Text(stringResource(R.string.lot_row, lot.lot.lotNo, lot.lot.expiryDate ?: "—", lot.available.display(), lot.baseUom))
         },
         trailingContent = {
-            if (lot.sellable) Chip("Aktif", Color(0xFF2E7D32)) else Chip(lot.lot.status.uppercase(), blockedRed)
+            if (lot.sellable) Chip(stringResource(R.string.status_active), Color(0xFF2E7D32)) else Chip(lot.lot.status.uppercase(), blockedRed)
         },
         colors = if (lot.sellable) ListItemDefaults.colors() else ListItemDefaults.colors(containerColor = Color(0xFFFFEBEE)),
         // bloke/geri cagrilmis lot tiklanamaz

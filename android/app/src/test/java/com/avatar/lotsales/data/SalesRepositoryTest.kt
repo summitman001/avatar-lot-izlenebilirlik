@@ -9,7 +9,10 @@ import com.avatar.lotsales.data.db.CustomerEntity
 import com.avatar.lotsales.data.db.ItemEntity
 import com.avatar.lotsales.data.db.LotEntity
 import com.avatar.lotsales.data.db.OutboxEntity
+import com.avatar.lotsales.data.db.SyncKeys
+import com.avatar.lotsales.data.db.SyncStateEntity
 import com.avatar.lotsales.data.net.AppJson
+import com.avatar.lotsales.data.net.CustomerReturnPayload
 import com.avatar.lotsales.data.net.SalesOrderPayload
 import com.avatar.lotsales.domain.SaleError
 import com.avatar.lotsales.domain.SaleException
@@ -35,12 +38,17 @@ class SalesRepositoryTest {
         db.master().insertLot(LotEntity(LOT, "SUC-2026-045", ITEM, "active", "2026-12-15", BigDecimal("18.1588"), BigDecimal("85.000"), 6))
         db.master().insertLot(LotEntity(BLOCKED_LOT, "SUC-2026-099", ITEM, "active", "2026-11-30", BigDecimal("18.2000"), BigDecimal("40.000"), 8))
         db.master().insertBlocked(listOf(BlockedLotEntity(BLOCKED_LOT, "geri cagirma", "2026-10-26T10:00:00Z")))
+        db.sync().putState(SyncStateEntity(SyncKeys.DEVICE_WAREHOUSE_ID, WAREHOUSE))
     }
 
     @After
     fun tearDown() = db.close()
 
     private fun line(qty: String, lot: String = LOT) = DraftLine(ITEM, lot, BigDecimal(qty), BigDecimal("24.9000"))
+
+    private suspend fun available() = LotRepository(db).observeLots().first().single { it.lot.id == LOT }.available
+
+    private suspend fun errorOf(block: suspend () -> Unit) = (runCatching { block() }.exceptionOrNull() as SaleException).error
 
     @Test
     fun confirmWritesOrderLinesMovementsAndOutboxTogether() = runBlocking {
@@ -63,16 +71,16 @@ class SalesRepositoryTest {
         assertEquals(listOf("sale_out"), db.column("SELECT DISTINCT movement_type FROM local_stock_movements"))
         assertEquals(listOf(orderId), db.column("SELECT DISTINCT ref_id FROM local_stock_movements"))
 
-        // outbox govdesi sozlesmedeki sales_order payload'i; decimal'ler string ve sabit olcekli
+        // outbox govdesi sunucunun CreateSalesOrderRequest'i; decimal'ler string, cihaz deposu dahil
         assertEquals(listOf("pending"), db.column("SELECT status FROM sync_outbox"))
         val payload = AppJson.decodeFromString(SalesOrderPayload.serializer(), db.column("SELECT payload_json FROM sync_outbox").single()!!)
         assertEquals(orderId, payload.id)
+        assertEquals(WAREHOUSE, payload.warehouseId)
         assertEquals(listOf("2.000", "1.000"), payload.lines.map { it.qty })
-        assertEquals(listOf("49.80", "24.90"), payload.lines.map { it.lineTotal })
         assertEquals("24.9000", payload.lines.first().unitPrice)
+        assertEquals(db.column("SELECT id FROM sales_lines ORDER BY id"), payload.lines.map { it.id }.sorted())
 
-        val available = LotRepository(db).observeLots().first().single { it.lot.id == LOT }.available
-        assertEquals(BigDecimal("82.000"), available)
+        assertEquals(BigDecimal("82.000"), available())
     }
 
     @Test
@@ -91,15 +99,59 @@ class SalesRepositoryTest {
     }
 
     @Test
-    fun blockedLotInsufficientStockAndBadQtyAreRejectedWithoutWrites() = runBlocking {
+    fun blockedLotInsufficientStockBadQtyAndMissingWarehouseAreRejectedWithoutWrites() = runBlocking {
         val repo = SalesRepository(db)
-        suspend fun errorOf(vararg lines: DraftLine) = (runCatching { repo.createSale(CUSTOMER, lines.toList()) }.exceptionOrNull() as SaleException).error
-
-        assertTrue(errorOf(line("1", BLOCKED_LOT)) is SaleError.LotNotSellable)
-        assertTrue(errorOf(line("50"), line("36")) is SaleError.InsufficientStock) // ayni lotta toplam 86 > 85
-        assertEquals(SaleError.InvalidQty, errorOf(line("0")))
-        assertEquals(SaleError.NoLines, errorOf())
+        assertTrue(errorOf { repo.createSale(CUSTOMER, listOf(line("1", BLOCKED_LOT))) } is SaleError.LotNotSellable)
+        assertTrue(errorOf { repo.createSale(CUSTOMER, listOf(line("50"), line("36"))) } is SaleError.InsufficientStock) // 86 > 85
+        assertEquals(SaleError.InvalidQty, errorOf { repo.createSale(CUSTOMER, listOf(line("0"))) })
+        assertEquals(SaleError.NoLines, errorOf { repo.createSale(CUSTOMER, emptyList()) })
+        db.openHelper.writableDatabase.execSQL("DELETE FROM sync_state")
+        assertEquals(SaleError.NoWarehouse, errorOf { repo.createSale(CUSTOMER, listOf(line("1"))) })
         assertEquals(0, db.count("sales_orders") + db.count("sales_lines") + db.count("local_stock_movements") + db.count("sync_outbox"))
+    }
+
+    @Test
+    fun returnWritesReturnMovementAndOutboxAndIsLimitedBySoldQty() = runBlocking {
+        val repo = SalesRepository(db)
+        repo.createSale(CUSTOMER, listOf(line("3")))
+        val lineId = db.column("SELECT id FROM sales_lines").single()!!
+        assertEquals(BigDecimal("82.000"), available())
+
+        repo.createReturn(lineId, BigDecimal("1"), " bozuk ambalaj ")
+
+        assertEquals(1, db.count("customer_returns"))
+        assertEquals(listOf("return_in"), db.column("SELECT movement_type FROM local_stock_movements WHERE ref_type = 'customer_return'"))
+        assertEquals(BigDecimal("83.000"), available()) // iade yerel stoga geri eklendi
+        val payload = AppJson.decodeFromString(
+            CustomerReturnPayload.serializer(),
+            db.column("SELECT payload_json FROM sync_outbox WHERE entity = 'customer_return'").single()!!,
+        )
+        assertEquals(lineId, payload.salesLineId)
+        assertEquals(LOT, payload.lotId)
+        assertEquals("1.000", payload.qty)
+        assertEquals("bozuk ambalaj", payload.reason)
+
+        assertTrue(errorOf { repo.createReturn(lineId, BigDecimal("2.5"), "x") } is SaleError.ReturnExceedsSold) // 1 + 2.5 > 3
+        assertEquals(SaleError.ReasonRequired, errorOf { repo.createReturn(lineId, BigDecimal("1"), "  ") })
+        assertEquals(SaleError.InvalidQty, errorOf { repo.createReturn(lineId, null, "x") })
+        assertEquals(1, db.count("customer_returns"))
+    }
+
+    @Test
+    fun discardingRejectedSaleRestoresLocalStockAndBlocksReturns() = runBlocking {
+        val repo = SalesRepository(db)
+        repo.createSale(CUSTOMER, listOf(line("5")))
+        val opId = db.column("SELECT op_id FROM sync_outbox").single()!!
+        db.sync().setResult(opId, "rejected", "lot bulunamadi")
+        assertEquals(BigDecimal("80.000"), available())
+
+        repo.discardRejected(opId)
+
+        assertEquals(0, db.count("sync_outbox"))
+        assertEquals(listOf("rejected"), db.column("SELECT status FROM sales_orders"))
+        assertEquals(BigDecimal("85.000"), available()) // sunucu hic kaydetmedi: stok etkisi geri alindi
+        val lineId = db.column("SELECT id FROM sales_lines").single()!!
+        assertEquals(SaleError.OrderRejected, errorOf { repo.createReturn(lineId, BigDecimal("1"), "x") })
     }
 
     private companion object {
@@ -107,5 +159,6 @@ class SalesRepositoryTest {
         const val CUSTOMER = "01a17000-0000-7000-8000-000000000101"
         const val LOT = "01a17000-0000-7000-8000-000000000201"
         const val BLOCKED_LOT = "01a17000-0000-7000-8000-000000000202"
+        const val WAREHOUSE = "01a17000-0000-7000-8000-000000000301"
     }
 }

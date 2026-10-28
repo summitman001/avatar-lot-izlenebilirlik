@@ -20,6 +20,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.res.stringResource
+import com.avatar.lotsales.R
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.SavedStateHandle
@@ -174,35 +176,37 @@ fun NewSaleScreen(vm: NewSaleViewModel = hiltViewModel()) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text("Müşteri", style = MaterialTheme.typography.labelLarge)
-        Picker("Müşteri", ui.customer?.name, ui.customers, { it.name }, vm::selectCustomer)
-        Text("Ürün", style = MaterialTheme.typography.labelLarge)
-        Picker("Ürün", ui.item?.name, ui.items, { it.name }, vm::selectItem)
-        Text("Lot (FEFO: SKT'si en yakın önce)", style = MaterialTheme.typography.labelLarge)
+        Text(stringResource(R.string.customer), style = MaterialTheme.typography.labelLarge)
+        Picker(stringResource(R.string.customer), ui.customer?.name, ui.customers, { it.name }, vm::selectCustomer)
+        Text(stringResource(R.string.product), style = MaterialTheme.typography.labelLarge)
+        Picker(stringResource(R.string.product), ui.item?.name, ui.items, { it.name }, vm::selectItem)
+        Text(stringResource(R.string.lot_fefo_label), style = MaterialTheme.typography.labelLarge)
+        val blockedTag = stringResource(R.string.blocked_tag)
+        val fefoTag = stringResource(R.string.fefo_tag)
         Picker(
-            "Lot",
+            stringResource(R.string.lot),
             ui.lot?.let { "${it.lot.lotNo} · SKT ${it.lot.expiryDate ?: "—"}" },
             ui.itemLots,
             { lot ->
                 buildString {
                     append("${lot.lot.lotNo} · SKT ${lot.lot.expiryDate ?: "—"} · ${lot.available.display()} ${lot.baseUom}")
-                    if (!lot.sellable) append(" · BLOKE")
-                    if (lot == ui.fefoSuggestion) append(" · FEFO önerisi")
+                    if (!lot.sellable) append(" · $blockedTag")
+                    if (lot == ui.fefoSuggestion) append(" · $fefoTag")
                 }
             },
             vm::pickLot,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
-                f.qty, vm::setQty, label = { Text("Miktar") }, singleLine = true, modifier = Modifier.weight(1f),
+                f.qty, vm::setQty, label = { Text(stringResource(R.string.qty)) }, singleLine = true, modifier = Modifier.weight(1f),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             )
             OutlinedTextField(
-                f.price, vm::setPrice, label = { Text("Birim fiyat") }, singleLine = true, modifier = Modifier.weight(1f),
+                f.price, vm::setPrice, label = { Text(stringResource(R.string.unit_price)) }, singleLine = true, modifier = Modifier.weight(1f),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             )
         }
-        Button(onClick = vm::addLine, modifier = Modifier.fillMaxWidth()) { Text("Satır ekle") }
+        Button(onClick = vm::addLine, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.add_line)) }
         f.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 
         f.lines.forEachIndexed { i, l ->
@@ -211,12 +215,12 @@ fun NewSaleScreen(vm: NewSaleViewModel = hiltViewModel()) {
                     "${l.itemName} · ${l.lotNo} · ${l.line.qty.display()} ${l.uom} × ${l.line.unitPrice.display()} = ${l.lineTotal.toPlainString()}",
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = { vm.removeLine(i) }) { Text("Sil") }
+                TextButton(onClick = { vm.removeLine(i) }) { Text(stringResource(R.string.remove)) }
             }
         }
-        if (f.lines.isNotEmpty()) Text("Toplam: ${ui.total.toPlainString()}", style = MaterialTheme.typography.titleMedium)
+        if (f.lines.isNotEmpty()) Text("${stringResource(R.string.total)}: ${ui.total.toPlainString()}", style = MaterialTheme.typography.titleMedium)
         Button(onClick = vm::confirm, enabled = f.customerId != null && f.lines.isNotEmpty(), modifier = Modifier.fillMaxWidth()) {
-            Text("Onayla")
+            Text(stringResource(R.string.confirm))
         }
         f.info?.let { Text(it, color = Color(0xFF2E7D32)) }
     }

@@ -1,7 +1,11 @@
 package com.avatar.lotsales.data.net
 
 import com.avatar.lotsales.core.Decimals
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
@@ -18,15 +22,32 @@ import java.math.BigDecimal
 
 /**
  * Backend olmadan calismak icin (debug, BuildConfig.USE_FAKE_API): istekleri aga cikarmadan
- * assets/fakeapi/ fixture'larindan cevaplar. Sunucu kurallarini taklit eder: ayni op_id ikinci kez
- * gelirse duplicate; bloke lot satilirsa flagged (recall_violation); applied/flagged satis bakiyeden duser.
+ * assets/fakeapi/pull.json'dan baslayan bellek ici bir sunucu gibi cevaplar. Go sunucusunun push
+ * kurallarini taklit eder (backend/internal/repo/sync.go, docs/sync.md "OFFLINE KURALI"):
+ *  - payload bilinmeyen alan icerirse veya lot/satir bilinmiyorsa rejected (dedup edilmez);
+ *  - ayni op_id ikinci kez gelirse duplicate;
+ *  - bloke lot satisi LOT_BLOCKED_AT_SALE, yetersiz bakiye NEGATIVE_STOCK_OFFLINE ile flagged (yine kaydedilir);
+ *  - satis/iade lotun depo bakiyesini degistirir ve pull akisina bakiyeli lot upsert'i ekler.
  * Durum bellekte tutulur, uygulama yeniden baslayinca sifirlanir.
  */
 class FakeApiInterceptor(private val readAsset: (String) -> String) : Interceptor {
-    private val pull by lazy { AppJson.parseToJsonElement(readAsset("fakeapi/pull.json")).jsonObject }
-    private val lots by lazy { AppJson.decodeFromString(LotListResponse.serializer(), readAsset("fakeapi/lots.json")).items }
-    private val firstStatus = mutableMapOf<String, String>() // op_id -> ilk sonuc
-    private val sold = mutableMapOf<String, BigDecimal>() // lot_id -> satilan miktar
+    private val strict = Json { ignoreUnknownKeys = false } // sunucu: DisallowUnknownFields
+    private val fixture by lazy { AppJson.parseToJsonElement(readAsset("fakeapi/pull.json")).jsonObject }
+    private val changes by lazy { fixture.getValue("changes").jsonArray.map { it.jsonObject }.toMutableList() }
+    private val blocked by lazy { fixture.getValue("blocked_lot_ids").jsonArray.map { it.jsonPrimitive.content }.toSet() }
+    private val lots by lazy { latestPayloads("lot") }
+    private val warehouseCodes by lazy { latestPayloads("warehouse").mapValues { it.value.getValue("code").jsonPrimitive.content } }
+    private val balances by lazy { // lot_id -> (warehouse_id -> qty)
+        lots.mapValues { (_, lot) ->
+            lot["balances"]?.jsonArray.orEmpty().associate {
+                it.jsonObject.getValue("warehouse_id").jsonPrimitive.content to BigDecimal(it.jsonObject.getValue("qty_on_hand").jsonPrimitive.content)
+            }.toMutableMap()
+        }.toMutableMap()
+    }
+    private val firstStatus = mutableMapOf<String, String>() // op_id -> ilk sonuc (yalniz kaydedilenler)
+    private val soldLines = mutableMapOf<String, SoldLine>() // sales_line id -> satis bilgisi
+
+    private data class SoldLine(val lotId: String, val warehouseId: String, val qty: BigDecimal, var returned: BigDecimal)
 
     @Synchronized
     override fun intercept(chain: Interceptor.Chain): Response {
@@ -39,8 +60,6 @@ class FakeApiInterceptor(private val readAsset: (String) -> String) : Intercepto
                 val buf = Buffer().also { req.body?.writeTo(it) }
                 200 to pushBody(AppJson.decodeFromString(PushRequest.serializer(), buf.readUtf8()))
             }
-            req.method == "GET" && path.endsWith("/lots") ->
-                200 to lotsBody(req.url.queryParameter("offset")?.toIntOrNull() ?: 0)
             req.method == "GET" && path.endsWith("/health") -> 200 to """{"status":"ok"}"""
             else -> 404 to """{"error":{"code":"not_found","message":"FakeApi: rota yok"}}"""
         }
@@ -53,45 +72,125 @@ class FakeApiInterceptor(private val readAsset: (String) -> String) : Intercepto
             .build()
     }
 
-    private fun blockedIds(): List<String> = pull.getValue("blocked_lot_ids").jsonArray.map { it.jsonPrimitive.content }
+    private fun seqOf(change: JsonObject) = change.getValue("seq").jsonPrimitive.long
+
+    private fun latestPayloads(entity: String): Map<String, JsonObject> =
+        changes.filter { it.getValue("entity").jsonPrimitive.content == entity }
+            .associate { it.getValue("entity_id").jsonPrimitive.content to it.getValue("payload").jsonObject }
 
     private fun pullBody(sinceSeq: Long): String {
-        val changes = pull.getValue("changes").jsonArray.filter { it.jsonObject.getValue("seq").jsonPrimitive.long > sinceSeq }
-        val next = changes.maxOfOrNull { it.jsonObject.getValue("seq").jsonPrimitive.long } ?: sinceSeq
+        val page = changes.filter { seqOf(it) > sinceSeq }
         return buildJsonObject {
-            put("changes", JsonArray(changes))
-            put("next_seq", JsonPrimitive(next))
+            put("changes", JsonArray(page))
+            put("next_seq", JsonPrimitive(page.maxOfOrNull(::seqOf) ?: sinceSeq))
             put("has_more", JsonPrimitive(false))
-            put("blocked_lot_ids", pull.getValue("blocked_lot_ids"))
+            put("blocked_lot_ids", JsonArray(blocked.map(::JsonPrimitive)))
         }.toString()
     }
 
     private fun pushBody(request: PushRequest): String {
-        val blocked = blockedIds().toSet()
         val results = request.operations.map { op ->
             firstStatus[op.opId]?.let { return@map PushResult(op.opId, "duplicate", "op_id daha once islendi (ilk sonuc: $it)") }
-            val result = if (op.entity == "sales_order" && op.action == "create") {
-                val order = AppJson.decodeFromJsonElement(SalesOrderPayload.serializer(), op.payload)
-                order.lines.forEach { sold[it.lotId] = (sold[it.lotId] ?: BigDecimal.ZERO) + BigDecimal(it.qty) }
-                if (order.lines.any { it.lotId in blocked }) {
-                    PushResult(op.opId, "flagged", "recall_violation: bloke/geri cagrilmis lot satildi")
-                } else {
-                    PushResult(op.opId, "applied", "")
+            val result = runCatching {
+                when ("${op.entity}/${op.action}") {
+                    "sales_order/create" -> applySale(op.opId, strict.decodeFromJsonElement(ServerSalesOrder.serializer(), op.payload))
+                    "customer_return/create" -> applyReturn(op.opId, strict.decodeFromJsonElement(ServerCustomerReturn.serializer(), op.payload))
+                    else -> PushResult(op.opId, "rejected", "desteklenmeyen islem: ${op.entity}/${op.action}")
                 }
-            } else {
-                PushResult(op.opId, "rejected", "FakeApi: desteklenmeyen islem ${op.entity}/${op.action}")
-            }
-            firstStatus[op.opId] = result.status
+            }.getOrElse { PushResult(op.opId, "rejected", "gecersiz payload: ${it.message}") }
+            if (result.status != "rejected") firstStatus[op.opId] = result.status
             result
         }
-        return AppJson.encodeToString(PushResponse.serializer(), PushResponse(results, serverSeq = 0))
+        return AppJson.encodeToString(PushResponse.serializer(), PushResponse(results, serverSeq = changes.maxOf(::seqOf)))
     }
 
-    private fun lotsBody(offset: Int): String {
-        val page = if (offset > 0) emptyList() else lots.map { lot ->
-            val onHand = BigDecimal(lot.qtyOnHand ?: "0") - (sold[lot.id] ?: BigDecimal.ZERO)
-            lot.copy(qtyOnHand = onHand.setScale(Decimals.QTY_SCALE).toPlainString())
+    private fun applySale(opId: String, order: ServerSalesOrder): PushResult {
+        if (order.warehouseId !in warehouseCodes) return PushResult(opId, "rejected", "warehouse_id bulunamadi")
+        if (order.lines.isEmpty()) return PushResult(opId, "rejected", "lines bos olamaz")
+        order.lines.forEach { if (it.lotId !in lots) return PushResult(opId, "rejected", "lot bulunamadi: ${it.lotId}") }
+        val violations = linkedSetOf<String>()
+        order.lines.forEach { line ->
+            val qty = BigDecimal(line.qty)
+            val wh = balances.getOrPut(line.lotId) { mutableMapOf() }
+            val left = (wh[order.warehouseId] ?: BigDecimal.ZERO) - qty
+            if (line.lotId in blocked) violations += "LOT_BLOCKED_AT_SALE"
+            if (left.signum() < 0) violations += "NEGATIVE_STOCK_OFFLINE"
+            wh[order.warehouseId] = left
+            line.id?.let { soldLines[it] = SoldLine(line.lotId, order.warehouseId, qty, BigDecimal.ZERO) }
         }
-        return AppJson.encodeToString(LotListResponse.serializer(), LotListResponse(page))
+        order.lines.map { it.lotId }.distinct().forEach(::emitLot)
+        return if (violations.isEmpty()) PushResult(opId, "applied", "satis kaydedildi: ${order.orderNo ?: order.id}")
+        else PushResult(opId, "flagged", violations.joinToString(","))
+    }
+
+    private fun applyReturn(opId: String, ret: ServerCustomerReturn): PushResult {
+        val sold = ret.salesLineId?.let(soldLines::get) ?: return PushResult(opId, "rejected", "sales_line bulunamadi")
+        val qty = BigDecimal(ret.qty)
+        if (sold.returned + qty > sold.qty) return PushResult(opId, "rejected", "iade miktari satilandan fazla")
+        sold.returned += qty
+        val wh = balances.getValue(sold.lotId)
+        wh[sold.warehouseId] = (wh[sold.warehouseId] ?: BigDecimal.ZERO) + qty
+        emitLot(sold.lotId)
+        return PushResult(opId, "applied", "iade kaydedildi")
+    }
+
+    /** Sunucu gibi: bakiyesi degisen lot icin yeni seq ile bakiyeli upsert. */
+    private fun emitLot(lotId: String) {
+        val wh = balances.getValue(lotId)
+        val payload = JsonObject(
+            lots.getValue(lotId) + mapOf(
+                "qty_on_hand" to JsonPrimitive(wh.values.fold(BigDecimal.ZERO, BigDecimal::add).setScale(Decimals.QTY_SCALE).toPlainString()),
+                "balances" to JsonArray(
+                    wh.map { (whId, q) ->
+                        buildJsonObject {
+                            put("warehouse_id", JsonPrimitive(whId))
+                            put("warehouse_code", JsonPrimitive(warehouseCodes[whId].orEmpty()))
+                            put("qty_on_hand", JsonPrimitive(q.setScale(Decimals.QTY_SCALE).toPlainString()))
+                        }
+                    },
+                ),
+            ),
+        )
+        changes += buildJsonObject {
+            put("seq", JsonPrimitive(changes.maxOf(::seqOf) + 1))
+            put("entity", JsonPrimitive("lot"))
+            put("entity_id", JsonPrimitive(lotId))
+            put("action", JsonPrimitive("upsert"))
+            put("payload", payload)
+        }
     }
 }
+
+// Go sunucusunun kabul ettigi alanlar (backend/internal/domain/sales.go); fazlasi strict decode'da patlar.
+@Serializable
+private data class ServerSalesOrder(
+    val id: String? = null,
+    @SerialName("order_no") val orderNo: String? = null,
+    @SerialName("customer_id") val customerId: String,
+    @SerialName("warehouse_id") val warehouseId: String,
+    @SerialName("device_id") val deviceId: String? = null,
+    @SerialName("sold_at") val soldAt: String,
+    val lines: List<ServerSalesLine>,
+    @SerialName("create_shipment") val createShipment: Boolean? = null,
+)
+
+@Serializable
+private data class ServerSalesLine(
+    val id: String? = null,
+    @SerialName("item_id") val itemId: String,
+    @SerialName("lot_id") val lotId: String,
+    val qty: String,
+    @SerialName("unit_price") val unitPrice: String,
+)
+
+@Serializable
+private data class ServerCustomerReturn(
+    val id: String? = null,
+    @SerialName("return_no") val returnNo: String? = null,
+    @SerialName("customer_id") val customerId: String,
+    @SerialName("sales_line_id") val salesLineId: String? = null,
+    @SerialName("lot_id") val lotId: String? = null,
+    val qty: String,
+    val reason: String,
+    @SerialName("returned_at") val returnedAt: String? = null,
+)
