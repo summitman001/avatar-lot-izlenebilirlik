@@ -268,6 +268,60 @@ Kurallar: yalnızca tek hareketli belgelerin hareketleri geri alınabilir (bugü
 
 ---
 
+## Alışlar (`purchase-receipts`)
+
+Bir alış fişi (`purchase_receipt`) bir veya daha fazla satır (`purchase_receipt_line`) içerir; her
+satır **tek bir lot** + `purchase_in` hareketi doğurur — `POST /purchase-receipts` yazma yolu
+`POST /lots` ile **AYNI** fonksiyonu (`createPurchaseLotInTx`) her satır için bir kez çağırır;
+tek fark çok satırlı belgenin **tek bir transaction'da** yazılmasıdır (bir satır başarısız olursa
+hiçbiri kalmaz).
+
+### `GET /purchase-receipts`
+
+Filtreler: `supplier_id`, `item_id` (en az bir satırında bu ürün olan belgeler), `from`/`to`
+(`received_at` tarih aralığı), `has_mismatch` (en az bir satırda tutar uyuşmazlığı). Satır
+içermez (performans, diğer liste uç noktalarıyla aynı desen):
+
+```json
+{
+  "items": [
+    {
+      "id": "01a1...", "doc_no": "PR-KZ-2026-001", "supplier_id": "01a1...",
+      "supplier_name": "Yayla Hayvancılık", "invoice_no": "HY-F-0001", "received_at": "2026-03-02",
+      "line_count": 1, "total_amount": "287.5000", "has_mismatch": true, "created_at": "2026-10-28T..."
+    }
+  ]
+}
+```
+
+### `GET /purchase-receipts/{id}`
+
+Belge başlığı + satırlar (hesaplanan `line_total` ve beyan edilen `declared_line_total` yan yana,
+`has_mismatch`) + satırların oluşturduğu **lotlar** (tam `Lot` görünümü, bakiye dahil) + ilgili
+`purchase_in` **stok hareketleri**.
+
+### `POST /purchase-receipts` — çok satırlı alış fişi oluştur
+
+```json
+{
+  "supplier_id": "01a1...",
+  "invoice_no": "HY-F-0001",
+  "received_at": "2026-03-02",
+  "lines": [
+    { "lot_no": "KZ-2026-001", "item_id": "01a1...", "warehouse_id": "01a1...", "qty": "25.000", "unit_price": "11.5000", "declared_line_total": "351.0000" },
+    { "lot_no": "KZ-2026-002", "item_id": "01a1...", "warehouse_id": "01a1...", "qty": "18.500", "unit_price": "11.7500" }
+  ]
+}
+```
+
+`doc_no` opsiyoneldir: verilmezse `AF-<yıl>-NNN` **atomik** üretilir ve tüm satırlar bu belgeye
+yazılır; verilip aynı `doc_no` + aynı `supplier_id` ile tekrar gönderilirse mevcut belgeye satır
+eklenir (`POST /lots` ile aynı kural), başka tedarikçiye aitse `409`. `201` yanıtı
+`GET /purchase-receipts/{id}` ile aynı biçimdedir (`lines`/`lots`/`movements` dahil). Hatalar:
+`409` (tekrarlanan `lot_no`/`doc_no` çakışması), `422` (`lines` boş, alan doğrulaması).
+
+---
+
 ## Satış / Sevkiyat / İade
 
 Ayrıntılı: [`backend/api/openapi.yaml`](../backend/api/openapi.yaml) (`sales` tag'i).
@@ -704,3 +758,61 @@ Severity bazında AÇIK (`acknowledged=false`) uyarı sayısı (web dashboard ka
 
 `GET /production-orders/{id}` ve `GET /cutting-orders/{id}` (ve `PUT .../outputs`) yanıtlarında
 `anomaly_alerts` alanı, o emre ait tüm uyarıları (`AnomalyAlert` listesi) içerir.
+
+## Tahminler (`predictions`)
+
+`prediction` tablosunun **TÜM** satırlarını (production + cutting, geçmiş dahil, her aşama/sipariş
+ayrı satır) düz bir listede gösterir — `GET /production-orders/{id}`/`GET /cutting-orders/{id}`
+içine gömülü "en güncel tahmin" görünümünden farklı olarak **örnek tahminler ve doğruluk
+değerlendirmesi** içindir (ayrıntılı rapor: [`docs/ml-report.md`](ml-report.md)).
+
+Genel metrik: production için `predicted_delivered_qty`/`actual_delivered_qty` (adet) —
+`docs/ml-report.md`'deki rolling-origin değerlendirmenin asıl hedefi budur; hibrit EKP tahmini
+(yalnız `stage=materials_sent`) ayrıca `predicted_ekp_unit`/`actual_ekp_unit`/`ekp_error_*`
+alanlarında taşınır. cutting için parça başına kg — özet değer parçalar arası **ortalama** mutlak
+hata/yüzdedir, ayrıntı `parts[]`'tadır (web "Tahminler" sayfasında satır genişletilince gösterilir).
+
+### `GET /predictions`
+
+Filtreler: `target_type` (`production|cutting`), `model_name`, `from`/`to` (`created_at` tarih
+aralığı), `has_actual` (`true|false`, gerçek değer girilmiş kayıtlar). Yeniden eskiye sıralanır.
+
+```json
+{
+  "items": [
+    {
+      "id": "01a1...", "created_at": "2026-10-28T17:29:08Z", "target_type": "production",
+      "stage": "materials_sent", "ref_type": "production_order", "ref_id": "01a1...",
+      "ref_no": "URT-2026-045", "model_name": "production_baseline_supplier_mean",
+      "model_version": "1", "baseline": true, "metric": "delivered_qty", "metric_unit": "adet",
+      "predicted_value": "84.87", "actual_value": "85.000", "error_abs": "0.130", "error_pct": "0.15",
+      "has_actual": true, "predicted_ekp_unit": "18.1783", "actual_ekp_unit": "18.1588",
+      "ekp_error_abs": "-0.0195", "ekp_error_pct": "0.11"
+    },
+    {
+      "id": "01a1...", "created_at": "2026-10-28T17:29:08Z", "target_type": "cutting",
+      "stage": null, "ref_type": "cutting_order", "ref_id": "01a1...", "ref_no": "CUT-2026-001",
+      "model_name": "cutting_ridge_multi", "model_version": "1", "baseline": false,
+      "metric": "part_weight", "metric_unit": "kg", "predicted_value": "21.000", "actual_value": "25.000",
+      "error_abs": "2.000", "error_pct": "11.11", "has_actual": true,
+      "parts": [
+        { "part_key": "but", "predicted_kg": "18.00", "actual_kg": "22.000", "diff_kg": "4.000", "diff_pct": "22.22" },
+        { "part_key": "fire", "predicted_kg": "3.00", "actual_kg": "3.000", "diff_kg": "0.000", "diff_pct": "0.00" }
+      ]
+    }
+  ]
+}
+```
+
+### `GET /predictions/summary`
+
+`target_type` bazında kayıt sayısı, gerçeği girilmiş kayıt sayısı, **MAE** (ortalama mutlak hata,
+`metric_unit` biriminde) ve **MAPE** (ortalama mutlak yüzde hata) — yalnızca `has_actual=true`
+kayıtlar üzerinden hesaplanır (web "Tahminler" sayfasının üst kartları):
+
+```json
+{
+  "production": { "count": 8, "count_with_actual": 4, "mae": "5.5100", "mape": "14.99" },
+  "cutting": { "count": 3, "count_with_actual": 1, "mae": "2.0000", "mape": "11.11" }
+}
+```

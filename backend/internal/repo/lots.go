@@ -146,106 +146,117 @@ func exists(ctx context.Context, q DBTX, table, id string) (bool, error) {
 	return err == nil, err
 }
 
-// CreatePurchaseLot bir alis lotunu TEK transaction'da olusturur:
-// purchase_receipt (varsa yeniden kullanilir) + lot + purchase_receipt_line + purchase_in stok hareketi + change_log.
+// createPurchaseLotInTx CreatePurchaseLot/CreatePurchaseReceipt'in PAYLASTIGI tek yol: verilen tx
+// icinde bir alis lotu + purchase_receipt_line + purchase_in stok hareketi + change_log yazar.
+// Belge (purchase_receipt) yoksa olusturur, ayni doc_no + ayni tedarikci ile varsa mevcut belgeye
+// satir ekler (coklu satirli belge -- bkz. docs/api-contract.md).
 //
 // line_total = round2(qty x unit_price) (hesaplanan). declared_line_total verilmis ve farkliysa
 // has_mismatch=true (ornek KZ-2026-001: 25 x 11.50 = 287.50, belgede 351.00).
-func (s *Store) CreatePurchaseLot(ctx context.Context, in domain.PurchaseLotRequest) (*domain.Lot, error) {
-	lotID, err := resolveIDPtr(in.ID)
+func createPurchaseLotInTx(ctx context.Context, tx *sql.Tx, in domain.PurchaseLotRequest) (lotID, receiptID string, err error) {
+	lotID, err = resolveIDPtr(in.ID)
 	if err != nil {
-		return nil, err
+		return "", "", err
 	}
-	var out *domain.Lot
-	var purchaseReceiptID string
-	err = s.InTx(ctx, func(tx *sql.Tx) error {
-		item, err := getItem(ctx, tx, in.ItemID)
-		if errors.Is(err, domain.ErrNotFound) {
-			return domain.Invalid("item_id bulunamadi")
-		} else if err != nil {
-			return err
+	item, err := getItem(ctx, tx, in.ItemID)
+	if errors.Is(err, domain.ErrNotFound) {
+		return "", "", domain.Invalid("item_id bulunamadi")
+	} else if err != nil {
+		return "", "", err
+	}
+	if !item.IsActive {
+		return "", "", domain.Invalid("urun pasif: %s", item.Code)
+	}
+	for table, id := range map[string]string{"supplier": in.SupplierID, "warehouse": in.WarehouseID} {
+		ok, err := exists(ctx, tx, table, id)
+		if err != nil {
+			return "", "", err
 		}
-		if !item.IsActive {
-			return domain.Invalid("urun pasif: %s", item.Code)
+		if !ok {
+			return "", "", domain.Invalid("%s_id bulunamadi", table)
 		}
-		for table, id := range map[string]string{"supplier": in.SupplierID, "warehouse": in.WarehouseID} {
-			ok, err := exists(ctx, tx, table, id)
-			if err != nil {
-				return err
-			}
-			if !ok {
-				return domain.Invalid("%s_id bulunamadi", table)
-			}
-		}
+	}
 
-		// Belge: ayni belge no + ayni tedarikci => mevcut belgeye satir eklenir.
-		docNo := "PR-" + in.LotNo
-		if in.DocNo != nil {
-			docNo = *in.DocNo
-		}
-		var receiptID, receiptSupplier string
-		err = tx.QueryRowContext(ctx, `SELECT id, supplier_id FROM purchase_receipt WHERE doc_no = ? FOR UPDATE`, docNo).
-			Scan(&receiptID, &receiptSupplier)
-		switch {
-		case errors.Is(err, sql.ErrNoRows):
-			receiptID = domain.NewID()
-			if _, err := tx.ExecContext(ctx,
-				`INSERT INTO purchase_receipt (id, doc_no, supplier_id, invoice_no, received_at) VALUES (?, ?, ?, ?, ?)`,
-				receiptID, docNo, in.SupplierID, in.InvoiceNo, in.ReceivedAt); err != nil {
-				return mapErr(err)
-			}
-		case err != nil:
-			return err
-		case receiptSupplier != in.SupplierID:
-			return domain.Conflict("belge %s baska bir tedarikciye ait", docNo)
-		}
-		purchaseReceiptID = receiptID
-
-		lineTotal := domain.LineTotal(in.Qty.Decimal, in.UnitPrice.Decimal)
-		var declared *decimal.Decimal
-		var declaredAmt *domain.Amount
-		if in.DeclaredLineTotal != nil {
-			declared = &in.DeclaredLineTotal.Decimal
-			declaredAmt = in.DeclaredLineTotal
-		}
-		mismatch := domain.HasMismatch(lineTotal, declared)
-
+	// Belge: ayni belge no + ayni tedarikci => mevcut belgeye satir eklenir.
+	docNo := "PR-" + in.LotNo
+	if in.DocNo != nil {
+		docNo = *in.DocNo
+	}
+	var receiptSupplier string
+	err = tx.QueryRowContext(ctx, `SELECT id, supplier_id FROM purchase_receipt WHERE doc_no = ? FOR UPDATE`, docNo).
+		Scan(&receiptID, &receiptSupplier)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		receiptID = domain.NewID()
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO lot (id, lot_no, item_id, supplier_id, origin_type, origin_id, received_or_produced_at,
-			                  expiry_date, initial_qty, uom, unit_cost, status)
-			 VALUES (?, ?, ?, ?, 'purchase', ?, ?, ?, ?, ?, ?, 'active')`,
-			lotID, in.LotNo, in.ItemID, in.SupplierID, receiptID, in.ReceivedAt, in.ExpiryDate,
-			in.Qty, item.BaseUOM, in.UnitPrice); err != nil {
-			return mapErr(err)
+			`INSERT INTO purchase_receipt (id, doc_no, supplier_id, invoice_no, received_at) VALUES (?, ?, ?, ?, ?)`,
+			receiptID, docNo, in.SupplierID, in.InvoiceNo, in.ReceivedAt); err != nil {
+			return "", "", mapErr(err)
 		}
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO purchase_receipt_line (id, receipt_id, item_id, lot_id, qty, unit_price, line_total,
-			                                    declared_line_total, has_mismatch)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			domain.NewID(), receiptID, in.ItemID, lotID, in.Qty, in.UnitPrice,
-			domain.NewAmount(lineTotal), declaredAmt, mismatch); err != nil {
-			return mapErr(err)
-		}
-		if _, err := insertMovement(ctx, tx, domain.StockMovement{
-			LotID:        lotID,
-			WarehouseID:  in.WarehouseID,
-			MovementType: "purchase_in",
-			Qty:          in.Qty,
-			UnitCost:     in.UnitPrice,
-			RefType:      "purchase_receipt",
-			RefID:        receiptID,
-		}); err != nil {
-			return err
-		}
-		// hareketten SONRA ve bakiyeli: cihaz yeni lotun stogunu pull'dan ogrenir (docs/sync.md)
-		if out, err = getLot(ctx, tx, lotID, true); err != nil {
-			return err
-		}
-		return appendChange(ctx, tx, "lot", lotID, "upsert", out)
+	case err != nil:
+		return "", "", err
+	case receiptSupplier != in.SupplierID:
+		return "", "", domain.Conflict("belge %s baska bir tedarikciye ait", docNo)
+	}
+
+	lineTotal := domain.LineTotal(in.Qty.Decimal, in.UnitPrice.Decimal)
+	var declared *decimal.Decimal
+	var declaredAmt *domain.Amount
+	if in.DeclaredLineTotal != nil {
+		declared = &in.DeclaredLineTotal.Decimal
+		declaredAmt = in.DeclaredLineTotal
+	}
+	mismatch := domain.HasMismatch(lineTotal, declared)
+
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO lot (id, lot_no, item_id, supplier_id, origin_type, origin_id, received_or_produced_at,
+		                  expiry_date, initial_qty, uom, unit_cost, status)
+		 VALUES (?, ?, ?, ?, 'purchase', ?, ?, ?, ?, ?, ?, 'active')`,
+		lotID, in.LotNo, in.ItemID, in.SupplierID, receiptID, in.ReceivedAt, in.ExpiryDate,
+		in.Qty, item.BaseUOM, in.UnitPrice); err != nil {
+		return "", "", mapErr(err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO purchase_receipt_line (id, receipt_id, item_id, lot_id, qty, unit_price, line_total,
+		                                    declared_line_total, has_mismatch)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		domain.NewID(), receiptID, in.ItemID, lotID, in.Qty, in.UnitPrice,
+		domain.NewAmount(lineTotal), declaredAmt, mismatch); err != nil {
+		return "", "", mapErr(err)
+	}
+	if _, err := insertMovement(ctx, tx, domain.StockMovement{
+		LotID:        lotID,
+		WarehouseID:  in.WarehouseID,
+		MovementType: "purchase_in",
+		Qty:          in.Qty,
+		UnitCost:     in.UnitPrice,
+		RefType:      "purchase_receipt",
+		RefID:        receiptID,
+	}); err != nil {
+		return "", "", err
+	}
+	// hareketten SONRA ve bakiyeli: cihaz yeni lotun stogunu pull'dan ogrenir (docs/sync.md)
+	lotView, err := getLot(ctx, tx, lotID, true)
+	if err != nil {
+		return "", "", err
+	}
+	if err := appendChange(ctx, tx, "lot", lotID, "upsert", lotView); err != nil {
+		return "", "", err
+	}
+	return lotID, receiptID, nil
+}
+
+// CreatePurchaseLot bir alis lotunu TEK transaction'da olusturur (createPurchaseLotInTx).
+func (s *Store) CreatePurchaseLot(ctx context.Context, in domain.PurchaseLotRequest) (*domain.Lot, error) {
+	var lotID, receiptID string
+	err := s.InTx(ctx, func(tx *sql.Tx) error {
+		var err error
+		lotID, receiptID, err = createPurchaseLotInTx(ctx, tx, in)
+		return err
 	})
 	if err != nil {
 		return nil, err
 	}
-	s.detectPurchaseCostAnomaly(ctx, purchaseReceiptID, in.ItemID, lotID, in.UnitPrice.Decimal) // en iyi gayret, commit sonrasi
-	return s.GetLot(ctx, out.ID)
+	s.detectPurchaseCostAnomaly(ctx, receiptID, in.ItemID, lotID, in.UnitPrice.Decimal) // en iyi gayret, commit sonrasi
+	return s.GetLot(ctx, lotID)
 }
