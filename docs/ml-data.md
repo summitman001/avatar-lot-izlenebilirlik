@@ -91,11 +91,29 @@ Sütunlar: `lamb_id, breed, sex, carcass_kg, but_kg, kol_kg, sirt_kg, kaburga_kg
 
 "Taban oran" ve etki değerleri Türk literatüründeki aralıkları hedefleyen seçilmiş sayılardır; kaynak sütunu literatür eklenince doldurulacak.
 
-## Baseline sonuçları ve öğrenme eğrisi
+## Model değerlendirme protokolü ve raporlar
 
-`python -m train.evaluate` iki rapor yazar:
+**Tek bir train/test bölmesi KULLANILMIYOR** (küçük veri setinde gürültülü sonuç
+verir). `python -m train.evaluate` tüm kayıtlı modelleri (baseline + Ridge/GBM) aynı
+CV protokolünden geçirip üç rapor yazar:
 
-- `ml/reports/baseline_metrics.json`: baseline MAE ve MAPE. Üretim için zaman sıralı bölme (en yeni %20 test), kuzu için rastgele %80/20 (seed 42).
-- `ml/reports/learning_curve.json`: baseline MAE/MAPE'sinin eğitim kaydı sayısıyla değişimi (üretim: 5, 10, 20, 40; kuzu: 10, 25, 50, 100, 160). Üretimde eğitim kayıtları eğitim bölmesinin en yeni n kaydıdır; kuzuda sabit seed ile karıştırılmış iç içe altkümelerdir. Yeni modeller `app.registry.register` ile eklenince aynı fonksiyondan geçer (`--all`).
+- `ml/reports/model_comparison.json`: üretim için **rolling-origin CV** (zaman sıralı,
+  genişleyen pencere, ilk 40 kayıtla başlar, 8 katman), kuzu için **5-fold CV**
+  (shuffle, seed=42). Her model için MAE/MAPE, katmanlar arası std, baseline'a göre
+  iyileşme yüzdesi, paired t-test p değeri; üretim için ayrıca hibrit EKP hata
+  metriği, kuzu için ayrıca normalizasyon öncesi/sonrası MAE.
+- `ml/reports/cv_folds.json`: katman bazında detay (anomali tespiti için kalıntı
+  serileri dahil, bkz. `docs/anomaly-integration.md`).
+- `ml/reports/learning_curve.json`: aynı protokolle, artan eğitim boyutuyla (üretim:
+  5, 10, 20, 40 - sabit boyutlu kayan pencere; kuzu: 10, 25, 50, 100, 160 - k-fold'un
+  her katmanında iç içe altkümeler, sabit seed).
 
-Bu sonuçlar da yukarıdaki sınırlılık notuna tabidir: baseline'ın yakalayamadığı etkiler (mevsim, etkileşim, lot yaşı, karkas ağırlığı) üreteçte bilinçli olarak vardır, böylece yarın eklenecek Ridge ve gradient boosting modellerinin baseline'a karşı kazancı ölçülebilir.
+Sonuçların tam yorumu, grafikleri ve SINIRLILIKLAR bölümü: **`docs/ml-report.md`**.
+Özet: üretimde (Madde A) hiçbir ML modeli baseline'ı istatistiksel olarak anlamlı
+şekilde geçemedi (p>0,2) - baseline aktif kaldı. Parçalamada (Madde B)
+`cutting_ridge_multi` anlamlı şekilde geçti (p=0,0096, %16,4 iyileşme) - aktif model
+olarak seçildi. Aktif model seçimi `ml/app/registry.py:DEFAULT_ACTIVE`'dedir.
+
+Model dosyaları (`ml/models/*.joblib`, `python -m train.train_models` ile üretilir)
+commit'lenir; Docker imajı bunları kopyalar, yeniden eğitim yapmaz (bkz.
+`docs/HANDOFF.md`).
