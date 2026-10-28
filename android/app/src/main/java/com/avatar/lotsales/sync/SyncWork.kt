@@ -13,6 +13,7 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.avatar.lotsales.data.SyncRepository
@@ -23,6 +24,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -54,9 +56,17 @@ class SyncWorker @AssistedInject constructor(
 class SyncScheduler @Inject constructor(@ApplicationContext private val context: Context) {
     private val constraints = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
 
+    /** Bir senkron turu su an calisiyor mu (ust bardaki ve Senkron ekranindaki donen ikon icin). */
+    val running: Flow<Boolean>
+        get() = WorkManager.getInstance(context).let { wm ->
+            combine(wm.getWorkInfosForUniqueWorkFlow(NOW), wm.getWorkInfosForUniqueWorkFlow(PERIODIC)) { now, periodic ->
+                (now + periodic).any { it.state == WorkInfo.State.RUNNING }
+            }.distinctUntilChanged()
+        }
+
     fun schedulePeriodic() {
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-            "sync-periodic",
+            PERIODIC,
             ExistingPeriodicWorkPolicy.KEEP,
             PeriodicWorkRequestBuilder<SyncWorker>(15, TimeUnit.MINUTES).setConstraints(constraints).build(),
         )
@@ -64,13 +74,18 @@ class SyncScheduler @Inject constructor(@ApplicationContext private val context:
 
     fun syncNow() {
         WorkManager.getInstance(context).enqueueUniqueWork(
-            "sync-now",
+            NOW,
             ExistingWorkPolicy.APPEND_OR_REPLACE, // calisan bir tur varsa ardina eklenir: yeni satis da gider
             OneTimeWorkRequestBuilder<SyncWorker>()
                 .setConstraints(constraints)
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .build(),
         )
+    }
+
+    private companion object {
+        const val NOW = "sync-now"
+        const val PERIODIC = "sync-periodic"
     }
 }
 

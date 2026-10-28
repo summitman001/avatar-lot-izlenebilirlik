@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Etiket egik ve kucuk baslar, yaylanarak oturur; sonra delik ve cizgiler belirir. Son kare ic_launcher_foreground ile ayni. -->
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+    <aapt:attr name="android:drawable">
+        <vector
+            android:width="108dp"
+            android:height="108dp"
+            android:viewportWidth="108"
+            android:viewportHeight="108">
+            <group
+                android:name="label"
+                android:pivotX="54"
+                android:pivotY="54"
+                android:rotation="-12"
+                android:scaleX="0.6"
+                android:scaleY="0.6">
+                <path
+                    android:fillColor="#FFFFFF"
+                    android:pathData="M34,40 L58,40 L76,54 L58,68 L34,68 Z" />
+                <path
+                    android:name="lines"
+                    android:fillAlpha="0"
+                    android:fillColor="#2E7D32"
+                    android:pathData="M39,49 L52,49 L52,52 L39,52 Z M39,56 L49,56 L49,59 L39,59 Z" />
+                <group
+                    android:name="hole"
+                    android:pivotX="60"
+                    android:pivotY="54"
+                    android:scaleX="0"
+                    android:scaleY="0">
+                    <path
+                        android:fillColor="#2E7D32"
+                        android:pathData="M60,54 m-4,0 a4,4 0,1 1,8 0 a4,4 0,1 1,-8 0" />
+                </group>
+            </group>
+        </vector>
+    </aapt:attr>
+    <target android:name="label">
+        <aapt:attr name="android:animation">
+            <set>
+                <objectAnimator android:duration="500" android:interpolator="@android:interpolator/overshoot" android:propertyName="scaleX" android:valueFrom="0.6" android:valueTo="1" />
+                <objectAnimator android:duration="500" android:interpolator="@android:interpolator/overshoot" android:propertyName="scaleY" android:valueFrom="0.6" android:valueTo="1" />
+                <objectAnimator android:duration="500" android:interpolator="@android:interpolator/overshoot" android:propertyName="rotation" android:valueFrom="-12" android:valueTo="0" />
+            </set>
+        </aapt:attr>
+    </target>
+    <target android:name="hole">
+        <aapt:attr name="android:animation">
+            <set>
+                <objectAnimator android:duration="250" android:interpolator="@android:interpolator/overshoot" android:propertyName="scaleX" android:startOffset="300" android:valueFrom="0" android:valueTo="1" />
+                <objectAnimator android:duration="250" android:interpolator="@android:interpolator/overshoot" android:propertyName="scaleY" android:startOffset="300" android:valueFrom="0" android:valueTo="1" />
+            </set>
+        </aapt:attr>
+    </target>
+    <target android:name="lines">
+        <aapt:attr name="android:animation">
+            <objectAnimator android:duration="250" android:propertyName="fillAlpha" android:startOffset="380" android:valueFrom="0" android:valueTo="1" />
+        </aapt:attr>
+    </target>
+</animated-vector>
