@@ -84,6 +84,9 @@ func run(ctx context.Context) error {
 	if err := s.independentControlLot(ctx); err != nil {
 		return err
 	}
+	if err := s.anomalyProductionDemo(ctx); err != nil {
+		return err
+	}
 	slog.Info("seed tamam", "olusturulan", s.created, "atlanan", s.skipped)
 	return nil
 }
@@ -337,6 +340,14 @@ func (s *seeder) purchases(ctx context.Context) error {
 		{"KZ-2026-001", "KUZU-BUTUN", "SUP-HAY", "25.000", "11.5000", amtP("351.0000"), "HY-F-0001"},
 		// Parçalama demosu (Görev 2) için ikinci kuzu: tutarsızlık yok, "dengeli" senaryoları için.
 		{"KZ-2026-002", "KUZU-BUTUN", "SUP-HAY", "22.000", "11.5000", nil, "HY-F-0002"},
+		// Anomali demosu (bkz. docs/anomaly-integration.md, anomalyProductionDemo): URT-2026-048 icin
+		// hammaddeler -- ayni fiyatlar, yalniz dusuk-verim senaryosunu olusturmak icin AYRI lotlar.
+		{"ET-2026-900", "ET-DANA", "SUP-ET", "100.000", "9.7000", nil, "ET-F-0900"},
+		{"BHR-2026-900", "BAHARAT-SUCUK", "SUP-BHR", "2.000", "24.0000", nil, "BH-F-0900"},
+		{"BGR-2026-900", "BAGIRSAK", "SUP-BGR", "5.000", "11.6000", nil, "BG-F-0900"},
+		// Anomali demosu: MALIYET_ARTISI -- aynı hammadde (ET-DANA), son alışların (9,70 €/kg)
+		// belirgin üstünde bir fiyatla (ML ayaktaysa /detect/anomaly bunu yakalar).
+		{"ET-2026-901", "ET-DANA", "SUP-ET", "15.000", "13.9000", nil, "ET-F-0901"},
 	} {
 		if _, err := s.store.LotByNo(ctx, v.lotNo); err == nil {
 			s.skipped++
@@ -823,5 +834,74 @@ func (s *seeder) independentControlLot(ctx context.Context) error {
 	}
 	s.created++
 	slog.Info("bagimsiz kontrol lotu satildi", "order_no", saleOrder.OrderNo, "musteri", "MKT-C", "qty", "10")
+	return nil
+}
+
+// anomalyProductionDemo: URT-2026-048, 100 kg etten SADECE 70 adet teslim alinan (normalde ~85 adet
+// beklenir -- diger senaryolarla ayni kompozisyon) dusuk verimli bir dis uretim siparisi. ML servisi
+// ayaktaysa receive sonrasi best-effort /detect/anomaly cagrisi VERIM_DUSUK (ve genelde EKP_SAPMA)
+// uretir; ML kapaliysa siparis yine basariyla olusur/kapanir, sadece uyari olusmaz (bkz.
+// docs/anomaly-integration.md). İkinci demo anomalisi (MALIYET_ARTISI) purchases()'taki ET-2026-901
+// satirindadir.
+func (s *seeder) anomalyProductionDemo(ctx context.Context) error {
+	const orderNo = "URT-2026-048"
+	var existingID string
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM production_order WHERE order_no = ?`, orderNo).Scan(&existingID)
+	if err == nil {
+		s.skipped++
+		return nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+
+	order, err := s.store.CreateProductionOrder(ctx, domain.CreateProductionOrderRequest{
+		OrderNo:             str(orderNo),
+		ProductItemID:       s.must(ctx, "item", "SUCUK-NARIN-1KG"),
+		ProducerSupplierID:  s.must(ctx, "supplier", "SUP-URT"),
+		ExternalWarehouseID: s.must(ctx, "warehouse", "WH-EXT-01"),
+		PlannedQty:          qty("85"),
+		ServiceUnitPrice:    amt("5.5000"),
+		SalePrice:           amtP("24.9000"),
+	})
+	if err != nil {
+		return err
+	}
+	s.created++
+	slog.Info("anomali demosu: dusuk verimli uretim siparisi olusturuldu", "order_no", order.OrderNo)
+
+	lines := []domain.SendMaterialsLine{}
+	for _, v := range []struct{ lotNo, qty string }{
+		{"ET-2026-900", "100.000"}, {"BHR-2026-900", "2.000"}, {"BGR-2026-900", "5.000"},
+	} {
+		lot, err := s.store.LotByNo(ctx, v.lotNo)
+		if err != nil {
+			return fmt.Errorf("sevk icin lot bulunamadi %s: %w", v.lotNo, err)
+		}
+		lines = append(lines, domain.SendMaterialsLine{LotID: lot.ID, Qty: qty(v.qty)})
+	}
+	order, err = s.store.SendMaterials(ctx, order.ID, domain.SendMaterialsRequest{Lines: lines})
+	if err != nil {
+		return err
+	}
+
+	// 100 kg etten SADECE 70 adet: normalde (ayni kompozisyonla, bkz. URT-2026-045) ~85 adet cikar.
+	order, err = s.store.ReceiveProduction(ctx, order.ID, domain.ReceiveProductionRequest{
+		ReceivedQty:        qty("70"),
+		OutputLotNo:        str("SUC-2026-048"),
+		ServiceInvoiceNo:   str("URT-2026-048-INV"),
+		ServiceInvoicedQty: qtyP("70"),
+	})
+	if err != nil {
+		return err
+	}
+	slog.Info("anomali demosu: dusuk verimli mamul teslim alindi", "order_no", order.OrderNo,
+		"ekp_unit", order.EkpUnit.StringFixed(domain.AmountScale))
+
+	order, err = s.store.CloseProductionOrder(ctx, order.ID, domain.CloseProductionOrderRequest{})
+	if err != nil {
+		return err
+	}
+	slog.Info("anomali demosu: siparis kapandi", "order_no", order.OrderNo, "status", order.Status)
 	return nil
 }
