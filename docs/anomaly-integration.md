@@ -1,10 +1,9 @@
 # Anomali Tespiti Entegrasyonu (ML -> Go)
 
-> **Kapsam notu:** Bu dosya yalnızca **sözleşmeyi** tanımlar. Go backend entegrasyonu
-> (`anomaly_alert` tablosuna yazma, hangi adımlardan sonra çağrılacağı, cron/poll vb.)
-> bu işte **yapılmadı** — bir sonraki iş kalemidir (bkz. `docs/HANDOFF.md`, "Sıradaki
-> 5 iş"). `ml/app/anomaly.py` ve `POST /detect/anomaly` zaten servis içinde çalışır
-> durumdadır ve `ml/tests/test_anomaly.py` + `ml/tests/test_api.py` ile test edilmiştir.
+> **Durum:** ML servisi tarafı (`ml/app/anomaly.py`, `POST /detect/anomaly`) ve **Go backend
+> entegrasyonu** (bu dosyanın tanımladığı sözleşme + `anomaly_alert` tablosuna yazma, çağrı
+> noktaları, GET/PATCH uç noktaları, web sayfası) ikisi de **tamamlandı**. Go tarafının gerçek
+> davranışı aşağıdaki "Go entegrasyonu" bölümündedir; uygulama `backend/internal/repo/anomaly.go`'dadır.
 
 ## Genel ilkeler
 
@@ -93,19 +92,63 @@ tıpkı `/predict/production` ve `/predict/cutting` gibi, aktif model `GET /mode
   kendi `code` kuralı gibi, bkz. `docs/HANDOFF.md` madde 13):
   `VERIM_DUSUK`, `FIRE_YUKSEK`, `MALIYET_ARTISI`, `EKP_SAPMA`, `KUTLE_DENGESI`.
 
-## Önerilen Go entegrasyon noktaları (yapılmadı, öneri)
+## Go entegrasyonu
 
-| Kural | Önerilen çağrı noktası | Kaynak veri |
+Uygulama: `backend/internal/repo/anomaly.go` (+ `mlclient.go`'da `DetectAnomaly`). **İlke: anomali
+uyarıları SADECE BİLGİLENDİRMEDİR.** Bu dosyadaki hiçbir kod bir lotu bloke etmez, bir işlemi
+reddetmez veya başka bir transaction'ı geri aldırmaz (bkz. `docs/assumptions.md`). Lot
+izlenebilirliği, geri çağırma ve stok kararları kesin kayıt ilişkilerine dayanır, anomaliye değil.
+
+### 1. Tetikleme noktaları (ML, en iyi gayret)
+
+Her biri kendi işleminin transaction'ı **COMMIT olduktan SONRA** (ayrı bir best-effort fonksiyonla)
+çağrılır; ML çağrısı başarısız olursa (kapalı/zaman aşımı) yalnızca loglanır, asıl işlem bozulmaz:
+
+| Kural | Çağrı noktası | Kaynak veri |
 |---|---|---|
-| `VERIM_DUSUK` | `receive` (dış üretim teslim alındığında) | `actual_yield_ratio = output_kg/et_kg` (zaten hesaplı, bkz. `production_cost.go`) |
-| `FIRE_YUKSEK` | `close` (parçalama kapanışında) | `actual_fire_kg` = fire çıktısının kg'ı, `cutting_order`'dan |
-| `MALIYET_ARTISI` | `POST /lots` (alış lotu oluşturulduğunda) | `recent_unit_costs` = aynı hammadde için son 5 `purchase_receipt_line.unit_cost` (SQL: `ORDER BY created_at DESC LIMIT 5`) |
-| `EKP_SAPMA` | `receive` (dış üretim) | `predicted_ekp_unit` zaten `prediction.materials_sent` satırında var (bkz. `docs/assumptions.md` madde 12); `actual_ekp_unit` aynı `receive` çağrısında hesaplanıyor |
-| `KUTLE_DENGESI` | `PUT .../outputs` veya `close` (parçalama) | `input_weight_kg` = `cutting_order.input_weight_kg`; `output_weights_kg` = tüm `cutting_output.actual_kg` + fire |
+| `VERIM_DUSUK` | `ReceiveProduction` sonrası (`detectProductionAnomaly`) | `et_kg` = tüketilen et miktarı (`production_input.qty_consumed`, kategori=`meat`); `actual_yield_ratio = (received_qty × unit_weight_kg) / et_kg`; opsiyonel `supplier_id` yalnızca TÜM sevk edilen hammaddeler AYNI tedarikçidense doldurulur (`singleSupplierOf`) |
+| `EKP_SAPMA` | `ReceiveProduction` sonrası (aynı fonksiyon) | `predicted_ekp_unit` = en güncel `prediction` satırının `predicted_ekp_unit`'i (materials_sent aşaması, bkz. madde 12); `actual_ekp_unit` = `production_order.ekp_unit`. İkisi de yoksa ML hiç çağrılmaz |
+| `FIRE_YUKSEK` | `CloseCuttingOrder` sonrası (`detectCuttingAnomaly`) | `actual_fire_kg` = reçetede `is_waste=true` olan parçanın fiili ağırlığı; `breed` = `cutting_recipe.animal_type` (sistem ırk değil hayvan türü tutar, bilinçli yaklaşım) |
+| `KUTLE_DENGESI` (ML) | `CloseCuttingOrder` sonrası (aynı fonksiyon) | `input_weight_kg` + `output_weights_kg` = tüm `cutting_output.actual_weight_kg` (fire dahil) |
+| `MALIYET_ARTISI` | `CreatePurchaseLot` (`POST /lots`) sonrası (`detectPurchaseCostAnomaly`) | `recent_unit_costs` = aynı `item_id` için bu satır HARİÇ son 5 `purchase_receipt_line.unit_price` (`ORDER BY created_at DESC LIMIT 5`) |
 
-Bulgular `anomaly_alert` tablosuna (zaten var, `NEGATIVE_STOCK_OFFLINE` için kullanılıyor,
-bkz. `docs/HANDOFF.md` "Stub/TODO") `code`/`severity`/`message`/`evidence_json` olarak
-yazılabilir; okuma uç noktası/web sayfası da henüz yok (aynı TODO).
+Bulgular `applyAnomalyFindings` ile `anomaly_alert`'e yazılır (bkz. madde 3, mükerrer önleme).
+
+### 2. Kural tabanlı ek kontrol (ML'den BAĞIMSIZ, her zaman çalışır)
+
+İki kontrol ML servisinin açık/kapalı olmasından TAMAMEN bağımsızdır:
+
+- **`KUTLE_DENGESİ` (deterministik hali):** `UpdateCuttingOutputs` (`PUT .../outputs`) her çağrıldığında,
+  AYNI transaction'da `checkMassBalanceRule` çalışır: `balance_diff_kg` negatifse (çıktılar — fire
+  dahil — girişi aşıyor, fiziksel olarak imkansız) `critical` uyarı yazılır. Bu durum zaten
+  `closable=false` ile kapatmayı engelliyordu; bu kontrol aynı durumu AYRICA `anomaly_alert`'e
+  kaydeder — iki ayrı mekanizma (ML'in kendi `KUTLE_DENGESI` kuralı ile bu) **aynı `alert_type`'ı**
+  paylaşır, kayıtlar `upsertAnomalyAlert` ile birleşir (mükerrer olmaz).
+- **`NEGATIVE_STOCK_OFFLINE`** (`backend/internal/repo/sales.go`): bir lotun bir depodaki bakiyesi
+  offline satış senaryosunda negatife düşerse. Bu, görev tanımındaki "LOT_HAREKET_TUTARSIZ" kavramıyla
+  **kavramsal olarak aynıdır** (bir lotun hareketi tutarsız/imkansız bir bakiye üretiyor); **iki ayrı
+  sistem olmasın diye** AYRI bir `LOT_HAREKET_TUTARSIZ` alert_type'ı eklenmedi, mevcut
+  `NEGATIVE_STOCK_OFFLINE` kodu `upsertAnomalyAlert` üzerinden yeniden kullanıldı (bkz.
+  `docs/assumptions.md`, "Satış/sevkiyat/iade" bölümü).
+
+### 3. Mükerrer önleme (`upsertAnomalyAlert`)
+
+Aynı `ref_type` + `ref_id` + `alert_type` için zaten AÇIK (`acknowledged=false`) bir uyarı varsa
+yenisi eklenmez, mevcut satır (`severity`/`message`/`evidence_json`/`updated_at`) güncellenir. Böylece
+aynı siparişe/emre tekrar tetiklenen aynı kural kayıt yığmaz (örnek: `PUT .../outputs` draft iken
+birden çok kez çağrılabilir).
+
+### 4. API ve web
+
+- `GET /api/v1/anomaly-alerts` (filtreler: `severity`, `acknowledged`, `ref_type`, `from`/`to`,
+  sayfalama) — her kayıtta `ref_no` (ilgili sipariş/belge numarası, SQL `CASE` ile çözülür).
+- `PATCH /api/v1/anomaly-alerts/{id}` — `acknowledged`/`note` günceller; SADECE uyarının kendisini
+  etkiler, hiçbir lotu/siparişi değiştirmez.
+- `GET /api/v1/anomaly-alerts/summary` — severity bazında AÇIK uyarı sayısı (web dashboard kartı).
+- `GET /production-orders/{id}` ve `GET /cutting-orders/{id}` yanıtlarına `anomaly_alerts` dizisi
+  gömülüdür (`loadAnomalyAlerts`).
+- Web: sol menüde "Uyarılar" sayfası (liste + filtre + okundu işaretleme), üst barda açık kritik
+  uyarı rozeti, Dış Üretim/Parçalama detay sayfalarında uyarı kartı, Dashboard'da severity bazlı özet.
 
 ## Sınırlılıklar
 
@@ -115,3 +158,9 @@ yazılabilir; okuma uç noktası/web sayfası da henüz yok (aynı TODO).
   `docs/ml-report.md` SINIRLILIKLAR).
 - `MALIYET_ARTISI` için geçmiş fiyat listesini ML servisi SAKLAMAZ (veritabanı yok);
   her çağrıda Go'nun göndermesi gerekir.
+- `FIRE_YUKSEK` için gönderilen `breed`, sistemin `cutting_recipe.animal_type`'ıdır (örn. `lamb`) —
+  gerçek ırk (örn. "Akkaraman") hiçbir yerde tutulmaz; ML bu alanı tanımadığı değerde `breed_used`'ı
+  kendi varsayılanına düşürür (bkz. `ml/app/main.py`), sonucu etkilemez ama ırka özgü bir kalibrasyon
+  sağlamaz.
+- `sex` (FIRE_YUKSEK opsiyonel alan) Go tarafından hiç gönderilmez: sistemde hayvan cinsiyeti
+  tutulmaz.

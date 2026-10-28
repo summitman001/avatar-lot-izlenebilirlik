@@ -90,6 +90,14 @@ Bu bölüm Go backend'in (`backend/`) veri modelini ve API davranışını etkil
 4. **Senkron push bugün stub.** `POST /sync/push` yalnızca `op_id`'yi kaydeder; payload'ı **işlemez**. İlk gönderim bu yüzden `applied` değil **`flagged`** döner (istemci "uygulandı" sanıp yerel kaydı silmesin). Aynı `op_id` tekrar gelirse `duplicate`. Payload işleme yazılınca stub kayıtları temizlenmelidir (bkz. `docs/HANDOFF.md`).
 5. **Stok defteri.** `stock_movement` değiştirilemez (UPDATE/DELETE trigger ile reddedilir); düzeltme yalnızca `reversal` kaydıyladır. Giriş tipleri (+), çıkış tipleri (−) işaret kuralı veritabanında CHECK ile zorlanır. Geri alma stoğu negatife düşürüyorsa reddedilir.
 6. **Kimlik doğrulama yok.** API şimdilik açıktır (CORS `*`); yarışma demosu içindir, üretimde eklenmelidir.
+7. **Anomali uyarıları (`anomaly_alert`) SADECE BİLGİLENDİRMEDİR, bir karar mekanizması DEĞİLDİR.**
+   `/detect/anomaly` (ML, en iyi gayret) ve iki kural tabanlı kontrol (deterministik `KUTLE_DENGESI`,
+   `NEGATIVE_STOCK_OFFLINE`) hiçbir lotu bloke etmez, hiçbir işlemi reddetmez; lot izlenebilirliği,
+   geri çağırma ve stok kararları HER ZAMAN kesin kayıt ilişkilerine (stok defteri, `lot_link`)
+   dayanır, bir anomali bulgusuna değil. Ayrıntı ve çağrı noktaları: `docs/anomaly-integration.md`
+   ("Go entegrasyonu"). Görev tanımındaki "LOT_HAREKET_TUTARSIZ" kavramı, mevcut
+   `NEGATIVE_STOCK_OFFLINE` mekanizmasıyla (bkz. "Satış/sevkiyat/iade" bölümü) BİRLEŞTİRİLDİ — iki
+   ayrı sistem yok, aynı `alert_type` ve aynı `upsertAnomalyAlert` yolu kullanılıyor.
 
 ## Dış üretim (Görev 1) servisine ilişkin varsayımlar ve tespitler
 
