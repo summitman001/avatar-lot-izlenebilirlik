@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Etiket (lot) simgesi; 108dp adaptive ikon, guvenli alan ortadaki 66dp. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,40 L58,40 L76,54 L58,68 L34,68 Z" />
+    <path
+        android:fillColor="#2E7D32"
+        android:pathData="M60,54 m-4,0 a4,4 0,1 1,8 0 a4,4 0,1 1,-8 0" />
+    <path
+        android:fillColor="#2E7D32"
+        android:pathData="M39,49 L52,49 L52,52 L39,52 Z M39,56 L49,56 L49,59 L39,59 Z" />
+</vector>

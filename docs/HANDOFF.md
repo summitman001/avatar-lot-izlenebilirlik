@@ -37,7 +37,7 @@ Bu dosya, backend iskeletini devralan full-stack geliştirici içindir. Branch'l
 | Web | Ürünler/Lotlar/Dış Üretim/Parçalama/Satış-Sevkiyat canlı; diğer modüller yok. Web testi yok (yalnızca `tsc` + build). |
 | Çok depolu dış üretim desteklenmiyor | Bir siparişin tüm girdileri aynı depodan sevk edilmeli; çıktı da oraya girer (bkz. `docs/assumptions.md` madde 5). |
 | `suppliers` sync | Senkron akışına dahil değil (spec: item/customer/warehouse/lot). |
-| Android | `android/` boş (`.gitkeep` + README); sözleşme ve entegrasyon rehberi hazır: `docs/android-integration.md`. |
+| Android | `android/`: offline-first satış uygulaması (lot listesi, FEFO'lu satış, satış geçmişi + iade, senkron ekranı); `sales_order`/`customer_return` push'u ve pull gerçek API'ye karşı uçtan uca testli (`RealBackendSyncTest`). Kalanlar: `android/README.md`. |
 
 ## 3. Alınan kararlar ve nedenleri
 

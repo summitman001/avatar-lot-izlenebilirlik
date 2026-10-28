@@ -741,17 +741,18 @@ func (s *Store) CloseCuttingOrder(ctx context.Context, orderID string) (*domain.
 				domain.NewQty(actualKg), unitCost); err != nil {
 				return mapErr(err)
 			}
-			outLot, err := getLot(ctx, tx, outputLotID, false)
-			if err != nil {
-				return err
-			}
-			if err := appendChange(ctx, tx, "lot", outputLotID, "upsert", outLot); err != nil {
-				return err
-			}
 			if _, err := insertMovement(ctx, tx, domain.StockMovement{
 				LotID: outputLotID, WarehouseID: srcWh, MovementType: "cutting_in",
 				Qty: domain.NewQty(actualKg), UnitCost: unitCost, RefType: "cutting_order", RefID: orderID,
 			}); err != nil {
+				return err
+			}
+			// hareketten SONRA ve bakiyeli: cihaz yeni lotun stogunu pull'dan ogrenir (docs/sync.md)
+			outLot, err := getLot(ctx, tx, outputLotID, true)
+			if err != nil {
+				return err
+			}
+			if err := appendChange(ctx, tx, "lot", outputLotID, "upsert", outLot); err != nil {
 				return err
 			}
 			if _, err := tx.ExecContext(ctx,

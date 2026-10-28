@@ -1,0 +1,206 @@
+{
+  "changes": [
+    {
+      "seq": 1,
+      "entity": "item",
+      "entity_id": "01a17000-0000-7000-8000-000000000001",
+      "action": "upsert",
+      "payload": {
+        "id": "01a17000-0000-7000-8000-000000000001",
+        "code": "SUCUK-NARIN-1KG",
+        "name": "Narin Sucuk 1 kg",
+        "item_type": "finished",
+        "base_uom": "adet",
+        "material_category": null,
+        "unit_weight_kg": "1.000",
+        "default_sale_price": "24.9000",
+        "is_active": true,
+        "created_at": "2026-10-23T18:28:27.473Z"
+      }
+    },
+    {
+      "seq": 2,
+      "entity": "warehouse",
+      "entity_id": "01a17000-0000-7000-8000-000000000301",
+      "action": "upsert",
+      "payload": {
+        "id": "01a17000-0000-7000-8000-000000000301",
+        "code": "WH-VAN-01",
+        "name": "Satış Aracı 1",
+        "warehouse_type": "vehicle",
+        "created_at": "2026-10-23T18:28:27.500Z"
+      }
+    },
+    {
+      "seq": 3,
+      "entity": "warehouse",
+      "entity_id": "01a17000-0000-7000-8000-000000000302",
+      "action": "upsert",
+      "payload": {
+        "id": "01a17000-0000-7000-8000-000000000302",
+        "code": "WH-MAIN",
+        "name": "Ana Depo",
+        "warehouse_type": "internal",
+        "created_at": "2026-10-23T18:28:27.505Z"
+      }
+    },
+    {
+      "seq": 4,
+      "entity": "customer",
+      "entity_id": "01a17000-0000-7000-8000-000000000101",
+      "action": "upsert",
+      "payload": {
+        "id": "01a17000-0000-7000-8000-000000000101",
+        "code": "MUS-A",
+        "name": "Market A",
+        "customer_type": "market",
+        "contact_name": "Ayşe Yılmaz",
+        "phone": "+90 212 000 00 01",
+        "email": null,
+        "address": null,
+        "created_at": "2026-10-23T18:28:27.510Z"
+      }
+    },
+    {
+      "seq": 5,
+      "entity": "customer",
+      "entity_id": "01a17000-0000-7000-8000-000000000102",
+      "action": "upsert",
+      "payload": {
+        "id": "01a17000-0000-7000-8000-000000000102",
+        "code": "MUS-B",
+        "name": "Market B",
+        "customer_type": "market",
+        "contact_name": null,
+        "phone": "+90 212 000 00 02",
+        "email": null,
+        "address": null,
+        "created_at": "2026-10-23T18:28:27.520Z"
+      }
+    },
+    {
+      "seq": 6,
+      "entity": "customer",
+      "entity_id": "01a17000-0000-7000-8000-000000000103",
+      "action": "upsert",
+      "payload": {
+        "id": "01a17000-0000-7000-8000-000000000103",
+        "code": "MUS-C",
+        "name": "Market C",
+        "customer_type": "market",
+        "contact_name": null,
+        "phone": null,
+        "email": null,
+        "address": null,
+        "created_at": "2026-10-23T18:28:27.530Z"
+      }
+    },
+    {
+      "seq": 7,
+      "entity": "lot",
+      "entity_id": "01a17000-0000-7000-8000-000000000201",
+      "action": "upsert",
+      "payload": {
+        "id": "01a17000-0000-7000-8000-000000000201",
+        "lot_no": "SUC-2026-045",
+        "item_id": "01a17000-0000-7000-8000-000000000001",
+        "item_code": "SUCUK-NARIN-1KG",
+        "item_name": "Narin Sucuk 1 kg",
+        "supplier_id": null,
+        "supplier_name": null,
+        "origin_type": "production",
+        "origin_id": null,
+        "received_or_produced_at": "2026-10-23",
+        "expiry_date": "2026-12-15",
+        "initial_qty": "85.000",
+        "uom": "adet",
+        "unit_cost": "18.1588",
+        "status": "active",
+        "blocked_reason": null,
+        "created_at": "2026-10-23T18:28:28.000Z",
+        "purchase": null,
+        "qty_on_hand": "85.000",
+        "balances": [
+          {
+            "warehouse_id": "01a17000-0000-7000-8000-000000000301",
+            "warehouse_code": "WH-VAN-01",
+            "qty_on_hand": "85.000"
+          }
+        ]
+      }
+    },
+    {
+      "seq": 8,
+      "entity": "lot",
+      "entity_id": "01a17000-0000-7000-8000-000000000203",
+      "action": "upsert",
+      "payload": {
+        "id": "01a17000-0000-7000-8000-000000000203",
+        "lot_no": "SUC-2026-040",
+        "item_id": "01a17000-0000-7000-8000-000000000001",
+        "item_code": "SUCUK-NARIN-1KG",
+        "item_name": "Narin Sucuk 1 kg",
+        "supplier_id": null,
+        "supplier_name": null,
+        "origin_type": "production",
+        "origin_id": null,
+        "received_or_produced_at": "2026-10-10",
+        "expiry_date": "2026-11-20",
+        "initial_qty": "20.000",
+        "uom": "adet",
+        "unit_cost": "18.4639",
+        "status": "active",
+        "blocked_reason": null,
+        "created_at": "2026-10-10T09:00:00.000Z",
+        "purchase": null,
+        "qty_on_hand": "20.000",
+        "balances": [
+          {
+            "warehouse_id": "01a17000-0000-7000-8000-000000000301",
+            "warehouse_code": "WH-VAN-01",
+            "qty_on_hand": "20.000"
+          }
+        ]
+      }
+    },
+    {
+      "seq": 9,
+      "entity": "lot",
+      "entity_id": "01a17000-0000-7000-8000-000000000202",
+      "action": "upsert",
+      "payload": {
+        "id": "01a17000-0000-7000-8000-000000000202",
+        "lot_no": "SUC-2026-099",
+        "item_id": "01a17000-0000-7000-8000-000000000001",
+        "item_code": "SUCUK-NARIN-1KG",
+        "item_name": "Narin Sucuk 1 kg",
+        "supplier_id": null,
+        "supplier_name": null,
+        "origin_type": "production",
+        "origin_id": null,
+        "received_or_produced_at": "2026-10-15",
+        "expiry_date": "2026-11-30",
+        "initial_qty": "40.000",
+        "uom": "adet",
+        "unit_cost": "18.2000",
+        "status": "blocked",
+        "blocked_reason": "Geri çağırma RC-2026-001",
+        "created_at": "2026-10-15T09:00:00.000Z",
+        "purchase": null,
+        "qty_on_hand": "40.000",
+        "balances": [
+          {
+            "warehouse_id": "01a17000-0000-7000-8000-000000000301",
+            "warehouse_code": "WH-VAN-01",
+            "qty_on_hand": "40.000"
+          }
+        ]
+      }
+    }
+  ],
+  "next_seq": 9,
+  "has_more": false,
+  "blocked_lot_ids": [
+    "01a17000-0000-7000-8000-000000000202"
+  ]
+}
