@@ -112,6 +112,15 @@ func NewDate(y int, m time.Month, day int) Date {
 	return Date{time.Date(y, m, day, 0, 0, 0, 0, time.UTC)}
 }
 
+// ExpiryFrom: SKT acikca verilmisse o; verilmemisse lot tarihi + urunun raf omru; raf omru de
+// tanimsizsa nil (lot SKT'siz kalir).
+func ExpiryFrom(explicit *Date, lotDate Date, shelfLifeDays *int) *Date {
+	if explicit != nil || shelfLifeDays == nil {
+		return explicit
+	}
+	return &Date{lotDate.AddDate(0, 0, *shelfLifeDays)}
+}
+
 // Today sunucunun bugunku UTC tarihini doner (ornek: receive aninda uretilen cikti lotunun tarihi).
 func Today() Date {
 	t := time.Now().UTC()

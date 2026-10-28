@@ -67,6 +67,27 @@ Girdi: giriş ağırlığı (kg), birim maliyet (€/kg, opsiyonel), alış belg
 3. **Yuvarlama: 18,16 × 85 ≠ 1.543,50:** `18,16 × 85 = 1.543,60`, oysa gerçek toplam 1.543,50 (fark 0,10 €). Sebep: 18,16, 18,158823... değerinin 2 ondalığa yuvarlanmış gösterimidir. Değerleme her zaman 4 ondalıklı `ekp_unit` (18,1588 × 85 = 1.543,498, 2 ondalık 1.543,50) veya doğrudan `total_cost` üzerinden yapılmalıdır; `ekp_display` yalnızca ekranda gösterilir. Golden: `UR-004` (`rounding_proof`).
 4. **Senaryo 004 (yan ürünlü) parça ağırlıkları:** Dokümandaki parça kg değerleri 22 kg toplamlıdır (but 7,5 kg, kıyma 2,5 kg). Yan ürün olarak 1,0 kg ciğer eklendiğinde parça toplamı 22 kg kalsın (ve 3,0 kg fire ile giriş 25 kg'a tamamlansın) diye `KZ-2026-004` içinde **but 7,5 → 7,0 kg** ve **kıyma 2,5 → 2,0 kg** indirildi (ana parçalar 21,0 kg + ciğer 1,0 kg = 22,0 kg). Bu, dokümandaki değerlerden bilinçli bir sapmadır; golden açıklamasında da yazılıdır.
 
+## Raf ömrü ve parça satış fiyatı varsayımları (seed)
+
+Yarışma dokümanı raf ömrü ve parça satış fiyatı vermez. Seed verisi soğutulmuş ürün için tipik değerler kullanır; SKT verilmeyen lotlarda SKT bunlardan türetilir (`item.shelf_life_days`, bkz. `docs/api-contract.md`):
+
+| Ürün | Raf ömrü (gün) | Varsayılan satış fiyatı |
+|---|---|---|
+| Dana eti | 7 | — |
+| Sucuk baharatı | 365 | — |
+| Bağırsak | 180 | — |
+| Narin Sucuk 1 kg | 90 | 24,90 € (aşağıda) |
+| Bütün kuzu (karkas) | 5 | — |
+| Kuzu but/kol/sırt/kaburga/gerdan | 5 | reçetenin referans satış fiyatı (16 / 15 / 18 / 12 / 10 €) |
+| Kuzu kıyma | 2 | 11 € (reçete) |
+| Kuzu fire | yok (SKT'siz) | satılmaz |
+
+Parçaların varsayılan satış fiyatı `docs/golden/cutting_case.json` içindeki `reference_sale_price` ile aynıdır (tek kaynak); Android'de satış satırına öneri olarak gelir, satıcı değiştirebilir.
+
+## Cihazdan satış kuralları
+
+Android satış uygulaması yalnızca mamul (`finished`), parça (`cut_part`) ve yan ürün (`by_product`) satar ve yalnızca iç depodan (`internal`) veya araçtan (`vehicle`) satış yapar. Cihaz hammadde/fire lotlarını, cihaz deposunda stoğu olmayan lotları ve karantina/dış üretici depolarını hiç göstermez; sunucu da bu kurala aykırı bir `sales_order` push'unu `rejected` ile reddeder (`DEVICE_SALE_ITEM_TYPE`, `DEVICE_SALE_WAREHOUSE`). Bu bir sözleşme ihlalidir, offline tolerans uygulanmaz: geri çağrılan lot veya yetersiz stok gibi fiziksel olarak gerçekleşmiş satışların aksine, kuralı uygulayan bir cihaz bu satışı hiç oluşturamaz. Web (REST) satışı bu kurala tabi değildir (örn. toptan hammadde satışı).
+
 ## VKP varsayımı (24,90 €)
 
 Doküman senaryosunda satış fiyatı (VKP) verilmediği için kâr ve marj örneği 24,90 € varsayımıyla hesaplanır. Bu değer yarışma dokümanından gelmez; `UR-001` ile `UR-004` arası golden senaryolarında kullanılır. `UR-005` satış fiyatsız örnektir (kâr alanları `null`); `UR-006` aynı fiyatın yarısını (12,45 € / 500 g) kullanır.

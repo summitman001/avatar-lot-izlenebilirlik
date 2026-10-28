@@ -151,6 +151,9 @@ func (s *Store) applySyncOperation(ctx context.Context, tx *sql.Tx, deviceID str
 		if err := req.Validate(); err != nil {
 			return nil, err
 		}
+		if err := checkDeviceSale(ctx, tx, req); err != nil {
+			return nil, err
+		}
 		order, violations, err := s.createSalesOrderInTx(ctx, tx, req, SaleOptions{Online: false})
 		if err != nil {
 			return nil, err
@@ -180,6 +183,39 @@ func (s *Store) applySyncOperation(ctx context.Context, tx *sql.Tx, deviceID str
 	default:
 		return nil, domain.Invalid("desteklenmeyen entity: %s", op.Entity)
 	}
+}
+
+// Cihaz (Android satis uygulamasi) yalniz mamul/parca/yan urun satar, yalniz ic depodan veya
+// aractan: hammadde/fire satisi ya da karantina/dis uretici deposundan satis sozlesme ihlalidir ->
+// rejected (hicbir kayit yazilmaz). Web (REST) satisi bu kurala tabi degil (or. toptan hammadde).
+var (
+	deviceSaleItemTypes      = map[string]bool{"finished": true, "cut_part": true, "by_product": true}
+	deviceSaleWarehouseTypes = map[string]bool{"internal": true, "vehicle": true}
+)
+
+// checkDeviceSale bulunamayan depo/urunu atlar: onlari createSalesOrderInTx "bulunamadi" diye reddeder.
+func checkDeviceSale(ctx context.Context, q DBTX, req domain.CreateSalesOrderRequest) error {
+	var whType string
+	err := q.QueryRowContext(ctx, `SELECT warehouse_type FROM warehouse WHERE id = ?`, req.WarehouseID).Scan(&whType)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if err == nil && !deviceSaleWarehouseTypes[whType] {
+		return domain.Invalid("cihazdan %s tipindeki depodan satis yapilamaz (DEVICE_SALE_WAREHOUSE)", whType)
+	}
+	for i, line := range req.Lines {
+		var itemType string
+		err := q.QueryRowContext(ctx, `SELECT item_type FROM item WHERE id = ?`, line.ItemID).Scan(&itemType)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		} else if err != nil {
+			return err
+		}
+		if !deviceSaleItemTypes[itemType] {
+			return domain.Invalid("lines[%d]: %s tipindeki urun cihazdan satilamaz (DEVICE_SALE_ITEM_TYPE)", i, itemType)
+		}
+	}
+	return nil
 }
 
 // strictUnmarshal bilinmeyen alanlari reddeder (REST decodeBody ile ayni kural).

@@ -85,6 +85,9 @@ Satış cihazda fiziksel olarak zaten oldu: sunucu reddetmez, kaydeder ve kurall
 - **Bakiye yetersizse:** satış yine kaydedilir, stok **negatife düşer**, bir `anomaly_alert`
   (`severity: critical`, `alert_type: NEGATIVE_STOCK_OFFLINE`, `ref_type: sales_line`) açılır, sonuç
   `flagged` (`message: "NEGATIVE_STOCK_OFFLINE"`; iki ihlal birden varsa virgülle: `"LOT_BLOCKED_AT_SALE,NEGATIVE_STOCK_OFFLINE"`).
+- **Cihazdan satılamayan ürün tipi veya depo:** hammadde/fire satışı (`DEVICE_SALE_ITEM_TYPE`) ya da
+  karantina/dış üretici deposundan satış (`DEVICE_SALE_WAREHOUSE`) `"rejected"`, hiçbir kayıt yazılmaz
+  (bkz. `docs/assumptions.md`, "Cihazdan satış kuralları").
 - **Bozuk payload veya bilinmeyen lot/müşteri/ürün/sales_line:** `"rejected"` ve açık mesaj, **hiçbir
   kayıt yazılmaz** (ne `sales_order`/`sales_line`/`stock_movement`, ne `processed_request`).
 - **Satılan miktarın üstünde `customer_return`:** aynı şekilde `rejected` (offline tolerans yalnızca
@@ -123,8 +126,9 @@ UNIQUE ihlaliyle çarpışır, o transaction tamamen geri alınır (hiçbir yan 
 - `changes`: `seq > since_seq`, `seq` sırasıyla, en fazla `limit` (varsayılan 500, en çok 1000). Bugün `entity`: `item`, `customer`, `warehouse`, `lot`. Bu tablolara yazan her repo fonksiyonu `change_log` kaydını **aynı transaction'da** atar; yazma geri alınırsa kayıt da gitmez.
 - `action`: `upsert | delete`. Bugün yalnızca `upsert` (silme yok).
 - `payload`: varlığın API JSON'u, yazıldığı andaki hâli. **Lot payload'ı `qty_on_hand`/`balances` İÇERİR**
-  (önceki sözleşmenin aksine): lot oluştuğunda (alış, üretim çıktısı, parçalama çıktısı) ve bir satış,
-  iade veya bloke/açma işlemi lotun bakiyesini veya durumunu değiştirdiğinde, o lot için TAM detaylı bir
+  (önceki sözleşmenin aksine): lot oluştuğunda (alış, üretim çıktısı, parçalama çıktısı) ve lotun
+  bakiyesini veya durumunu değiştiren her işlemde (satış, iade, bloke/açma, dış üreticiye sevk, üretim
+  kabulündeki iade/tüketim, parçalamada giriş lotunun tüketimi, hareket geri alma) o lot için TAM detaylı bir
   `upsert` kaydı yazılır — cihaz böylece kendi offline
   hesapladığı bakiyeyi sunucunun otoriter değeriyle karşılaştırıp düzeltebilir (`qty_on_hand_server`
   niyetiyle; alan adı sözleşmedeki mevcut `qty_on_hand` alanıyla aynıdır, ayrı bir alan EKLENMEDİ).
@@ -171,5 +175,6 @@ Push'u pull'dan önce yapmak, cihazın kendi işlemlerinin sonuçlarını (ör. 
 | Geri çağrılmış/bloke lot satışı | Kaydedilir, `sales_line.recall_violation = TRUE`, `flagged`. |
 | Satılandan fazla `customer_return` | `rejected`, hiçbir kayıt yazılmaz (iade için offline tolerans yok). |
 | Bilinmeyen müşteri/ürün/lot/sales_line | `rejected`, hiçbir kayıt yazılmaz. |
+| Hammadde/fire satışı veya karantina/dış üretici deposundan satış | `rejected` (`DEVICE_SALE_ITEM_TYPE` / `DEVICE_SALE_WAREHOUSE`), hiçbir kayıt yazılmaz. |
 | Ana veri çakışması (aynı `code`) | Cihaz ana veri oluşturmaz; ana veri yalnızca sunucudan gelir (pull). |
 | Hareket düzeltme | Defter değiştirilemez; düzeltme `reversal` hareketiyle (`POST /stock-movements/{id}/reverse`, `id` verilirse idempotent). |

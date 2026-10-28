@@ -178,8 +178,10 @@ func (s *Store) ReverseMovement(ctx context.Context, id string, req domain.Rever
 			return domain.Conflict("geri alma stogu negatife dusurur (mevcut %s, degisim %s)",
 				onHand.StringFixed(domain.QtyScale), reversal.Qty.StringFixed(domain.QtyScale))
 		}
-		out, err = insertMovement(ctx, tx, reversal)
-		return err
+		if out, err = insertMovement(ctx, tx, reversal); err != nil {
+			return err
+		}
+		return appendLotBalance(ctx, tx, orig.LotID)
 	})
 	return out, err
 }
