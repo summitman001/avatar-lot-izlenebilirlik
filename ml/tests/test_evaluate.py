@@ -4,6 +4,8 @@ from decimal import Decimal
 import pytest
 
 from app import datasets
+from app.models.base import CUTTING, PRODUCTION
+from train import cv as cvmod
 from train import evaluate
 
 
@@ -18,57 +20,103 @@ def test_metrik_uzunluk_hatasi():
         evaluate.regression_metrics([Decimal(1)], [])
 
 
-def test_zaman_sirali_bolme_sizinti_yok():
-    train, test = datasets.split_time_ordered(datasets.load_production())
-    assert (len(train), len(test)) == (48, 12)
-    assert train.order_date.max() <= test.order_date.min()
+def test_rolling_origin_katmanlari_sizinti_yok():
+    """Production: ilk 40 kayitla basla, her katman 10 test, genisleyen pencere -> 8 katman."""
+    df = datasets.load_production()
+    folds = cvmod.rolling_origin_folds(df, 40, 10)
+    assert len(folds) == 8
+    assert [f.n_train for f in folds] == [40, 50, 60, 70, 80, 90, 100, 110]
+    assert all(f.n_test == 10 for f in folds)
+    for f in folds:
+        assert f.train.order_date.max() <= f.test.order_date.min()  # zaman sizintisi yok
+    # pencereler genisliyor: bir sonraki katmanin egitimi oncekinin tamamini icerir
+    assert set(folds[0].train.order_id) < set(folds[1].train.order_id)
 
 
-def test_rastgele_bolme_deterministik_ve_ayrik():
+def test_kfold_deterministik_ve_ayrik():
     df = datasets.load_cutting()
-    a_tr, a_te = datasets.split_random(df)
-    b_tr, b_te = datasets.split_random(df)
-    assert (len(a_tr), len(a_te)) == (160, 40)
-    assert a_te.lamb_id.tolist() == b_te.lamb_id.tolist()
-    assert not set(a_tr.lamb_id) & set(a_te.lamb_id)
+    a = cvmod.kfold_folds(df, 5, 42)
+    b = cvmod.kfold_folds(df, 5, 42)
+    assert len(a) == 5
+    assert sum(f.n_test for f in a) == len(df)
+    assert [f.test.lamb_id.tolist() for f in a] == [f.test.lamb_id.tolist() for f in b]  # deterministik
+    for f in a:
+        assert not set(f.train.lamb_id) & set(f.test.lamb_id)  # ayrik
 
 
-def test_ogrenme_egrisi_boyutlari_ve_alt_kume():
-    prod_train, prod_test = datasets.split_time_ordered(datasets.load_production())
-    cut_train, cut_test = datasets.split_random(datasets.load_cutting())
-    for n in (5, 40):
-        sub = evaluate.training_subset("production", prod_train, n)
-        assert len(sub) == n and sub.order_date.min() >= prod_train.order_date.iloc[-n]  # en yeni n kayit
-    small = set(evaluate.training_subset("cutting", cut_train, 25).lamb_id)
-    big = set(evaluate.training_subset("cutting", cut_train, 50).lamb_id)
-    assert small < big  # ic ice altkumeler
+def test_paired_significance_ozdes_seriler():
+    r = cvmod.paired_significance([1.0, 2.0, 3.0], [1.0, 2.0, 3.0])
+    assert r["p_value"] == 1.0
 
 
-def test_ogrenme_egrisi_raporu(tmp_path):
-    report = evaluate.run_learning_curve(tmp_path / "lc.json")
+def test_paired_significance_yetersiz_katman():
+    r = cvmod.paired_significance([1.0, 2.0], [1.0, 1.0])
+    assert r["p_value"] is None
+
+
+def test_evaluate_production_ekp_metrigi_var():
+    df = datasets.load_production()
+    folds = cvmod.rolling_origin_folds(df, 40, 10)
+    from app.models.baseline import SupplierMeanYield
+
+    m = evaluate.evaluate_production(SupplierMeanYield(), folds[0].train, folds[0].test)
+    assert "ekp" in m and Decimal(m["ekp"]["mae_eur"]) >= 0
+    assert len(m["yield_residuals"]) == len(folds[0].test)
+
+
+def test_evaluate_cutting_normalizasyon_etkisi_ridge_multi_icin_var():
+    df = datasets.load_cutting()
+    folds = cvmod.kfold_folds(df, 5, 42)
+    from app.models.cutting_ml import RidgeMultiCutting
+
+    m = evaluate.evaluate_cutting(RidgeMultiCutting(), folds[0].train, folds[0].test)
+    assert "normalization_effect" in m
+    assert len(m["fire_residuals"]) == len(folds[0].test)
+
+
+def test_cv_protokolu_deterministik():
+    """Aynı seed/veri -> aynı metrikler (CV protokolu deterministik olmali)."""
+    a, _ = evaluate.run_cv(baseline_only=True)
+    b, _ = evaluate.run_cv(baseline_only=True)
+    assert a == b
+
+
+def test_ogrenme_egrisi_boyutlari():
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as tmp:
+        report = evaluate.run_learning_curve(Path(tmp) / "lc.json", baseline_only=True)
     sizes = {t: [p["n_train"] for p in next(iter(v["models"].values()))["points"]] for t, v in report.items()}
-    assert sizes == {"production": [5, 10, 20, 40], "cutting": [10, 25, 50, 100, 160]}
+    assert sizes == {PRODUCTION: [5, 10, 20, 40], CUTTING: [10, 25, 50, 100, 160]}
     for task in report.values():
         for model in task["models"].values():
             assert all(isinstance(p["mae"], str) and isinstance(p["mape_pct"], str) for p in model["points"])
 
 
-def test_ogrenme_egrisi_dosyasi_guncel(tmp_path):
-    fresh = evaluate.run_learning_curve(tmp_path / "lc.json")
+def test_model_comparison_dosyasi_guncel():
+    """reports/model_comparison.json ve cv_folds.json mevcut kod/veriyle birebir ayni uretilmeli."""
+    comparison, folds_detail = evaluate.run_cv(baseline_only=False)
+    assert json.loads(evaluate.COMPARISON_PATH.read_text(encoding="utf-8")) == comparison
+    assert json.loads(evaluate.FOLDS_PATH.read_text(encoding="utf-8")) == folds_detail
+
+
+def test_learning_curve_dosyasi_guncel():
+    fresh = evaluate.run_learning_curve(evaluate.CURVE_PATH.parent / "_tmp_lc.json", baseline_only=False)
     assert json.loads(evaluate.CURVE_PATH.read_text(encoding="utf-8")) == fresh
+    (evaluate.CURVE_PATH.parent / "_tmp_lc.json").unlink(missing_ok=True)
 
 
-def test_rapor_yazilir(tmp_path):
-    out = tmp_path / "baseline_metrics.json"
-    report = evaluate.run(out)
-    assert json.loads(out.read_text(encoding="utf-8")) == report
-    p = report["production"]["models"]["production_baseline_supplier_mean"]["metrics"]
-    c = report["cutting"]["models"]["cutting_baseline_breed_mean"]["metrics"]["overall"]
-    assert all(isinstance(v, str) for v in (p["mae_kg"], p["mape_pct"], c["mae_kg"], c["mape_pct"]))
+def test_model_comparison_durustluk_production_baseline_gecemedi():
+    """DURUSTLUK KURALI: production icin ML baseline'i gecmiyor, bu acikca raporlanir."""
+    comparison = json.loads(evaluate.COMPARISON_PATH.read_text(encoding="utf-8"))
+    for name in ("production_ridge", "production_gbm"):
+        entry = comparison[PRODUCTION]["models"][name]
+        assert entry["improvement_vs_baseline_pct"] is not None and entry["improvement_vs_baseline_pct"] < 0
 
 
-def test_baseline_rapor_dosyasi_guncel(tmp_path):
-    """reports/baseline_metrics.json mevcut kod ve veriyle birebir ayni uretilmeli."""
-    out = tmp_path / "m.json"
-    fresh = evaluate.run(out)
-    assert json.loads(evaluate.REPORT_PATH.read_text(encoding="utf-8")) == fresh
+def test_model_comparison_cutting_ridge_multi_anlamli_iyilesme():
+    comparison = json.loads(evaluate.COMPARISON_PATH.read_text(encoding="utf-8"))
+    entry = comparison[CUTTING]["models"]["cutting_ridge_multi"]
+    assert entry["improvement_vs_baseline_pct"] > 0
+    assert entry["significance_vs_baseline"]["p_value"] < 0.05

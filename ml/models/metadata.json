@@ -1,0 +1,34 @@
+{
+  "production__production_ridge": {
+    "task": "production",
+    "name": "production_ridge",
+    "version": "1.0.0",
+    "n_train": 120,
+    "trained_at": "2026-10-28T11:04:29+00:00",
+    "path": "production__production_ridge.joblib"
+  },
+  "production__production_gbm": {
+    "task": "production",
+    "name": "production_gbm",
+    "version": "1.0.0",
+    "n_train": 120,
+    "trained_at": "2026-10-28T11:04:29+00:00",
+    "path": "production__production_gbm.joblib"
+  },
+  "cutting__cutting_ridge_multi": {
+    "task": "cutting",
+    "name": "cutting_ridge_multi",
+    "version": "1.0.0",
+    "n_train": 200,
+    "trained_at": "2026-10-28T11:04:29+00:00",
+    "path": "cutting__cutting_ridge_multi.joblib"
+  },
+  "cutting__cutting_gbm_multi": {
+    "task": "cutting",
+    "name": "cutting_gbm_multi",
+    "version": "1.0.0",
+    "n_train": 200,
+    "trained_at": "2026-10-28T11:04:29+00:00",
+    "path": "cutting__cutting_gbm_multi.joblib"
+  }
+}
