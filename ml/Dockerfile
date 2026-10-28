@@ -13,6 +13,9 @@ COPY data ./data
 COPY app ./app
 COPY train ./train
 COPY reports ./reports
+# Ridge/GBM modelleri ONCEDEN egitilip commitlenir (python -m train.train_models);
+# imaj icinde yeniden egitim YAPILMAZ (bkz. docs/HANDOFF.md).
+COPY models ./models
 
 # Sentetik veri sabit seed ile imaj icinde uretilir (bkz. docs/ml-data.md)
 RUN python -m data.generate_production && python -m data.generate_cutting

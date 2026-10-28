@@ -1,6 +1,6 @@
 """Sentetik dis uretim emirleri: python -m data.generate_production [--out DIR]
 
-60 emir, 2025-01 ile 2026-10 arasi. Hedef: teslim edilen adet (kg).
+120 emir, 2025-01 ile 2026-10 arasi. Hedef: teslim edilen adet (kg).
 BU VERI SENTETIKTIR; gercek dunya performansini kanitlamaz (bkz. docs/ml-data.md).
 EKP her emir icin oracle ile hesaplanir. Cikti ve maliyet hesaplari Decimal'dir.
 """
@@ -18,7 +18,7 @@ from oracle import production_cost
 from oracle.decimal_utils import dstr, ratio4
 
 SEED = 20250101
-N_ORDERS = 60
+N_ORDERS = 120
 START_YEAR, START_MONTH = 2025, 1
 N_MONTHS = 22  # 2025-01 ... 2026-10
 
