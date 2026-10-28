@@ -13,6 +13,8 @@ from pydantic import BaseModel, Field
 
 from oracle.decimal_utils import dstr, qty3, ratio4
 
+from . import anomaly
+from .config import THRESHOLDS
 from .models.base import CUTTING, PRODUCTION
 from .service import ModelService, frame
 
@@ -38,7 +40,12 @@ class ProductionRequest(BaseModel):
     supplier_id: str | None = None
     producer_id: str | None = None
     unit_weight_kg: Decimal = Field(default=Decimal("1.000"), gt=0, le=100, max_digits=8, decimal_places=3)
-    order_date: date | None = None  # baseline kullanmaz; ileri modeller icin kabul edilir
+    order_date: date | None = None  # baseline kullanmaz; ay turunden Ridge/GBM icin kullanilir
+    # Asagidakiler backend sozlesmesinde ZORUNLU DEGIL (bkz. docs/assumptions.md madde 11-12);
+    # verilmezse Ridge/GBM egitim ortalamalarini kullanir, baseline etkilenmez.
+    lot_age_days: int | None = Field(default=None, ge=0, le=365)
+    spice_kg: Decimal | None = Field(default=None, gt=0, le=1000, max_digits=10, decimal_places=3)
+    casing_kg: Decimal | None = Field(default=None, gt=0, le=1000, max_digits=10, decimal_places=3)
 
 
 class ProductionResponse(BaseModel):
@@ -100,6 +107,10 @@ def predict_production(req: ProductionRequest, request: Request) -> ProductionRe
             producer_id=req.producer_id,
             unit_weight_kg=dstr(req.unit_weight_kg),
             order_date=req.order_date,
+            month=req.order_date.month if req.order_date else None,
+            lot_age_days=req.lot_age_days,
+            spice_kg=dstr(req.spice_kg) if req.spice_kg is not None else None,
+            casing_kg=dstr(req.casing_kg) if req.casing_kg is not None else None,
         )
     )[0]
     return ProductionResponse(
@@ -134,3 +145,96 @@ def predict_cutting(req: CuttingRequest, request: Request) -> CuttingResponse:
         expected_fire_ratio=dstr(pred.notes.get("expected_fire_ratio", ratio4(pred.fire_kg / carcass))),
         parts=[CuttingPartOut(part=p, kg=dstr(kg), ratio=dstr(ratio4(kg / carcass))) for p, kg in pred.parts_kg.items()],
     )
+
+
+class AnomalyRequest(BaseModel):
+    """Her alan opsiyoneldir: hangi alanlar verilirse yalnizca o kurallar calisir (best-effort).
+
+    Sozlesme ve ornekler: docs/anomaly-integration.md.
+    """
+
+    reference_id: str | None = None
+
+    # VERIM_DUSUK (production)
+    actual_yield_ratio: Decimal | None = None
+    et_kg: Decimal | None = Field(default=None, gt=0)
+    supplier_id: str | None = None
+    producer_id: str | None = None
+
+    # FIRE_YUKSEK (cutting)
+    actual_fire_kg: Decimal | None = Field(default=None, ge=0)
+    carcass_kg: Decimal | None = Field(default=None, gt=0)
+    breed: str | None = None
+    sex: str | None = None
+
+    # MALIYET_ARTISI
+    current_unit_cost: Decimal | None = Field(default=None, gt=0)
+    recent_unit_costs: list[Decimal] | None = None
+
+    # EKP_SAPMA
+    predicted_ekp_unit: Decimal | None = Field(default=None, gt=0)
+    actual_ekp_unit: Decimal | None = Field(default=None, gt=0)
+
+    # KUTLE_DENGESI
+    input_weight_kg: Decimal | None = Field(default=None, gt=0)
+    output_weights_kg: list[Decimal] | None = None
+
+
+class AnomalyFindingOut(BaseModel):
+    code: str
+    severity: str
+    message: str
+    evidence: dict[str, str]
+
+
+class AnomalyResponse(BaseModel):
+    reference_id: str | None
+    findings: list[AnomalyFindingOut]
+
+
+def _residual_std(service: ModelService, task: str, field: str) -> float:
+    cv = service.active(task).metrics.get("cv") or {}
+    return float(cv.get(field, 0.0) or 0.0)
+
+
+@app.post("/detect/anomaly", response_model=AnomalyResponse)
+def detect_anomaly(req: AnomalyRequest, request: Request) -> AnomalyResponse:
+    service = _service(request)
+    findings: list[anomaly.AnomalyFinding] = []
+
+    if req.actual_yield_ratio is not None and req.et_kg is not None:
+        loaded = service.active(PRODUCTION)
+        pred = loaded.model.predict(
+            frame(et_kg=dstr(req.et_kg), supplier_id=req.supplier_id, producer_id=req.producer_id)
+        )[0]
+        sigma = _residual_std(service, PRODUCTION, "residual_std_yield_ratio")
+        finding = anomaly.check_verim_dusuk(req.actual_yield_ratio, pred.yield_ratio, sigma, THRESHOLDS.yield_sigma)
+        if finding:
+            findings.append(finding)
+
+    if req.actual_fire_kg is not None and req.carcass_kg is not None:
+        loaded = service.active(CUTTING)
+        pred = loaded.model.predict(frame(carcass_kg=dstr(req.carcass_kg), breed=req.breed, sex=req.sex))[0]
+        actual_fire_ratio = ratio4(req.actual_fire_kg / req.carcass_kg)
+        predicted_fire_ratio = pred.notes.get("expected_fire_ratio", ratio4(pred.fire_kg / req.carcass_kg))
+        sigma = _residual_std(service, CUTTING, "residual_std_fire_ratio")
+        finding = anomaly.check_fire_yuksek(actual_fire_ratio, predicted_fire_ratio, sigma, THRESHOLDS.fire_sigma)
+        if finding:
+            findings.append(finding)
+
+    if req.current_unit_cost is not None and req.recent_unit_costs:
+        finding = anomaly.check_maliyet_artisi(req.current_unit_cost, req.recent_unit_costs, THRESHOLDS.cost_increase_pct)
+        if finding:
+            findings.append(finding)
+
+    if req.predicted_ekp_unit is not None and req.actual_ekp_unit is not None:
+        finding = anomaly.check_ekp_sapma(req.actual_ekp_unit, req.predicted_ekp_unit, THRESHOLDS.ekp_deviation_pct)
+        if finding:
+            findings.append(finding)
+
+    if req.input_weight_kg is not None and req.output_weights_kg is not None:
+        finding = anomaly.check_kutle_dengesi(req.input_weight_kg, req.output_weights_kg)
+        if finding:
+            findings.append(finding)
+
+    return AnomalyResponse(reference_id=req.reference_id, findings=[AnomalyFindingOut(**f.to_json()) for f in findings])
