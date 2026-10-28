@@ -6,7 +6,7 @@ Uygulama **offline-first** çalışır: tüm yazmalar önce Room'a gider, intern
 
 ## Gereksinimler
 
-- **Android Studio 2025.3.4** veya daha yenisi (AGP 9.4.1). Gradle'ı Studio'nun JBR'si (JDK 21) ile çalıştırın; JDK 26 gibi çok yeni bir `JAVA_HOME` Gradle 9.7'de desteklenmeyebilir.
+- **Android Studio 2025.3.4** veya daha yenisi (AGP 9.2.1). Gradle'ı Studio'nun JBR'si (JDK 21) ile çalıştırın; JDK 26 gibi çok yeni bir `JAVA_HOME` Gradle 9.7'de desteklenmeyebilir.
 - Android SDK: platform 37 ve build-tools. Eksikse AGP kendisi indirir (lisanslar kabul edilmiş olmalı).
 - Komut satırından derlemek için `local.properties` dosyasında `sdk.dir` olmalı (Studio otomatik yazar; repoya girmez).
 
