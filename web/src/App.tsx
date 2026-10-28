@@ -11,6 +11,9 @@ import Lots from './pages/Lots'
 import ProductionOrderDetail from './pages/ProductionOrderDetail'
 import ProductionOrders from './pages/ProductionOrders'
 import Products from './pages/Products'
+import Predictions from './pages/Predictions'
+import PurchaseReceiptDetail from './pages/PurchaseReceiptDetail'
+import Purchases from './pages/Purchases'
 import RecallDetail from './pages/RecallDetail'
 import Recalls from './pages/Recalls'
 import SalesOrderDetail from './pages/SalesOrderDetail'
@@ -22,13 +25,13 @@ const MENU = [
   { path: '/', label: 'Dashboard', ready: true },
   { path: '/urunler', label: 'Ürünler', ready: true },
   { path: '/lotlar', label: 'Lotlar', ready: true },
-  { path: '/alislar', label: 'Alışlar', ready: false },
+  { path: '/alislar', label: 'Alışlar', ready: true },
   { path: '/dis-uretim', label: 'Dış Üretim', ready: true },
   { path: '/parcalama', label: 'Parçalama', ready: true },
   { path: '/satis-sevkiyat', label: 'Satış/Sevkiyat', ready: true },
   { path: '/izlenebilirlik', label: 'İzlenebilirlik', ready: true },
   { path: '/geri-cagirma', label: 'Geri Çağırma', ready: true },
-  { path: '/tahminler', label: 'Tahminler', ready: false },
+  { path: '/tahminler', label: 'Tahminler', ready: true },
   { path: '/uyarilar', label: 'Uyarılar', ready: true },
 ]
 
@@ -94,6 +97,9 @@ export default function App() {
           <Route path="/uyarilar" element={<AnomalyAlertsPage />} />
           <Route path="/urunler" element={<Products />} />
           <Route path="/lotlar" element={<Lots />} />
+          <Route path="/alislar" element={<Purchases />} />
+          <Route path="/alislar/:id" element={<PurchaseReceiptDetail />} />
+          <Route path="/tahminler" element={<Predictions />} />
           <Route path="/dis-uretim" element={<ProductionOrders />} />
           <Route path="/dis-uretim/:id" element={<ProductionOrderDetail />} />
           <Route path="/parcalama" element={<CuttingOrders />} />

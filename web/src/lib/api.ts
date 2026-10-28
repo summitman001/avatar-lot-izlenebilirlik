@@ -104,6 +104,121 @@ export interface List<T> {
 }
 
 // ---------------------------------------------------------------------------
+// Alışlar (purchase-receipts)
+// ---------------------------------------------------------------------------
+
+export interface PurchaseReceiptListItem {
+  id: string
+  doc_no: string
+  supplier_id: string
+  supplier_name: string
+  invoice_no: string | null
+  received_at: string
+  line_count: number
+  total_amount: Decimal
+  has_mismatch: boolean
+  created_at: string
+}
+
+export interface PurchaseReceiptLineView {
+  id: string
+  item_id: string
+  item_code: string
+  item_name: string
+  lot_id: string
+  lot_no: string
+  qty: Decimal
+  unit_price: Decimal
+  line_total: Decimal
+  declared_line_total: Decimal | null
+  has_mismatch: boolean
+}
+
+export interface PurchaseReceiptDetail {
+  id: string
+  doc_no: string
+  supplier_id: string
+  supplier_name: string
+  invoice_no: string | null
+  received_at: string
+  total_amount: Decimal
+  has_mismatch: boolean
+  created_at: string
+  lines: PurchaseReceiptLineView[]
+  lots: Lot[]
+  movements: StockMovement[]
+}
+
+export interface CreatePurchaseReceiptLineRequest {
+  lot_no: string
+  item_id: string
+  warehouse_id: string
+  qty: string
+  unit_price: string
+  declared_line_total?: string
+  expiry_date?: string
+}
+
+export interface CreatePurchaseReceiptRequest {
+  doc_no?: string
+  supplier_id: string
+  invoice_no?: string
+  received_at: string
+  lines: CreatePurchaseReceiptLineRequest[]
+}
+
+// ---------------------------------------------------------------------------
+// Tahminler (predictions) -- bkz. docs/ml-report.md
+// ---------------------------------------------------------------------------
+
+export type PredictionTargetType = 'production' | 'cutting'
+
+export interface PredictionPartDiff {
+  part_key: string
+  predicted_kg: Decimal | null
+  actual_kg: Decimal | null
+  diff_kg: Decimal | null
+  diff_pct: Decimal | null
+}
+
+export interface PredictionListItem {
+  id: string
+  created_at: string
+  target_type: PredictionTargetType
+  stage: 'draft' | 'materials_sent' | null
+  ref_type: 'production_order' | 'cutting_order'
+  ref_id: string
+  ref_no: string | null
+  model_name: string
+  model_version: string
+  baseline: boolean
+  metric: string
+  metric_unit: string
+  predicted_value: Decimal | null
+  actual_value: Decimal | null
+  error_abs: Decimal | null
+  error_pct: Decimal | null
+  has_actual: boolean
+  predicted_ekp_unit?: Decimal | null
+  actual_ekp_unit?: Decimal | null
+  ekp_error_abs?: Decimal | null
+  ekp_error_pct?: Decimal | null
+  parts?: PredictionPartDiff[]
+}
+
+export interface PredictionSummaryEntry {
+  count: number
+  count_with_actual: number
+  mae: Decimal | null
+  mape: Decimal | null
+}
+
+export interface PredictionSummary {
+  production: PredictionSummaryEntry
+  cutting: PredictionSummaryEntry
+}
+
+// ---------------------------------------------------------------------------
 // Dis uretim (Gorev 1)
 // ---------------------------------------------------------------------------
 
