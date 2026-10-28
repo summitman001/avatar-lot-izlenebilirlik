@@ -178,6 +178,7 @@ export interface ProductionOrder {
   inputs?: ProductionInputLine[]
   status_history?: ProductionStatusEvent[]
   prediction?: ProductionPrediction | null
+  anomaly_alerts?: AnomalyAlert[]
 }
 
 export interface CostReportLine {
@@ -451,6 +452,7 @@ export interface CuttingOrder {
   ml_prediction?: CuttingPredictionView | null
   closed_at: string | null
   created_at: string
+  anomaly_alerts?: AnomalyAlert[]
 }
 
 // ---------------------------------------------------------------------------
@@ -616,4 +618,34 @@ export interface Recall {
   pending_customer_count: number
   affected_lots?: RecallLot[]
   customers?: RecallCustomerView[]
+}
+
+// ---------------------------------------------------------------------------
+// Anomali uyarıları (bkz. docs/anomaly-integration.md)
+// ---------------------------------------------------------------------------
+
+export type AnomalySeverity = 'info' | 'warning' | 'critical'
+export type AnomalyRefType = 'production_order' | 'cutting_order' | 'purchase_receipt' | 'sales_line'
+
+// SADECE BİLGİLENDİRMEDİR: hiçbir uyarı bir lotu bloke etmez veya bir işlemi reddetmez.
+export interface AnomalyAlert {
+  id: string
+  alert_type: string
+  severity: AnomalySeverity
+  ref_type: AnomalyRefType
+  ref_id: string
+  ref_no: string | null
+  message: string
+  evidence?: Record<string, string>
+  acknowledged: boolean
+  note: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AnomalyAlertSummary {
+  critical: number
+  warning: number
+  info: number
+  total: number
 }

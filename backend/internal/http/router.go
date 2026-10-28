@@ -163,6 +163,10 @@ func NewRouter(d Deps) nethttp.Handler {
 		r.Get("/sales-orders/{id}", h.getSalesOrder)
 		r.Post("/customer-returns", h.createCustomerReturn)
 
+		r.Get("/anomaly-alerts", h.listAnomalyAlerts)
+		r.Get("/anomaly-alerts/summary", h.anomalyAlertSummary)
+		r.Patch("/anomaly-alerts/{id}", h.patchAnomalyAlert)
+
 		r.Post("/sync/push", h.syncPush)
 		r.Get("/sync/pull", h.syncPull)
 	})

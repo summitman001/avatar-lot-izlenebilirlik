@@ -239,6 +239,9 @@ func getProductionOrderDetail(ctx context.Context, q DBTX, id string) (*domain.P
 	if o.Prediction, err = loadProductionPrediction(ctx, q, id); err != nil {
 		return nil, err
 	}
+	if o.AnomalyAlerts, err = loadAnomalyAlerts(ctx, q, "production_order", id); err != nil {
+		return nil, err
+	}
 	return o, nil
 }
 
@@ -835,6 +838,9 @@ func (s *Store) ReceiveProduction(ctx context.Context, orderID string, req domai
 		out, err = getProductionOrderDetail(ctx, tx, orderID)
 		return err
 	})
+	if err == nil {
+		s.detectProductionAnomaly(ctx, orderID) // en iyi gayret, commit sonrasi (bkz. anomaly.go)
+	}
 	return out, err
 }
 

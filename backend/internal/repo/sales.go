@@ -376,13 +376,17 @@ func (s *Store) createSalesOrderInTx(ctx context.Context, tx *sql.Tx, req domain
 		}
 
 		if insufficient {
-			if _, err := tx.ExecContext(ctx,
-				`INSERT INTO anomaly_alert (id, alert_type, severity, ref_type, ref_id, message)
-				 VALUES (?, 'NEGATIVE_STOCK_OFFLINE', 'critical', 'sales_line', ?, ?)`,
-				domain.NewID(), lineID,
-				fmt.Sprintf("Offline satis stogu negatife dusurdu: lot %s, depo %s, eldeki %s, satilan %s",
-					lot.LotNo, req.WarehouseID, onHand.StringFixed(domain.QtyScale), line.Qty.StringFixed(domain.QtyScale))); err != nil {
-				return nil, nil, mapErr(err)
+			// LOT_HAREKET_TUTARSIZ (bir lotun bakiyesi negatife dustu) kavramsal olarak bununla
+			// AYNIDIR; iki ayri sistem olmasin diye tek bir alert_type (NEGATIVE_STOCK_OFFLINE)
+			// kullanilir (bkz. docs/anomaly-integration.md, "2. Kural tabanli ek kontrol").
+			evidence := map[string]string{
+				"lot_no": lot.LotNo, "warehouse_id": req.WarehouseID,
+				"on_hand": onHand.StringFixed(domain.QtyScale), "sold_qty": line.Qty.StringFixed(domain.QtyScale),
+			}
+			message := fmt.Sprintf("Offline satis stogu negatife dusurdu: lot %s, depo %s, eldeki %s, satilan %s",
+				lot.LotNo, req.WarehouseID, onHand.StringFixed(domain.QtyScale), line.Qty.StringFixed(domain.QtyScale))
+			if err := upsertAnomalyAlert(ctx, tx, "NEGATIVE_STOCK_OFFLINE", "critical", "sales_line", lineID, message, evidence); err != nil {
+				return nil, nil, err
 			}
 		}
 		touchedLots[line.LotID] = true

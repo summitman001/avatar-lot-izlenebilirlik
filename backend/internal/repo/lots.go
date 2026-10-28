@@ -157,6 +157,7 @@ func (s *Store) CreatePurchaseLot(ctx context.Context, in domain.PurchaseLotRequ
 		return nil, err
 	}
 	var out *domain.Lot
+	var purchaseReceiptID string
 	err = s.InTx(ctx, func(tx *sql.Tx) error {
 		item, err := getItem(ctx, tx, in.ItemID)
 		if errors.Is(err, domain.ErrNotFound) {
@@ -198,6 +199,7 @@ func (s *Store) CreatePurchaseLot(ctx context.Context, in domain.PurchaseLotRequ
 		case receiptSupplier != in.SupplierID:
 			return domain.Conflict("belge %s baska bir tedarikciye ait", docNo)
 		}
+		purchaseReceiptID = receiptID
 
 		lineTotal := domain.LineTotal(in.Qty.Decimal, in.UnitPrice.Decimal)
 		var declared *decimal.Decimal
@@ -244,5 +246,6 @@ func (s *Store) CreatePurchaseLot(ctx context.Context, in domain.PurchaseLotRequ
 	if err != nil {
 		return nil, err
 	}
+	s.detectPurchaseCostAnomaly(ctx, purchaseReceiptID, in.ItemID, lotID, in.UnitPrice.Decimal) // en iyi gayret, commit sonrasi
 	return s.GetLot(ctx, out.ID)
 }

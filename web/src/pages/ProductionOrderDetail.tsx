@@ -6,6 +6,7 @@ import { IconPlus, IconTrash } from '@tabler/icons-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { AnomalyAlertsCard } from '../components/AnomalyAlerts'
 import {
   ApiError, apiGet, apiPost, type List, type Lot, type ProductionCostReport,
   type ProductionOrder, type StockMovement,
@@ -78,6 +79,10 @@ export default function ProductionOrderDetail() {
       {order.status === 'draft' || order.status === 'materials_sent' ? (
         <SendMaterialsForm orderId={id} externalWarehouseId={order.external_warehouse_id} onDone={invalidate} />
       ) : null}
+
+      {order.anomaly_alerts && (
+        <AnomalyAlertsCard alerts={order.anomaly_alerts} queryKeysToInvalidate={[['production-order', id]]} />
+      )}
 
       {order.inputs && order.inputs.length > 0 && <InputsTable order={order} />}
 

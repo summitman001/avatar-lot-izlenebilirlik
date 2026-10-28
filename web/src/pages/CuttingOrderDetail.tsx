@@ -5,6 +5,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { AnomalyAlertsCard } from '../components/AnomalyAlerts'
 import {
   ApiError, apiGet, apiPost, apiSend, type CuttingOrder, type CuttingResult, type List, type StockMovement,
 } from '../lib/api'
@@ -63,6 +64,10 @@ export default function CuttingOrderDetail() {
       </Group>
 
       <InputCard order={order} />
+
+      {order.anomaly_alerts && (
+        <AnomalyAlertsCard alerts={order.anomaly_alerts} queryKeysToInvalidate={[['cutting-order', id]]} />
+      )}
 
       {order.outputs && (
         <OutputsForm order={order} onSaved={invalidate} />

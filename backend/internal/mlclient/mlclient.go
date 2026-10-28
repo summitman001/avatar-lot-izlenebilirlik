@@ -98,6 +98,61 @@ func (c *Client) PredictCutting(ctx context.Context, in CuttingPredictionInput) 
 	return &out, nil
 }
 
+// DetectAnomalyInput ml/app/anomaly.py AnomalyRequest ile ayni alanlar. Tum alanlar opsiyoneldir;
+// hangileri doluysa o kural calisir (bkz. docs/anomaly-integration.md). Decimal-guvenli: hepsi string.
+type DetectAnomalyInput struct {
+	ReferenceID string `json:"reference_id,omitempty"`
+
+	// VERIM_DUSUK
+	ActualYieldRatio *string `json:"actual_yield_ratio,omitempty"`
+	EtKg             *string `json:"et_kg,omitempty"`
+	SupplierID       *string `json:"supplier_id,omitempty"`
+	ProducerID       *string `json:"producer_id,omitempty"`
+
+	// FIRE_YUKSEK
+	ActualFireKg *string `json:"actual_fire_kg,omitempty"`
+	CarcassKg    *string `json:"carcass_kg,omitempty"`
+	Breed        *string `json:"breed,omitempty"`
+	Sex          *string `json:"sex,omitempty"`
+
+	// MALIYET_ARTISI
+	CurrentUnitCost *string  `json:"current_unit_cost,omitempty"`
+	RecentUnitCosts []string `json:"recent_unit_costs,omitempty"`
+
+	// EKP_SAPMA
+	PredictedEkpUnit *string `json:"predicted_ekp_unit,omitempty"`
+	ActualEkpUnit    *string `json:"actual_ekp_unit,omitempty"`
+
+	// KUTLE_DENGESI
+	InputWeightKg   *string  `json:"input_weight_kg,omitempty"`
+	OutputWeightsKg []string `json:"output_weights_kg,omitempty"`
+}
+
+// AnomalyFinding ml/app/anomaly.py Finding ile ayni alanlar. Evidence yalnizca string degerler icerir
+// (Decimal-guvenli), Go tarafi bunu dogrudan anomaly_alert.evidence_json'a yazabilir.
+type AnomalyFinding struct {
+	Code     string            `json:"code"`
+	Severity string            `json:"severity"`
+	Message  string            `json:"message"`
+	Evidence map[string]string `json:"evidence"`
+}
+
+// DetectAnomalyOutput ml/app/main.py AnomalyResponse ile ayni alanlar.
+type DetectAnomalyOutput struct {
+	ReferenceID string           `json:"reference_id"`
+	Findings    []AnomalyFinding `json:"findings"`
+}
+
+// DetectAnomaly POST /detect/anomaly cagirir. En iyi gayrettir: cagiran taraf (repo/anomaly.go) ML
+// erisilemezse/hata verirse anomali kontrolunu atlar, asil islemi BOZMAZ.
+func (c *Client) DetectAnomaly(ctx context.Context, in DetectAnomalyInput) (*DetectAnomalyOutput, error) {
+	var out DetectAnomalyOutput
+	if err := c.post(ctx, "/detect/anomaly", in, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 func (c *Client) post(ctx context.Context, path string, in, out any) error {
 	body, err := json.Marshal(in)
 	if err != nil {

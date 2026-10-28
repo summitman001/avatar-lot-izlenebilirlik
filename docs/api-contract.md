@@ -645,3 +645,62 @@ Liste filtreleri: `status`, `input_lot_id`. Liste görünümü `outputs`/`alloca
 dış üretim listesiyle aynı desen); detay (`GET /{id}`) ve `PUT .../outputs` yanıtı ikisini de içerir —
 her istekte **taze** hesaplanır (DB'de sadece seçilen yöntemin `closable`/`balance_diff_kg`'si saklanır,
 liste bunu okur). `movements` bu emre ait `cutting_consume`/`cutting_in` hareketlerini kronolojik döner.
+
+## Anomali uyarıları
+
+Ayrıntılı sözleşme ve Go entegrasyonu: [`docs/anomaly-integration.md`](anomaly-integration.md).
+**SADECE BİLGİLENDİRMEDİR**: hiçbir uyarı bir lotu bloke etmez veya bir işlemi reddetmez.
+
+### `GET /anomaly-alerts`
+
+Filtreler: `severity` (`info|warning|critical`), `acknowledged` (`true|false`), `ref_type`
+(`production_order|cutting_order|purchase_receipt|sales_line`), `from`/`to` (`created_at`
+tarih aralığı, `YYYY-MM-DD`), `limit`, `offset`. Varsayılan sıralama: açık uyarılar önce, sonra
+yeniden eskiye.
+
+```json
+{
+  "items": [
+    {
+      "id": "01a1...",
+      "alert_type": "VERIM_DUSUK",
+      "severity": "critical",
+      "ref_type": "production_order",
+      "ref_id": "01a1...",
+      "ref_no": "URT-2026-048",
+      "message": "Gercek verim (0.7000) model tahmininden (0.8487) 4.12 sigma asagida.",
+      "evidence": { "actual_yield_ratio": "0.7000", "predicted_yield_ratio": "0.8487", "z_score": "4.12" },
+      "acknowledged": false,
+      "note": null,
+      "created_at": "2026-10-23T18:28:27.957Z",
+      "updated_at": "2026-10-23T18:28:27.957Z"
+    }
+  ]
+}
+```
+
+`ref_no`, `ref_type`'a göre çözülen ilgili sipariş/belge numarasıdır (`production_order.order_no`,
+`cutting_order.order_no`, `purchase_receipt.doc_no`, ya da satış için `sales_order.order_no`).
+
+### `PATCH /anomaly-alerts/{id}`
+
+`acknowledged` ve/veya `note`'tan en az biri verilmeli:
+
+```json
+{ "acknowledged": true, "note": "fiili tartim tekrar girildi" }
+```
+
+`200` yanıtı güncellenen `AnomalyAlert`'tir. Bu işlem SADECE uyarının kendisini etkiler.
+
+### `GET /anomaly-alerts/summary`
+
+```json
+{ "critical": 2, "warning": 1, "info": 0, "total": 3 }
+```
+
+Severity bazında AÇIK (`acknowledged=false`) uyarı sayısı (web dashboard kartı/üst bar rozeti için).
+
+### Detay yanıtlarına gömülü uyarılar
+
+`GET /production-orders/{id}` ve `GET /cutting-orders/{id}` (ve `PUT .../outputs`) yanıtlarında
+`anomaly_alerts` alanı, o emre ait tüm uyarıları (`AnomalyAlert` listesi) içerir.

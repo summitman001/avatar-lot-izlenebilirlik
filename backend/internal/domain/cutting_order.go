@@ -244,6 +244,7 @@ type CuttingOrder struct {
 	MLPrediction      *CuttingPredictionView    `json:"ml_prediction,omitempty"`
 	ClosedAt          *time.Time                `json:"closed_at"`
 	CreatedAt         time.Time                 `json:"created_at"`
+	AnomalyAlerts     []AnomalyAlert            `json:"anomaly_alerts,omitempty"`
 }
 
 // ---------------------------------------------------------------------------

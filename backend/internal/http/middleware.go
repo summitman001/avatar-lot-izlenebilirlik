@@ -49,7 +49,7 @@ func cors(origins []string) func(nethttp.Handler) nethttp.Handler {
 					w.Header().Set("Access-Control-Allow-Origin", origin)
 					w.Header().Add("Vary", "Origin")
 				}
-				w.Header().Set("Access-Control-Allow-Methods", strings.Join([]string{"GET", "POST", "PUT", "OPTIONS"}, ", "))
+				w.Header().Set("Access-Control-Allow-Methods", strings.Join([]string{"GET", "POST", "PUT", "PATCH", "OPTIONS"}, ", "))
 				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Request-ID")
 				w.Header().Set("Access-Control-Max-Age", "600")
 			}
