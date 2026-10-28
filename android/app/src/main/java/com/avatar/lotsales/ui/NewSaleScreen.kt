@@ -100,7 +100,11 @@ class NewSaleViewModel @Inject constructor(
     init {
         // Lot listesinden gelindiyse o lot (ve urunu) secili baslar.
         savedState.toRoute<NewSaleRoute>().lotId?.let { lotId ->
-            viewModelScope.launch { lots.first { l -> l.any { it.lot.id == lotId } }.first { it.lot.id == lotId }.let(::pickLot) }
+            viewModelScope.launch {
+                val lot = lots.first { l -> l.any { it.lot.id == lotId } }.first { it.lot.id == lotId }
+                items.first { list -> list.any { it.id == lot.lot.itemId } } // varsayilan fiyat urunden gelir
+                pickLot(lot)
+            }
         }
     }
 
