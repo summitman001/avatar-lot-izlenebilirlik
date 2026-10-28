@@ -50,7 +50,7 @@ class LotsScreenTest {
         compose.setContent { LotsScreen(onSell = { opened += it }, vm = LotsViewModel(LotRepository(db))) }
 
         // Room Flow'u kendi executor'unda calisir; compose kurali onu beklemez
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("BLOCKED").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Bloke").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("SUC-2026-099", substring = true).assertHasNoClickAction()
         compose.onNodeWithText("SUC-2026-045", substring = true).assertHasClickAction().performClick()
 

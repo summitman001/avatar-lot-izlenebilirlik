@@ -64,6 +64,13 @@ fun LotsScreen(onSell: (String) -> Unit, vm: LotsViewModel = hiltViewModel()) {
     }
 }
 
+/** Sunucunun lot durumu -> Turkce rozet; blocked_lots'ta olup durumu henuz guncellenmemis lot da "Bloke". */
+private fun statusLabel(status: String) = when (status) {
+    "recalled" -> R.string.status_recalled
+    "consumed" -> R.string.status_consumed
+    else -> R.string.status_blocked
+}
+
 @Composable
 private fun LotRow(lot: LotView, onClick: () -> Unit) {
     val blockedRed = Color(0xFFC62828)
@@ -73,7 +80,7 @@ private fun LotRow(lot: LotView, onClick: () -> Unit) {
             Text(stringResource(R.string.lot_row, lot.lot.lotNo, lot.lot.expiryDate ?: "—", lot.available.display(), lot.baseUom))
         },
         trailingContent = {
-            if (lot.sellable) Chip(stringResource(R.string.status_active), Color(0xFF2E7D32)) else Chip(lot.lot.status.uppercase(), blockedRed)
+            if (lot.sellable) Chip(stringResource(R.string.status_active), Color(0xFF2E7D32)) else Chip(stringResource(statusLabel(lot.lot.status)), blockedRed)
         },
         colors = if (lot.sellable) ListItemDefaults.colors() else ListItemDefaults.colors(containerColor = Color(0xFFFFEBEE)),
         // bloke/geri cagrilmis lot tiklanamaz

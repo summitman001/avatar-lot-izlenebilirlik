@@ -22,6 +22,9 @@
     <string name="lots_empty">Lot yok. Senkron sekmesinden senkronlayın.</string>
     <string name="lot_row">%1$s · SKT: %2$s · Kullanılabilir: %3$s %4$s</string>
     <string name="status_active">Aktif</string>
+    <string name="status_blocked">Bloke</string>
+    <string name="status_recalled">Geri çağrıldı</string>
+    <string name="status_consumed">Tükendi</string>
 
     <string name="customer">Müşteri</string>
     <string name="product">Ürün</string>

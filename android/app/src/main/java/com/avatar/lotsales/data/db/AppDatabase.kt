@@ -10,6 +10,8 @@ import androidx.room.Query
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.room.Upsert
+import androidx.room.migration.AutoMigrationSpec
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 import java.math.BigDecimal
 
@@ -21,13 +23,25 @@ import java.math.BigDecimal
     ],
     version = 2,
     exportSchema = true,
-    autoMigrations = [AutoMigration(from = 1, to = 2)], // v2: warehouses + customer_returns
+    autoMigrations = [AutoMigration(from = 1, to = 2, spec = Migration1To2::class)], // v2: warehouses + customer_returns
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun master(): MasterDao
     abstract fun sales(): SalesDao
     abstract fun sync(): SyncDao
+}
+
+/**
+ * v1 pull'da warehouse kayitlarini atiyor ve qty_on_hand_server'a TUM depolarin toplamini yaziyordu.
+ * Imlec o kayitlari coktan gectigi icin v2'de depolar hic gelmezdi: imlec sifirlanir, bakiyeler 0'lanir;
+ * ilk senkron her seyi (depolar + cihaz deposu bakiyeleri) yeniden ceker.
+ */
+class Migration1To2 : AutoMigrationSpec {
+    override fun onPostMigrate(db: SupportSQLiteDatabase) {
+        db.execSQL("UPDATE sync_state SET value = '0' WHERE `key` = 'last_pull_seq'")
+        db.execSQL("UPDATE lots SET qty_on_hand_server = '0.000'")
+    }
 }
 
 /** Sunucudan pull ile gelen ana veri ve lotlar (cihaz bunlari olusturmaz). */
