@@ -64,10 +64,10 @@ class SyncRepositoryTest {
     @Test
     fun pullLoadsMasterDataAndBalanceComesFromDeviceWarehouse() = runBlocking {
         sync.sync()
-        assertEquals(1, db.count("items"))
+        assertEquals(4, db.count("items")) // sucuk, 2 kuzu parcasi, butun kuzu (hammadde)
         assertEquals(3, db.count("customers"))
-        assertEquals(2, db.count("warehouses"))
-        assertEquals(3, db.count("lots"))
+        assertEquals(3, db.count("warehouses")) // arac, ana depo, karantina
+        assertEquals(7, db.count("lots"))
         assertEquals(listOf(BLOCKED_LOT), db.column("SELECT lot_id FROM blocked_lots"))
         assertEquals(BigDecimal("0.000"), lot(LOT).available) // depo secilmeden satilacak stok yok
 
@@ -181,7 +181,27 @@ class SyncRepositoryTest {
         assertEquals(BigDecimal("0.000"), lot(LOT).available) // ana depoda bu lotun stogu yok
     }
 
+    @Test
+    fun cutPartSellsInKgAndRawLotSaleIsRejectedByServer() = runBlocking {
+        readyWithVan()
+        assertTrue(lot(KUZU_BUT_LOT).forSale)
+        assertFalse(lot(RAW_LOT).forSale) // UI listelemez
+        sales.createSale(MARKET_A, listOf(DraftLine(KUZU_BUT, KUZU_BUT_LOT, BigDecimal("1.250"), BigDecimal("16.0000"))))
+        // yine de gonderilen hammadde satisini sunucu reddeder (FakeApi ayni kurali uygular)
+        sales.createSale(MARKET_A, listOf(DraftLine(KUZU_BUTUN, RAW_LOT, BigDecimal("1.000"), BigDecimal("12.0000"))))
+        sync.sync()
+
+        assertEquals(BigDecimal("6.250"), lot(KUZU_BUT_LOT).available) // 7.5 kg - 1.25 kg, sunucu bakiyesinden
+        val problem = sync.observeStatus().first().problems.single()
+        assertEquals("rejected", problem.status)
+        assertTrue(problem.lastError.orEmpty().contains("DEVICE_SALE_ITEM_TYPE"))
+    }
+
     private companion object {
+        const val KUZU_BUT = "01a17000-0000-7000-8000-000000000002"
+        const val KUZU_BUTUN = "01a17000-0000-7000-8000-000000000004"
+        const val KUZU_BUT_LOT = "01a17000-0000-7000-8000-000000000204"
+        const val RAW_LOT = "01a17000-0000-7000-8000-000000000206"
         const val ITEM = "01a17000-0000-7000-8000-000000000001"
         const val MARKET_A = "01a17000-0000-7000-8000-000000000101"
         const val LOT = "01a17000-0000-7000-8000-000000000201"

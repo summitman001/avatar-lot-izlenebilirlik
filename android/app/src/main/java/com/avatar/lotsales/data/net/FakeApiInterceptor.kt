@@ -1,6 +1,8 @@
 package com.avatar.lotsales.data.net
 
 import com.avatar.lotsales.core.Decimals
+import com.avatar.lotsales.data.SALE_WAREHOUSE_TYPES
+import com.avatar.lotsales.data.SELLABLE_ITEM_TYPES
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -25,6 +27,7 @@ import java.math.BigDecimal
  * assets/fakeapi/pull.json'dan baslayan bellek ici bir sunucu gibi cevaplar. Go sunucusunun push
  * kurallarini taklit eder (backend/internal/repo/sync.go, docs/sync.md "OFFLINE KURALI"):
  *  - payload bilinmeyen alan icerirse veya lot/satir bilinmiyorsa rejected (dedup edilmez);
+ *  - hammadde/fire satisi ya da karantina/dis uretici deposundan satis rejected (repo.checkDeviceSale);
  *  - ayni op_id ikinci kez gelirse duplicate;
  *  - bloke lot satisi LOT_BLOCKED_AT_SALE, yetersiz bakiye NEGATIVE_STOCK_OFFLINE ile flagged (yine kaydedilir);
  *  - satis/iade lotun depo bakiyesini degistirir ve pull akisina bakiyeli lot upsert'i ekler.
@@ -37,6 +40,8 @@ class FakeApiInterceptor(private val readAsset: (String) -> String) : Intercepto
     private val blocked by lazy { fixture.getValue("blocked_lot_ids").jsonArray.map { it.jsonPrimitive.content }.toSet() }
     private val lots by lazy { latestPayloads("lot") }
     private val warehouseCodes by lazy { latestPayloads("warehouse").mapValues { it.value.getValue("code").jsonPrimitive.content } }
+    private val warehouseTypes by lazy { latestPayloads("warehouse").mapValues { it.value.getValue("warehouse_type").jsonPrimitive.content } }
+    private val itemTypes by lazy { latestPayloads("item").mapValues { it.value.getValue("item_type").jsonPrimitive.content } }
     private val balances by lazy { // lot_id -> (warehouse_id -> qty)
         lots.mapValues { (_, lot) ->
             lot["balances"]?.jsonArray.orEmpty().associate {
@@ -107,6 +112,14 @@ class FakeApiInterceptor(private val readAsset: (String) -> String) : Intercepto
     private fun applySale(opId: String, order: ServerSalesOrder): PushResult {
         if (order.warehouseId !in warehouseCodes) return PushResult(opId, "rejected", "warehouse_id bulunamadi")
         if (order.lines.isEmpty()) return PushResult(opId, "rejected", "lines bos olamaz")
+        warehouseTypes.getValue(order.warehouseId).let {
+            if (it !in SALE_WAREHOUSE_TYPES) return PushResult(opId, "rejected", "cihazdan $it tipindeki depodan satis yapilamaz (DEVICE_SALE_WAREHOUSE)")
+        }
+        order.lines.forEachIndexed { i, line ->
+            itemTypes[line.itemId]?.let {
+                if (it !in SELLABLE_ITEM_TYPES) return PushResult(opId, "rejected", "lines[$i]: $it tipindeki urun cihazdan satilamaz (DEVICE_SALE_ITEM_TYPE)")
+            }
+        }
         order.lines.forEach { if (it.lotId !in lots) return PushResult(opId, "rejected", "lot bulunamadi: ${it.lotId}") }
         val violations = linkedSetOf<String>()
         order.lines.forEach { line ->

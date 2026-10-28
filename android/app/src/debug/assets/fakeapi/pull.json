@@ -15,7 +15,8 @@
         "unit_weight_kg": "1.000",
         "default_sale_price": "24.9000",
         "is_active": true,
-        "created_at": "2026-10-23T18:28:27.473Z"
+        "created_at": "2026-10-23T18:28:27.473Z",
+        "shelf_life_days": 90
       }
     },
     {
@@ -196,9 +197,215 @@
           }
         ]
       }
+    },
+    {
+      "seq": 10,
+      "entity": "item",
+      "entity_id": "01a17000-0000-7000-8000-000000000002",
+      "action": "upsert",
+      "payload": {
+        "id": "01a17000-0000-7000-8000-000000000002",
+        "code": "KUZU-BUT",
+        "name": "Kuzu But",
+        "item_type": "cut_part",
+        "base_uom": "kg",
+        "material_category": null,
+        "unit_weight_kg": null,
+        "default_sale_price": "16.0000",
+        "shelf_life_days": 5,
+        "is_active": true,
+        "created_at": "2026-10-24T08:00:00.000Z"
+      }
+    },
+    {
+      "seq": 11,
+      "entity": "item",
+      "entity_id": "01a17000-0000-7000-8000-000000000003",
+      "action": "upsert",
+      "payload": {
+        "id": "01a17000-0000-7000-8000-000000000003",
+        "code": "KUZU-KIYMA",
+        "name": "Kuzu Kıyma",
+        "item_type": "cut_part",
+        "base_uom": "kg",
+        "material_category": null,
+        "unit_weight_kg": null,
+        "default_sale_price": "11.0000",
+        "shelf_life_days": 2,
+        "is_active": true,
+        "created_at": "2026-10-24T08:00:00.000Z"
+      }
+    },
+    {
+      "seq": 12,
+      "entity": "item",
+      "entity_id": "01a17000-0000-7000-8000-000000000004",
+      "action": "upsert",
+      "payload": {
+        "id": "01a17000-0000-7000-8000-000000000004",
+        "code": "KUZU-BUTUN",
+        "name": "Bütün Kuzu",
+        "item_type": "raw",
+        "base_uom": "kg",
+        "material_category": null,
+        "unit_weight_kg": null,
+        "default_sale_price": null,
+        "shelf_life_days": 5,
+        "is_active": true,
+        "created_at": "2026-10-24T08:00:00.000Z"
+      }
+    },
+    {
+      "seq": 13,
+      "entity": "warehouse",
+      "entity_id": "01a17000-0000-7000-8000-000000000303",
+      "action": "upsert",
+      "payload": {
+        "id": "01a17000-0000-7000-8000-000000000303",
+        "code": "WH-QUAR",
+        "name": "Karantina",
+        "warehouse_type": "quarantine",
+        "created_at": "2026-10-23T18:28:27.540Z"
+      }
+    },
+    {
+      "seq": 14,
+      "entity": "lot",
+      "entity_id": "01a17000-0000-7000-8000-000000000204",
+      "action": "upsert",
+      "payload": {
+        "id": "01a17000-0000-7000-8000-000000000204",
+        "lot_no": "KUZ-BUT-2026-001",
+        "item_id": "01a17000-0000-7000-8000-000000000002",
+        "item_code": "KUZU-BUT",
+        "item_name": "Kuzu But",
+        "supplier_id": null,
+        "supplier_name": null,
+        "origin_type": "cutting",
+        "origin_id": null,
+        "received_or_produced_at": "2026-10-28",
+        "expiry_date": "2026-11-02",
+        "initial_qty": "7.500",
+        "uom": "kg",
+        "unit_cost": "13.2000",
+        "status": "active",
+        "blocked_reason": null,
+        "created_at": "2026-10-28T09:00:00.000Z",
+        "purchase": null,
+        "qty_on_hand": "7.500",
+        "balances": [
+          {
+            "warehouse_id": "01a17000-0000-7000-8000-000000000301",
+            "warehouse_code": "WH-VAN-01",
+            "qty_on_hand": "7.500"
+          }
+        ]
+      }
+    },
+    {
+      "seq": 15,
+      "entity": "lot",
+      "entity_id": "01a17000-0000-7000-8000-000000000205",
+      "action": "upsert",
+      "payload": {
+        "id": "01a17000-0000-7000-8000-000000000205",
+        "lot_no": "KUZ-KIYMA-2026-001",
+        "item_id": "01a17000-0000-7000-8000-000000000003",
+        "item_code": "KUZU-KIYMA",
+        "item_name": "Kuzu Kıyma",
+        "supplier_id": null,
+        "supplier_name": null,
+        "origin_type": "cutting",
+        "origin_id": null,
+        "received_or_produced_at": "2026-10-28",
+        "expiry_date": "2026-10-30",
+        "initial_qty": "2.500",
+        "uom": "kg",
+        "unit_cost": "9.0750",
+        "status": "active",
+        "blocked_reason": null,
+        "created_at": "2026-10-28T09:00:00.000Z",
+        "purchase": null,
+        "qty_on_hand": "2.500",
+        "balances": [
+          {
+            "warehouse_id": "01a17000-0000-7000-8000-000000000301",
+            "warehouse_code": "WH-VAN-01",
+            "qty_on_hand": "2.500"
+          }
+        ]
+      }
+    },
+    {
+      "seq": 16,
+      "entity": "lot",
+      "entity_id": "01a17000-0000-7000-8000-000000000206",
+      "action": "upsert",
+      "payload": {
+        "id": "01a17000-0000-7000-8000-000000000206",
+        "lot_no": "KZ-2026-002",
+        "item_id": "01a17000-0000-7000-8000-000000000004",
+        "item_code": "KUZU-BUTUN",
+        "item_name": "Bütün Kuzu",
+        "supplier_id": null,
+        "supplier_name": null,
+        "origin_type": "purchase",
+        "origin_id": null,
+        "received_or_produced_at": "2026-10-27",
+        "expiry_date": "2026-11-01",
+        "initial_qty": "22.000",
+        "uom": "kg",
+        "unit_cost": "11.5000",
+        "status": "active",
+        "blocked_reason": null,
+        "created_at": "2026-10-27T09:00:00.000Z",
+        "purchase": null,
+        "qty_on_hand": "22.000",
+        "balances": [
+          {
+            "warehouse_id": "01a17000-0000-7000-8000-000000000301",
+            "warehouse_code": "WH-VAN-01",
+            "qty_on_hand": "22.000"
+          }
+        ]
+      }
+    },
+    {
+      "seq": 17,
+      "entity": "lot",
+      "entity_id": "01a17000-0000-7000-8000-000000000207",
+      "action": "upsert",
+      "payload": {
+        "id": "01a17000-0000-7000-8000-000000000207",
+        "lot_no": "SUC-2026-046",
+        "item_id": "01a17000-0000-7000-8000-000000000001",
+        "item_code": "SUCUK-NARIN-1KG",
+        "item_name": "Narin Sucuk 1 kg",
+        "supplier_id": null,
+        "supplier_name": null,
+        "origin_type": "production",
+        "origin_id": null,
+        "received_or_produced_at": "2026-10-20",
+        "expiry_date": "2027-01-18",
+        "initial_qty": "0.000",
+        "uom": "adet",
+        "unit_cost": "19.4000",
+        "status": "active",
+        "blocked_reason": null,
+        "created_at": "2026-10-20T09:00:00.000Z",
+        "purchase": null,
+        "qty_on_hand": "0.000",
+        "balances": [
+          {
+            "warehouse_id": "01a17000-0000-7000-8000-000000000301",
+            "warehouse_code": "WH-VAN-01",
+            "qty_on_hand": "0.000"
+          }
+        ]
+      }
     }
   ],
-  "next_seq": 9,
+  "next_seq": 17,
   "has_more": false,
   "blocked_lot_ids": [
     "01a17000-0000-7000-8000-000000000202"

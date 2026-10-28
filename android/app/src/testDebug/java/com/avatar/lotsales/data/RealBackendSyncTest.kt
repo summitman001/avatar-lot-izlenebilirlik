@@ -148,4 +148,43 @@ class RealBackendSyncTest {
         val badOrderId = AppJson.parseToJsonElement(statusOf(badOp).payloadJson).jsonObject.getValue("id").jsonPrimitive.content
         assertEquals(404, call("GET", "sales-orders/$badOrderId").first)
     }
+
+    /** Gorev 2: parca urun kg ile (ondalikli) satilir; hammadde cihazda listelenmez ve sunucu satisini reddeder. */
+    @Test
+    fun cutPartSellsInKgAndRawSaleIsRejectedAgainstRealServer() = runBlocking {
+        val part = idOf("items?q=KUZU-BUT", "KUZU-BUT")
+        val raw = idOf("items?q=KUZU-BUTUN", "KUZU-BUTUN")
+        val warehouse = idOf("warehouses", "WH-MAIN")
+        val customer = idOf("customers?q=MKT-A", "MKT-A")
+        val supplier = call("GET", "suppliers").second!!.getValue("items").jsonArray.first().jsonObject.getValue("id").jsonPrimitive.content
+        fun newLot(itemId: String, prefix: String, qty: String): String {
+            val (code, json) = call(
+                "POST", "lots",
+                """{"lot_no":"$prefix-${System.nanoTime()}","item_id":"$itemId","supplier_id":"$supplier","warehouse_id":"$warehouse","received_at":"2026-10-28","qty":"$qty","unit_price":"12.0000"}""",
+            )
+            assertEquals(201, code)
+            return json!!.getValue("id").jsonPrimitive.content
+        }
+        val partLot = newLot(part, "E2E-BUT", "5")
+        val rawLot = newLot(raw, "E2E-KZ", "10")
+
+        sync.sync()
+        sync.setDeviceWarehouse(warehouse)
+        sync.sync()
+        assertEquals("2026-11-02", local(partLot).lot.expiryDate) // SKT verilmedi: alis tarihi + KUZU-BUT raf omru (5 gun, seed)
+        assertTrue(local(partLot).forSale)
+        assertFalse(local(rawLot).forSale)
+
+        sales.createSale(customer, listOf(DraftLine(part, partLot, BigDecimal("1.250"), BigDecimal("16.0000"))))
+        val partOp = lastOp()
+        sync.sync()
+        assertEquals("applied", statusOf(partOp).status)
+        assertEquals(BigDecimal("3.750"), local(partLot).available)
+
+        sales.createSale(customer, listOf(DraftLine(raw, rawLot, BigDecimal("1"), BigDecimal("12.0000"))))
+        val rawOp = lastOp()
+        sync.sync()
+        assertEquals("rejected", statusOf(rawOp).status)
+        assertTrue(statusOf(rawOp).lastError!!.contains("DEVICE_SALE_ITEM_TYPE"))
+    }
 }

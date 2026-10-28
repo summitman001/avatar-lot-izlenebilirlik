@@ -39,6 +39,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.avatar.lotsales.R
 import com.avatar.lotsales.data.LotRepository
+import com.avatar.lotsales.data.SALE_WAREHOUSE_TYPES
 import com.avatar.lotsales.data.SalesRepository
 import com.avatar.lotsales.data.SyncRepository
 import com.avatar.lotsales.data.SyncStatus
@@ -53,6 +54,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -76,7 +78,10 @@ class SyncViewModel @Inject constructor(
 ) : ViewModel() {
     private val error = MutableStateFlow<String?>(null)
 
-    val ui = combine(connectivity.online, repo.observeStatus(), lots.observeWarehouses(), error, scheduler.running, ::SyncUi)
+    // karantina/dis uretici deposundan satis yapilmaz: secicide yalniz ic depo ve araclar
+    private val saleWarehouses = lots.observeWarehouses().map { all -> all.filter { it.warehouseType in SALE_WAREHOUSE_TYPES } }
+
+    val ui = combine(connectivity.online, repo.observeStatus(), saleWarehouses, error, scheduler.running, ::SyncUi)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SyncUi())
 
     fun syncNow() = scheduler.syncNow()

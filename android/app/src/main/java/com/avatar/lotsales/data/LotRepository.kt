@@ -10,16 +10,25 @@ import kotlinx.coroutines.flow.combine
 import java.math.BigDecimal
 import javax.inject.Inject
 
+/** Cihazdan satilabilen urun tipleri ve satis yapilabilen depo tipleri (sunucu ayni kurali uygular: repo.checkDeviceSale). */
+val SELLABLE_ITEM_TYPES = setOf("finished", "cut_part", "by_product")
+val SALE_WAREHOUSE_TYPES = setOf("internal", "vehicle")
+
 data class LotView(
     val lot: LotEntity,
     val itemName: String,
     val baseUom: String,
+    /** urun henuz senkronlanmadiysa null */
+    val itemType: String?,
     /** qty_on_hand_server + senkronlanmamis yerel hareketler */
     val available: BigDecimal,
     val blocked: Boolean,
     val blockedReason: String?,
 ) {
     val sellable: Boolean get() = !blocked && lot.status == "active"
+
+    /** Satis listelerinde gorunur: satilabilir urun tipi ve cihaz deposunda stok var (bloke olan da gorunur ama satilamaz). */
+    val forSale: Boolean get() = itemType in SELLABLE_ITEM_TYPES && available.signum() > 0
 }
 
 /** FEFO: SKT'si en yakin once (SKT'siz en sona), sonra lot_no. */
@@ -40,6 +49,7 @@ fun buildLotViews(
             lot = lot,
             itemName = item?.name ?: lot.itemId,
             baseUom = item?.baseUom ?: "",
+            itemType = item?.itemType,
             available = lot.qtyOnHandServer + (localDelta[lot.id] ?: BigDecimal.ZERO),
             blocked = lot.id in blockedById || lot.status in setOf("blocked", "recalled"),
             blockedReason = blockedById[lot.id]?.reason,

@@ -56,7 +56,7 @@ import javax.inject.Inject
 class LotsViewModel @Inject constructor(repo: LotRepository) : ViewModel() {
     val query = MutableStateFlow("")
     val lots = combine(repo.observeLots(), query) { lots, q ->
-        lots.filter { q.isBlank() || it.lot.lotNo.contains(q, ignoreCase = true) || it.itemName.contains(q, ignoreCase = true) }
+        lots.filter { it.forSale && (q.isBlank() || it.lot.lotNo.contains(q, ignoreCase = true) || it.itemName.contains(q, ignoreCase = true)) }
             .sortedWith(compareBy<LotView> { it.itemName }.then(fefoOrder))
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 }
