@@ -72,7 +72,7 @@ backend/    Go 1.23 API (chi, database/sql, golang-migrate, shopspring/decimal; 
   api/openapi.yaml      elle yazılmış OpenAPI 3.1
 web/        React 18 + Vite + TypeScript + TanStack Query + React Router + Mantine
 ml/         Python 3.11 FastAPI: maliyet oracle'ı (golden dosyaları üretir) + baseline tahmin modelleri
-android/    Kotlin Android uygulaması (boş; ayrı geliştirilecek)
+android/    Kotlin Android saha satış uygulaması (Compose, Room, WorkManager; offline-first) — android/README.md
 docs/       api-contract.md, data-model.md, sync.md, cutting.md, assumptions.md, ml-data.md, android-integration.md, HANDOFF.md, golden/
 docker/     MySQL ilk kurulum betiği (test veritabanı)
 ```
