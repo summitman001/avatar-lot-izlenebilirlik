@@ -12,6 +12,10 @@ plugins {
 val useFakeApi = providers.gradleProperty("useFakeApi").getOrElse("true").toBoolean()
 val apiBaseUrl = providers.gradleProperty("apiBaseUrl").getOrElse("http://10.0.2.2:8080/api/v1/")
 
+// Release imzasi: anahtar repoya girmez; ~/.gradle/gradle.properties veya -P ile verilir (README).
+val releaseStoreFile = providers.gradleProperty("releaseStoreFile").orNull
+fun signingProp(name: String) = providers.gradleProperty(name).get()
+
 android {
     namespace = "com.avatar.lotsales"
     compileSdk = 37
@@ -25,6 +29,17 @@ android {
         buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
     }
 
+    signingConfigs {
+        if (releaseStoreFile != null) {
+            create("release") {
+                storeFile = file(releaseStoreFile)
+                storePassword = signingProp("releaseStorePassword")
+                keyAlias = signingProp("releaseKeyAlias")
+                keyPassword = signingProp("releaseKeyPassword")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             buildConfigField("boolean", "USE_FAKE_API", "$useFakeApi")
@@ -32,6 +47,7 @@ android {
         }
         release {
             isMinifyEnabled = false
+            if (releaseStoreFile != null) signingConfig = signingConfigs.getByName("release")
             buildConfigField("boolean", "USE_FAKE_API", "false")
             manifestPlaceholders["usesCleartext"] = "false"
         }
@@ -99,4 +115,7 @@ dependencies {
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.androidx.test.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(libs.compose.ui.test.manifest) // Robolectric Compose testleri icin bos Activity
 }

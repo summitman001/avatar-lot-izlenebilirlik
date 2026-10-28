@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Arayuz metinleri. Is kurali mesajlari (domain/SaleValidator.kt) Kotlin'de kalir: saf JVM testlerinde dogrulanir. -->
+<resources>
+    <string name="app_name">Lot Satış</string>
+
+    <string name="tab_lots">Lotlar</string>
+    <string name="tab_new_sale">Yeni satış</string>
+    <string name="tab_sales">Satışlar</string>
+    <string name="tab_sync">Senkron</string>
+
+    <string name="indicator_offline">Çevrimdışı</string>
+    <string name="indicator_offline_pending">Çevrimdışı · bekleyen %1$d</string>
+    <string name="indicator_pending">Bekleyen %1$d</string>
+    <string name="indicator_ok">Güncel</string>
+    <string name="indicator_problems">İnceleme %1$d</string>
+    <string name="indicator_no_warehouse">Depo seçilmedi</string>
+
+    <string name="picker_choose">%1$s seçin</string>
+    <string name="picker_empty">Kayıt yok (senkron bekleniyor)</string>
+
+    <string name="lots_search">Ara (lot no / ürün)</string>
+    <string name="lots_empty">Lot yok. Senkron sekmesinden senkronlayın.</string>
+    <string name="lot_row">%1$s · SKT: %2$s · Kullanılabilir: %3$s %4$s</string>
+    <string name="status_active">Aktif</string>
+
+    <string name="customer">Müşteri</string>
+    <string name="product">Ürün</string>
+    <string name="lot">Lot</string>
+    <string name="lot_fefo_label">Lot (FEFO: SKT\'si en yakın önce)</string>
+    <string name="qty">Miktar</string>
+    <string name="unit_price">Birim fiyat</string>
+    <string name="add_line">Satır ekle</string>
+    <string name="remove">Sil</string>
+    <string name="total">Toplam</string>
+    <string name="confirm">Onayla</string>
+    <string name="blocked_tag">BLOKE</string>
+    <string name="fefo_tag">FEFO önerisi</string>
+
+    <string name="conn_online">Bağlantı: çevrimiçi</string>
+    <string name="conn_offline">Bağlantı: çevrimdışı</string>
+    <string name="device_warehouse">Cihaz deposu (satışın yapıldığı depo)</string>
+    <string name="pending_ops">Bekleyen işlem: %1$d</string>
+    <string name="last_sync">Son başarılı senkron: %1$s</string>
+    <string name="last_error">Son hata: %1$s</string>
+    <string name="sync_now">Şimdi senkronla</string>
+    <string name="problems_title">İnceleme gerekenler (flagged / rejected)</string>
+    <string name="none">Yok</string>
+    <string name="ack">Tamam</string>
+    <string name="discard">Vazgeç</string>
+
+    <string name="sales_empty">Henüz satış yok.</string>
+    <string name="status_rejected">Reddedildi</string>
+    <string name="status_flagged">İncelemede</string>
+    <string name="status_synced">Senkronlandı</string>
+    <string name="status_pending">Bekliyor</string>
+    <string name="returned">İade</string>
+    <string name="take_return">İade al</string>
+    <string name="return_title">İade · %1$s</string>
+    <string name="return_max">En fazla: %1$s</string>
+    <string name="return_reason">İade nedeni</string>
+    <string name="save">Kaydet</string>
+    <string name="cancel">Vazgeç</string>
+</resources>
