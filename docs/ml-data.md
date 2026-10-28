@@ -13,7 +13,9 @@ python -m data.generate_cutting
 
 ## Üretim emirleri (`generate_production.py`)
 
-60 dış üretim emri, 2025-01 ile 2026-10 arası (22 ay), seed `20250101`. Ürün: Narin Sucuk (`unit_weight_kg = 1.000`). Hedef: `delivered_qty` (teslim edilen adet). EKP her emir için `oracle.production_cost` ile hesaplanır (satır bazlı yuvarlama kuralı, faturalanan adet = teslim edilen adet, satış fiyatı yok).
+120 dış üretim emri, 2025-01 ile 2026-10 arası (22 ay), seed `20250101`. Ürün: Narin Sucuk (`unit_weight_kg = 1.000`). Hedef: `delivered_qty` (teslim edilen adet). EKP her emir için `oracle.production_cost` ile hesaplanır (satır bazlı yuvarlama kuralı, faturalanan adet = teslim edilen adet, satış fiyatı yok).
+
+**Neden 120 (60 değil):** Haftada bir üretim yapan (yılda ~50 emir) bir işletme için 2+ yıllık bir dönemde 100-120 emir gerçekçidir; 60 emir (yaklaşık ayda 3) gerçek işletme ritmine göre azdı ve rolling-origin CV protokolünün (8 katman, her katman 10 test kaydı, ilk katman 40 eğitim kaydıyla başlıyor) anlamlı sayıda katman üretmesi için de yetersiz kalıyordu. Sabit seed (`20250101`) ve mevcut etkiler/gürültü (σ=0,012) DEĞİŞTİRİLMEDİ; yalnızca emir sayısı arttı. Kuzu parçalama verisi (200 kayıt) zaten 5-fold CV için yeterli olduğundan değiştirilmedi.
 
 Gerçek verim (kg çıktı / kg et) şu şekilde kurulur, sonra `teslim adedi = round(et_kg × verim / unit_weight_kg)`:
 

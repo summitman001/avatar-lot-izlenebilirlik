@@ -39,7 +39,7 @@ def test_cutting_deterministik(tmp_path):
 
 def test_production_ozellikleri(tmp_path):
     df = pd.read_csv(generate_production.main(["--out", str(tmp_path)]), dtype=str)
-    assert len(df) == 60 and "meat_purchase_date" in df.columns
+    assert len(df) == 120 and "meat_purchase_date" in df.columns
     assert df.order_date.min() >= "2025-01-01" and df.order_date.max() <= "2026-10-31"
     assert df.order_date.is_monotonic_increasing
     assert df.et_kg.map(Decimal).between(60, 150).all()
