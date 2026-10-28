@@ -600,6 +600,41 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/GenealogyResponse" } } } }
         "404": { $ref: "#/components/responses/Error" }
 
+  /anomaly-alerts:
+    get:
+      tags: [anomaly]
+      summary: Anomali uyari listesi (bkz. docs/anomaly-integration.md)
+      description: |
+        SADECE BILGILENDIRMEDIR: hicbir uyari bir lotu bloke etmez veya bir islemi reddetmez
+        (bkz. docs/assumptions.md). Ayni ref_type+ref_id+alert_type icin ACIK (acknowledged=false)
+        bir uyari tekrar tetiklenirse mukerrer kayit olusmaz, mevcut satir guncellenir.
+      parameters:
+        - { name: severity, in: query, schema: { enum: [info, warning, critical] } }
+        - { name: acknowledged, in: query, schema: { type: boolean } }
+        - { name: ref_type, in: query, schema: { enum: [production_order, cutting_order, purchase_receipt, sales_line] } }
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AnomalyAlertList" } } } }
+  /anomaly-alerts/summary:
+    get:
+      tags: [anomaly]
+      summary: Severity bazinda ACIK uyari sayisi (dashboard ozet karti icin)
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AnomalyAlertSummary" } } } }
+  /anomaly-alerts/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    patch:
+      tags: [anomaly]
+      summary: Uyariyi okundu isaretle ve/veya not ekle
+      description: "acknowledged ve/veya note'tan en az biri verilmeli. Bu islem SADECE uyarinin kendisini etkiler; hicbir lotu/siparisi degistirmez."
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PatchAnomalyAlertRequest" } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/AnomalyAlert" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
   /recalls:
     get:
       tags: [recalls]
@@ -993,6 +1028,7 @@ components:
         inputs: { type: array, items: { $ref: "#/components/schemas/ProductionInputLine" }, description: "Yalniz GET /production-orders/{id}" }
         status_history: { type: array, items: { $ref: "#/components/schemas/ProductionStatusEvent" }, description: "Yalniz GET /production-orders/{id}" }
         prediction: { oneOf: [{ $ref: "#/components/schemas/ProductionPrediction" }, { type: "null" }], description: "Yalniz GET /production-orders/{id}" }
+        anomaly_alerts: { type: array, items: { $ref: "#/components/schemas/AnomalyAlert" }, description: "Yalniz GET /production-orders/{id}" }
     ProductionOrderList: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/ProductionOrder" } } } }
     CostReportLine:
       type: object
@@ -1183,6 +1219,7 @@ components:
         ml_prediction: { oneOf: [{ $ref: "#/components/schemas/CuttingPredictionView" }, { type: "null" }] }
         closed_at: { oneOf: [{ $ref: "#/components/schemas/DateTime" }, { type: "null" }] }
         created_at: { $ref: "#/components/schemas/DateTime" }
+        anomaly_alerts: { type: array, items: { $ref: "#/components/schemas/AnomalyAlert" }, description: "Yalniz GET /cutting-orders/{id} ve PUT .../outputs" }
     CuttingOrderList: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/CuttingOrder" } } } }
 
     BlockLotRequest:
@@ -1423,6 +1460,36 @@ components:
       properties:
         contact_status: { enum: [pending, contacted, confirmed] }
         notes: { type: [string, "null"], maxLength: 400 }
+    AnomalyAlert:
+      type: object
+      description: "SADECE BILGILENDIRMEDIR (bkz. docs/assumptions.md); hicbir lotu/islemi etkilemez."
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        alert_type: { enum: [VERIM_DUSUK, FIRE_YUKSEK, MALIYET_ARTISI, EKP_SAPMA, KUTLE_DENGESI, NEGATIVE_STOCK_OFFLINE] }
+        severity: { enum: [info, warning, critical] }
+        ref_type: { enum: [production_order, cutting_order, purchase_receipt, sales_line] }
+        ref_id: { $ref: "#/components/schemas/Id" }
+        ref_no: { type: [string, "null"], description: "Ilgili siparis/belge numarasi (order_no/doc_no)" }
+        message: { type: string, description: "Turkce, sayisal kanit icerir" }
+        evidence: { type: object, additionalProperties: { type: string }, description: "ML'den/kural kontrolunden gelen sayisal kanit (Decimal-guvenli, yalniz string)" }
+        acknowledged: { type: boolean }
+        note: { type: [string, "null"] }
+        created_at: { $ref: "#/components/schemas/DateTime" }
+        updated_at: { $ref: "#/components/schemas/DateTime" }
+    AnomalyAlertList: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/AnomalyAlert" } } } }
+    AnomalyAlertSummary:
+      type: object
+      properties:
+        critical: { type: integer }
+        warning: { type: integer }
+        info: { type: integer }
+        total: { type: integer }
+    PatchAnomalyAlertRequest:
+      type: object
+      description: "acknowledged ve/veya note'tan en az biri verilmeli."
+      properties:
+        acknowledged: { type: boolean }
+        note: { type: [string, "null"], maxLength: 500 }
     RecallLot:
       type: object
       properties:

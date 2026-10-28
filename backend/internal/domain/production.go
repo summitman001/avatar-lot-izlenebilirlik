@@ -66,6 +66,7 @@ type ProductionOrder struct {
 	Inputs                []ProductionInputLine     `json:"inputs,omitempty"`
 	StatusHistory         []ProductionStatusEvent   `json:"status_history,omitempty"`
 	Prediction            *ProductionPredictionView `json:"prediction,omitempty"`
+	AnomalyAlerts         []AnomalyAlert            `json:"anomaly_alerts,omitempty"`
 }
 
 // ProductionInputLine bir sevk edilen hammadde satiri (production_input + lot/item bilgisi).

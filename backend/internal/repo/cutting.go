@@ -415,6 +415,9 @@ func getCuttingOrderDetail(ctx context.Context, q DBTX, id string) (*domain.Cutt
 		return nil, err
 	}
 	o.Outputs, o.Allocation, o.BalanceDiffKg, o.Closable, o.Warnings = outLines, allocation, balanceDiff, closable, warnings
+	if o.AnomalyAlerts, err = loadAnomalyAlerts(ctx, q, "cutting_order", id); err != nil {
+		return nil, err
+	}
 	return o, nil
 }
 
@@ -659,8 +662,12 @@ func (s *Store) UpdateCuttingOutputs(ctx context.Context, orderID string, req do
 				return mapErr(err)
 			}
 		}
-		_, err = s.recomputeCuttingPreview(ctx, tx, orderID)
-		return err
+		o, err := s.recomputeCuttingPreview(ctx, tx, orderID)
+		if err != nil {
+			return err
+		}
+		// KUTLE_DENGESI: ML'den bagimsiz, her zaman calisan kural tabanli kontrol (bkz. anomaly.go).
+		return checkMassBalanceRule(ctx, tx, orderID, o.OrderNo, o.BalanceDiffKg)
 	})
 	if err != nil {
 		return nil, err
@@ -780,5 +787,8 @@ func (s *Store) CloseCuttingOrder(ctx context.Context, orderID string) (*domain.
 		out, err = getCuttingOrderDetail(ctx, tx, orderID)
 		return err
 	})
+	if err == nil {
+		s.detectCuttingAnomaly(ctx, orderID) // en iyi gayret, commit sonrasi (bkz. anomaly.go)
+	}
 	return out, err
 }
