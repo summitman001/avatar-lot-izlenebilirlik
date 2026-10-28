@@ -66,6 +66,8 @@ export interface Item {
   base_uom: 'kg' | 'adet'
   unit_weight_kg: Decimal | null
   default_sale_price: Decimal | null
+  /** raf ömrü (gün); lot SKT'si verilmezse lot tarihinden türetilir */
+  shelf_life_days: number | null
   is_active: boolean
   created_at: string
 }

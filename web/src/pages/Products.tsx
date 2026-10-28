@@ -49,6 +49,7 @@ export default function Products() {
               <Table.Th>Birim</Table.Th>
               <Table.Th ta="right">Birim ağırlık (kg)</Table.Th>
               <Table.Th ta="right">Varsayılan satış fiyatı</Table.Th>
+              <Table.Th ta="right">Raf ömrü (gün)</Table.Th>
               <Table.Th>Durum</Table.Th>
             </Table.Tr>
           </Table.Thead>
@@ -62,6 +63,7 @@ export default function Products() {
                 {/* Decimal'ler string olarak gösterilir; Number'a çevrilmez. */}
                 <Table.Td ta="right">{it.unit_weight_kg ?? '—'}</Table.Td>
                 <Table.Td ta="right">{it.default_sale_price ?? '—'}</Table.Td>
+                <Table.Td ta="right">{it.shelf_life_days ?? '—'}</Table.Td>
                 <Table.Td>
                   <Badge color={it.is_active ? 'green' : 'gray'} variant="light">
                     {it.is_active ? 'Aktif' : 'Pasif'}
