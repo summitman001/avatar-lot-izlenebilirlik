@@ -17,8 +17,13 @@ class ModelSpec:
 _REGISTRY: dict[str, dict[str, ModelSpec]] = {PRODUCTION: {}, CUTTING: {}}
 
 DEFAULT_ACTIVE = {
+    # CV karsilastirmasina gore (bkz. reports/model_comparison.json, docs/ml-report.md):
+    # production: hicbir ML modeli baseline'i gecemedi (ridge/gbm istatistiksel olarak
+    # anlamli degil, p>0.2) -> baseline aktif kalir, DURUSTLUK KURALI geregi.
     PRODUCTION: "production_baseline_supplier_mean",
-    CUTTING: "cutting_baseline_breed_mean",
+    # cutting: cutting_ridge_multi baseline'i anlamli sekilde gecti (p=0.0096, %16.4
+    # iyilesme) ve gbm_multi'den daha basit/yorumlanabilir -> aktif secildi.
+    CUTTING: "cutting_ridge_multi",
 }
 
 
@@ -30,7 +35,7 @@ def register(cls):
 
 
 def load_builtin_models() -> None:
-    from .models import baseline  # noqa: F401  (yan etki: modeller register olur)
+    from .models import baseline, cutting_ml, production_ml  # noqa: F401  (yan etki: modeller register olur)
 
 
 def specs(task: str, baseline_only: bool = False) -> list[ModelSpec]:
