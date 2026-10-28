@@ -123,8 +123,9 @@ UNIQUE ihlaliyle çarpışır, o transaction tamamen geri alınır (hiçbir yan 
 - `changes`: `seq > since_seq`, `seq` sırasıyla, en fazla `limit` (varsayılan 500, en çok 1000). Bugün `entity`: `item`, `customer`, `warehouse`, `lot`. Bu tablolara yazan her repo fonksiyonu `change_log` kaydını **aynı transaction'da** atar; yazma geri alınırsa kayıt da gitmez.
 - `action`: `upsert | delete`. Bugün yalnızca `upsert` (silme yok).
 - `payload`: varlığın API JSON'u, yazıldığı andaki hâli. **Lot payload'ı `qty_on_hand`/`balances` İÇERİR**
-  (önceki sözleşmenin aksine): bir satış, iade veya bloke/açma işlemi lotun bakiyesini veya durumunu
-  değiştirdiğinde, o lot için TAM detaylı bir `upsert` kaydı yazılır — cihaz böylece kendi offline
+  (önceki sözleşmenin aksine): lot oluştuğunda (alış, üretim çıktısı, parçalama çıktısı) ve bir satış,
+  iade veya bloke/açma işlemi lotun bakiyesini veya durumunu değiştirdiğinde, o lot için TAM detaylı bir
+  `upsert` kaydı yazılır — cihaz böylece kendi offline
   hesapladığı bakiyeyi sunucunun otoriter değeriyle karşılaştırıp düzeltebilir (`qty_on_hand_server`
   niyetiyle; alan adı sözleşmedeki mevcut `qty_on_hand` alanıyla aynıdır, ayrı bir alan EKLENMEDİ).
   Ana veri (item/customer/warehouse) değişiklikleri bakiyesizdir (zaten yok).

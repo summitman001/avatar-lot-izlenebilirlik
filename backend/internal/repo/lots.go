@@ -235,7 +235,8 @@ func (s *Store) CreatePurchaseLot(ctx context.Context, in domain.PurchaseLotRequ
 		}); err != nil {
 			return err
 		}
-		if out, err = getLot(ctx, tx, lotID, false); err != nil {
+		// hareketten SONRA ve bakiyeli: cihaz yeni lotun stogunu pull'dan ogrenir (docs/sync.md)
+		if out, err = getLot(ctx, tx, lotID, true); err != nil {
 			return err
 		}
 		return appendChange(ctx, tx, "lot", lotID, "upsert", out)

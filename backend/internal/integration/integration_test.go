@@ -372,6 +372,14 @@ func TestCreateLotCreatesMovementAtomically(t *testing.T) {
 	if n := count(t, `SELECT COUNT(*) FROM change_log WHERE entity = 'lot' AND entity_id = ?`, lot.str("id")); n != 1 {
 		t.Fatalf("lot icin 1 change_log beklenirdi, %d", n)
 	}
+	// payload bakiyeli: cihaz yeni lotun depo stogunu pull'dan ogrenir
+	var payloadQty, payloadWhQty string
+	if err := testDB.QueryRow(`SELECT JSON_UNQUOTE(JSON_EXTRACT(payload_json, '$.qty_on_hand')),
+	                                  JSON_UNQUOTE(JSON_EXTRACT(payload_json, '$.balances[0].qty_on_hand'))
+	                           FROM change_log WHERE entity = 'lot' AND entity_id = ?`, lot.str("id")).Scan(&payloadQty, &payloadWhQty); err != nil ||
+		payloadQty != "100.000" || payloadWhQty != "100.000" {
+		t.Fatalf("change_log payload bakiyesi = %q / %q err=%v", payloadQty, payloadWhQty, err)
+	}
 }
 
 // Ikinci adimda hata olursa onceki adimlar geri alinir (belge, lot, hareket kalmaz).

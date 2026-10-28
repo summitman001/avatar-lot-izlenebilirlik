@@ -788,17 +788,18 @@ func (s *Store) ReceiveProduction(ctx context.Context, orderID string, req domai
 			domain.Today(), req.ExpiryDate, req.ReceivedQty, product.BaseUOM, domain.NewAmount(ekp)); err != nil {
 			return mapErr(err)
 		}
-		outLot, err := getLot(ctx, tx, outputLotID, false)
-		if err != nil {
-			return err
-		}
-		if err := appendChange(ctx, tx, "lot", outputLotID, "upsert", outLot); err != nil {
-			return err
-		}
 		if _, err := insertMovement(ctx, tx, domain.StockMovement{
 			LotID: outputLotID, WarehouseID: mainWarehouseID, MovementType: "production_in",
 			Qty: req.ReceivedQty, UnitCost: domain.NewAmount(ekp), RefType: "production_order", RefID: orderID,
 		}); err != nil {
+			return err
+		}
+		// hareketten SONRA ve bakiyeli: cihaz yeni lotun stogunu pull'dan ogrenir (docs/sync.md)
+		outLot, err := getLot(ctx, tx, outputLotID, true)
+		if err != nil {
+			return err
+		}
+		if err := appendChange(ctx, tx, "lot", outputLotID, "upsert", outLot); err != nil {
 			return err
 		}
 		for _, in := range inputs {

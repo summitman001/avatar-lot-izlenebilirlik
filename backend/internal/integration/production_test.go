@@ -383,6 +383,11 @@ func TestProductionOrderFullLifecycle(t *testing.T) {
 	if n := count(t, `SELECT COUNT(*) FROM change_log WHERE entity = 'lot' AND entity_id = ?`, outputLotID); n != 1 {
 		t.Fatalf("cikti lotu change_log'a 1 kez yazilmali: %d", n)
 	}
+	var payloadQty string
+	if err := testDB.QueryRow(`SELECT JSON_UNQUOTE(JSON_EXTRACT(payload_json, '$.qty_on_hand')) FROM change_log WHERE entity = 'lot' AND entity_id = ?`,
+		outputLotID).Scan(&payloadQty); err != nil || payloadQty != "85.000" {
+		t.Fatalf("cikti lotu payload bakiyesi 85.000 olmali: %q err=%v", payloadQty, err)
+	}
 
 	// Hammadde degeri mamule aktarilir: hammadde girdisinin tam degeri (material_cost=1076.00)
 	// ciktinin toplam maliyetine (total_cost=1543.50) dahildir; aradaki fark (467.50) hizmet
