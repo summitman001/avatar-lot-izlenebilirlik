@@ -7,6 +7,8 @@ import ComingSoon from './pages/ComingSoon'
 import CuttingOrderDetail from './pages/CuttingOrderDetail'
 import CuttingOrders from './pages/CuttingOrders'
 import Dashboard from './pages/Dashboard'
+import InvoiceImportDetail from './pages/InvoiceImportDetail'
+import InvoiceImports from './pages/InvoiceImports'
 import Lots from './pages/Lots'
 import ProductionOrderDetail from './pages/ProductionOrderDetail'
 import ProductionOrders from './pages/ProductionOrders'
@@ -26,6 +28,7 @@ const MENU = [
   { path: '/urunler', label: 'Ürünler', ready: true },
   { path: '/lotlar', label: 'Lotlar', ready: true },
   { path: '/alislar', label: 'Alışlar', ready: true },
+  { path: '/fatura-okuma', label: 'Fatura Okuma', ready: true },
   { path: '/dis-uretim', label: 'Dış Üretim', ready: true },
   { path: '/parcalama', label: 'Parçalama', ready: true },
   { path: '/satis-sevkiyat', label: 'Satış/Sevkiyat', ready: true },
@@ -99,6 +102,8 @@ export default function App() {
           <Route path="/lotlar" element={<Lots />} />
           <Route path="/alislar" element={<Purchases />} />
           <Route path="/alislar/:id" element={<PurchaseReceiptDetail />} />
+          <Route path="/fatura-okuma" element={<InvoiceImports />} />
+          <Route path="/fatura-okuma/:id" element={<InvoiceImportDetail />} />
           <Route path="/tahminler" element={<Predictions />} />
           <Route path="/dis-uretim" element={<ProductionOrders />} />
           <Route path="/dis-uretim/:id" element={<ProductionOrderDetail />} />

@@ -58,6 +58,28 @@ export async function apiSend<T>(method: 'POST' | 'PUT' | 'PATCH', path: string,
 export const apiPost = <T>(path: string, body?: unknown) => apiSend<T>('POST', path, body)
 export const apiPatch = <T>(path: string, body?: unknown) => apiSend<T>('PATCH', path, body)
 
+// apiUpload: multipart/form-data dosya yuklemesi (fatura/irsaliye OCR, bkz. docs/invoice-ocr.md).
+// Content-Type HEADER'I ELLE AYARLANMAZ: tarayici boundary'yi kendisi ekler.
+export async function apiUpload<T>(path: string, file: File): Promise<T> {
+  const form = new FormData()
+  form.append('file', file)
+  let res: Response
+  try {
+    res = await fetch(API_URL + path, { method: 'POST', body: form })
+  } catch {
+    throw new ApiError(0, 'network', `API'ye ulaşılamıyor (${API_URL})`)
+  }
+  const raw = await res.text()
+  const parsed = raw ? JSON.parse(raw) : null
+  if (!res.ok) {
+    throw new ApiError(res.status, parsed?.error?.code ?? 'unknown', parsed?.error?.message ?? res.statusText)
+  }
+  return parsed as T
+}
+
+// apiFileURL: sunucuda saklanan bir dosyayi (ornek: yuklenen fatura goruntusu) dogrudan gosterir.
+export const apiFileURL = (path: string): string => API_URL + path
+
 export interface Item {
   id: string
   code: string
@@ -168,6 +190,83 @@ export interface CreatePurchaseReceiptRequest {
   received_at: string
   lines: CreatePurchaseReceiptLineRequest[]
 }
+
+// ---------------------------------------------------------------------------
+// Fatura/irsaliye okuma (invoice-imports) -- bkz. docs/invoice-ocr.md.
+//
+// KESIN KURAL: OCR SADECE oneri uretir, "dogru" diye sunulmaz. Onay (confirm) olmadan hicbir
+// lot/stok hareketi/alis fisi olusmaz -- confirm govdesi OCR ciktisi DEGIL, kullanicinin
+// duzelttigi veridir (CreatePurchaseReceiptRequest ile aynidir, mevcut alis fisi olusturma yolu
+// aynen kullanilir).
+// ---------------------------------------------------------------------------
+
+export interface OcrField {
+  value: string | null
+  confidence: number // 0..1
+  source_text: string
+  warnings: string[]
+}
+
+export interface OcrLine {
+  product_name: OcrField
+  quantity: OcrField
+  unit: OcrField
+  unit_price: OcrField
+  line_total: OcrField
+  lot_no: OcrField
+  expiry_date: OcrField
+  warnings: string[]
+}
+
+export interface OcrInvoiceExtraction {
+  supplier_name: OcrField
+  document_no: OcrField
+  document_date: OcrField
+  currency: OcrField
+  lines: OcrLine[]
+  overall_confidence: number
+  raw_text: string
+  warnings: string[]
+}
+
+export interface MatchCandidate {
+  id: string
+  code: string
+  name: string
+  score: number
+}
+
+export type InvoiceImportStatus = 'extracted' | 'confirmed' | 'discarded'
+
+export interface InvoiceImportListItem {
+  id: string
+  file_name: string
+  uploaded_at: string
+  status: InvoiceImportStatus
+  overall_confidence: number
+  purchase_receipt_id: string | null
+  purchase_receipt_doc_no: string | null
+}
+
+export interface InvoiceImportDetail {
+  id: string
+  file_name: string
+  content_type: string
+  uploaded_at: string
+  status: InvoiceImportStatus
+  ocr: OcrInvoiceExtraction
+  overall_confidence: number
+  supplier_candidates: MatchCandidate[]
+  line_item_candidates: MatchCandidate[][]
+  purchase_receipt_id: string | null
+  confirmed_at: string | null
+  discarded_at: string | null
+  created_at: string
+}
+
+// Guven esikleri (ml/app/config.py OCR_CONFIDENCE_HIGH/MEDIUM ile ayni, bkz. docs/invoice-ocr.md).
+export const OCR_CONFIDENCE_HIGH = 0.8
+export const OCR_CONFIDENCE_MEDIUM = 0.5
 
 // ---------------------------------------------------------------------------
 // Tahminler (predictions) -- bkz. docs/ml-report.md
