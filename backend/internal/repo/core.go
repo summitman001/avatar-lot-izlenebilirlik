@@ -24,11 +24,12 @@ type DBTX interface {
 }
 
 type Store struct {
-	db *sql.DB
-	ml *mlclient.Client // nil ise ML entegrasyonu atlanir (bkz. production.go, predictOnCreate)
+	db         *sql.DB
+	ml         *mlclient.Client // nil ise ML entegrasyonu atlanir (bkz. production.go, predictOnCreate)
+	uploadsDir string           // fatura/irsaliye OCR yuklemeleri (bkz. invoice_import.go), varsayilan "./uploads"
 }
 
-func New(db *sql.DB) *Store { return &Store{db: db} }
+func New(db *sql.DB) *Store { return &Store{db: db, uploadsDir: "./uploads"} }
 
 func (s *Store) DB() *sql.DB { return s.db }
 
@@ -36,6 +37,15 @@ func (s *Store) DB() *sql.DB { return s.db }
 // gecilebilir (ML'siz calisma, ornegin testlerde).
 func (s *Store) SetMLClient(c *mlclient.Client) *Store {
 	s.ml = c
+	return s
+}
+
+// SetUploadsDir yuklenen fatura/irsaliye gorsellerinin saklanacagi dizini belirler
+// (zincirlenebilir). Varsayilan "./uploads".
+func (s *Store) SetUploadsDir(dir string) *Store {
+	if dir != "" {
+		s.uploadsDir = dir
+	}
 	return s
 }
 

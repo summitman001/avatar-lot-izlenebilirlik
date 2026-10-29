@@ -32,6 +32,17 @@ func Conflict(format string, args ...any) error {
 	return &ConflictError{Msg: fmt.Sprintf(format, args...)}
 }
 
+// UnavailableError: bagimli bir servis (fatura OCR icin ML, bkz. docs/invoice-ocr.md) erisilemez
+// (HTTP 503). Diger ML entegrasyonlarindan (tahmin/anomali) FARKLI olarak burada en iyi gayret
+// YOKTUR: OCR olmadan oneri uretilemeyeceginden istek acikca reddedilir, kullanici manuel giris yapar.
+type UnavailableError struct{ Msg string }
+
+func (e *UnavailableError) Error() string { return e.Msg }
+
+func Unavailable(format string, args ...any) error {
+	return &UnavailableError{Msg: fmt.Sprintf(format, args...)}
+}
+
 // NewID yeni UUIDv7 uretir (zaman sirali; istemci tarafinda da uretilebilir).
 func NewID() string {
 	id, err := uuid.NewV7()

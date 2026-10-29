@@ -37,7 +37,7 @@ func run() error {
 	}
 	defer conn.Close()
 
-	store := repo.New(conn).SetMLClient(mlclient.New(cfg.MLURL))
+	store := repo.New(conn).SetMLClient(mlclient.New(cfg.MLURL)).SetUploadsDir(cfg.UploadsDir)
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           apihttp.NewRouter(apihttp.Deps{DB: conn, Store: store, CORSOrigins: cfg.CORSOrigins}),

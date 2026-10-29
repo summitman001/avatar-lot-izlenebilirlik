@@ -26,6 +26,7 @@ tags:
   - name: anomaly
   - name: purchase
   - name: predictions
+  - name: invoice-ocr
 paths:
   /health:
     get:
@@ -252,6 +253,74 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/PurchaseReceiptDetail" } } } }
         "404": { $ref: "#/components/responses/Error" }
+
+  /invoice-imports:
+    get:
+      tags: [invoice-ocr]
+      summary: Fatura/irsaliye OCR yukleme gecmisi (bkz. docs/invoice-ocr.md)
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [extracted, confirmed, discarded] } }
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/InvoiceImportList" } } } }
+    post:
+      tags: [invoice-ocr]
+      summary: Fatura/irsaliye yukle (multipart), ML (Tesseract OCR) ile oneri cikar
+      description: |
+        Govde multipart/form-data, dosya alani "file" (jpg/png/pdf, azami 15 MB). ML servisine
+        (/extract/invoice) iletilir; sonuc ONERI olarak status=extracted ile kaydedilir. ML
+        kapaliysa veya hata verirse 503 doner ve HICBIR KAYIT OLUSMAZ -- diger ML entegrasyonlarinin
+        aksine burada "en iyi gayret" yoktur (bkz. docs/invoice-ocr.md).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { type: object, required: [file], properties: { file: { type: string, format: binary } } }
+      responses:
+        "201": { description: Olusturuldu (status=extracted), content: { application/json: { schema: { $ref: "#/components/schemas/InvoiceImportDetail" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /invoice-imports/{id}:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [invoice-ocr]
+      summary: OCR onerisi (ham) + taze hesaplanan tedarikci/urun eslestirme adaylari
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/InvoiceImportDetail" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+  /invoice-imports/{id}/file:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    get:
+      tags: [invoice-ocr]
+      summary: Yuklenen fatura/irsaliye goruntusunu (veya PDF'ini) doner
+      responses:
+        "200": { description: Dosya icerigi (Content-Type yuklenen dosyaya gore) }
+        "404": { $ref: "#/components/responses/Error" }
+  /invoice-imports/{id}/confirm:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [invoice-ocr]
+      summary: Onayla -- alis fisi/lot/stok hareketi olustur
+      description: |
+        Govde OCR CIKTISI DEGIL, kullanicinin DUZELTTIGI veridir (CreatePurchaseReceiptRequest ile
+        AYNI sekil). Mevcut POST /purchase-receipts yazma yolunu (createPurchaseReceiptInTx)
+        AYNEN cagirir -- ikinci bir alis fisi olusturma yolu yoktur. status=extracted disinda 409.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreatePurchaseReceiptRequest" } } } }
+      responses:
+        "200": { description: OK (status=confirmed), content: { application/json: { schema: { $ref: "#/components/schemas/InvoiceImportDetail" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /invoice-imports/{id}/discard:
+    parameters: [{ $ref: "#/components/parameters/Id" }]
+    post:
+      tags: [invoice-ocr]
+      summary: Iptal et -- hicbir lot/hareket/fis etkilenmez
+      responses:
+        "200": { description: OK (status=discarded), content: { application/json: { schema: { $ref: "#/components/schemas/InvoiceImportDetail" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
 
   /lots/{id}/block:
     parameters: [{ $ref: "#/components/parameters/Id" }]
@@ -1672,6 +1741,76 @@ components:
         invoice_no: { type: [string, "null"] }
         received_at: { $ref: "#/components/schemas/Date" }
         lines: { type: array, minItems: 1, items: { $ref: "#/components/schemas/CreatePurchaseReceiptLineRequest" } }
+
+    OcrField:
+      type: object
+      description: "Bir alanin OCR onerisi -- hicbir zaman 'dogru' diye sunulmaz (bkz. docs/invoice-ocr.md)"
+      properties:
+        value: { type: [string, "null"] }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        source_text: { type: string, description: "Okunan ham metin" }
+        warnings: { type: array, items: { type: string } }
+    OcrLine:
+      type: object
+      properties:
+        product_name: { $ref: "#/components/schemas/OcrField" }
+        quantity: { $ref: "#/components/schemas/OcrField" }
+        unit: { $ref: "#/components/schemas/OcrField" }
+        unit_price: { $ref: "#/components/schemas/OcrField" }
+        line_total: { $ref: "#/components/schemas/OcrField" }
+        lot_no: { $ref: "#/components/schemas/OcrField" }
+        expiry_date: { $ref: "#/components/schemas/OcrField" }
+        warnings: { type: array, items: { type: string }, description: "ornek TUTAR_UYUSMAZLIGI" }
+    OcrInvoiceExtraction:
+      type: object
+      description: "ML POST /extract/invoice yanitinin aynisi (Go degistirmeden saklar/gecirir)"
+      properties:
+        supplier_name: { $ref: "#/components/schemas/OcrField" }
+        document_no: { $ref: "#/components/schemas/OcrField" }
+        document_date: { $ref: "#/components/schemas/OcrField" }
+        currency: { $ref: "#/components/schemas/OcrField" }
+        lines: { type: array, items: { $ref: "#/components/schemas/OcrLine" } }
+        overall_confidence: { type: number, minimum: 0, maximum: 1 }
+        raw_text: { type: string }
+        warnings: { type: array, items: { type: string }, description: "ornek TOPLAM_UYUSMAZLIGI, DUSUK_GUVEN" }
+    MatchCandidate:
+      type: object
+      description: "Fuzzy eslestirme adayi (tedarikci/urun); otomatik secim YAPILMAZ (bkz. docs/invoice-ocr.md)"
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        code: { type: string }
+        name: { type: string }
+        score: { type: number, minimum: 0, maximum: 1 }
+    InvoiceImportListItem:
+      type: object
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        file_name: { type: string }
+        uploaded_at: { $ref: "#/components/schemas/DateTime" }
+        status: { type: string, enum: [extracted, confirmed, discarded] }
+        overall_confidence: { type: number }
+        purchase_receipt_id: { oneOf: [{ $ref: "#/components/schemas/Id" }, { type: "null" }] }
+        purchase_receipt_doc_no: { type: [string, "null"] }
+    InvoiceImportList: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/InvoiceImportListItem" } } } }
+    InvoiceImportDetail:
+      type: object
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        file_name: { type: string }
+        content_type: { type: string }
+        uploaded_at: { $ref: "#/components/schemas/DateTime" }
+        status: { type: string, enum: [extracted, confirmed, discarded] }
+        ocr: { $ref: "#/components/schemas/OcrInvoiceExtraction" }
+        overall_confidence: { type: number }
+        supplier_candidates: { type: array, items: { $ref: "#/components/schemas/MatchCandidate" } }
+        line_item_candidates:
+          type: array
+          description: "ocr.lines ile AYNI sirada paralel dizi"
+          items: { type: array, items: { $ref: "#/components/schemas/MatchCandidate" } }
+        purchase_receipt_id: { oneOf: [{ $ref: "#/components/schemas/Id" }, { type: "null" }] }
+        confirmed_at: { oneOf: [{ $ref: "#/components/schemas/DateTime" }, { type: "null" }] }
+        discarded_at: { oneOf: [{ $ref: "#/components/schemas/DateTime" }, { type: "null" }] }
+        created_at: { $ref: "#/components/schemas/DateTime" }
 
     PredictionPartDiff:
       type: object

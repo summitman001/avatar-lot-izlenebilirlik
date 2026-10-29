@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"strings"
 	"time"
@@ -18,6 +19,7 @@ import (
 type Client struct {
 	baseURL string
 	http    *http.Client
+	ocrHTTP *http.Client // goruntu OCR'i (tesseract) tahmin/anomali cagrilarindan daha uzun surer
 }
 
 // New boş baseURL ise nil doner: cagiran taraf nil kontrolu yaparak ML'i tamamen atlayabilir.
@@ -26,7 +28,11 @@ func New(baseURL string) *Client {
 	if baseURL == "" {
 		return nil
 	}
-	return &Client{baseURL: baseURL, http: &http.Client{Timeout: 3 * time.Second}}
+	return &Client{
+		baseURL: baseURL,
+		http:    &http.Client{Timeout: 3 * time.Second},
+		ocrHTTP: &http.Client{Timeout: 30 * time.Second},
+	}
 }
 
 // ProductionPredictionInput ml/app/main.py ProductionRequest ile ayni alanlar.
@@ -151,6 +157,54 @@ func (c *Client) DetectAnomaly(ctx context.Context, in DetectAnomalyInput) (*Det
 		return nil, err
 	}
 	return &out, nil
+}
+
+// ExtractInvoice POST /extract/invoice cagirir (multipart dosya yuklemesi). ml/app/main.py
+// InvoiceExtractionResponse'u OLDUGU GIBI (json.RawMessage) doner -- Go alan alan kopyalamaz,
+// invoice_import.ocr_json'a aynen yazilir ve web'e aynen gecirilir (bkz. docs/invoice-ocr.md).
+// overallConfidence yaniti ayrica Decimal(5,4) kolonu icin ayristirilir. EN IYI GAYRET DEGILDIR:
+// cagiran taraf (repo/invoice_import.go) hata donerse OCR servisi kapali/basarisiz kabul eder,
+// kayit OLUSTURMAZ (bkz. docs/invoice-ocr.md, "ML kapaliysa").
+func (c *Client) ExtractInvoice(ctx context.Context, filename, contentType string, content []byte) (raw json.RawMessage, overallConfidence float64, err error) {
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("file", filename)
+	if err != nil {
+		return nil, 0, err
+	}
+	if _, err := part.Write(content); err != nil {
+		return nil, 0, err
+	}
+	if err := writer.Close(); err != nil {
+		return nil, 0, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/extract/invoice", body)
+	if err != nil {
+		return nil, 0, err
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	_ = contentType // ML icerik tipini dosya adi/magic byte'tan kendi cikarir (bkz. ml/app/ocr.py)
+
+	res, err := c.ocrHTTP.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer res.Body.Close()
+	respRaw, err := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+	if err != nil {
+		return nil, 0, err
+	}
+	if res.StatusCode != http.StatusOK {
+		return nil, 0, fmt.Errorf("ml servisi %d dondu: %s", res.StatusCode, string(respRaw))
+	}
+	var probe struct {
+		OverallConfidence float64 `json:"overall_confidence"`
+	}
+	if err := json.Unmarshal(respRaw, &probe); err != nil {
+		return nil, 0, err
+	}
+	return json.RawMessage(respRaw), probe.OverallConfidence, nil
 }
 
 func (c *Client) post(ctx context.Context, path string, in, out any) error {

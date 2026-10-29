@@ -177,52 +177,64 @@ func (s *Store) GetPurchaseReceipt(ctx context.Context, id string) (*domain.Purc
 	return getPurchaseReceiptDetail(ctx, s.db, id)
 }
 
-// CreatePurchaseReceipt: belge (yoksa) + N satir (her biri bir lot + purchase_in hareketi) TEK
-// transaction'da yazilir -- bir satir basarisiz olursa hicbiri kalmaz. doc_no verilmemisse
+// createPurchaseReceiptInTx: belge (yoksa) + N satir (her biri bir lot + purchase_in hareketi)
+// VERILEN tx icinde yazar -- bir satir basarisiz olursa hicbiri kalmaz. doc_no verilmemisse
 // "AF-<yil>-NNN" atomik uretilir (Alis Fisi; tum satirlar AYNI belgeye yazilir).
+//
+// CreatePurchaseReceipt (asagida) VE fatura OCR onay akisi (repo/invoice_import.go
+// ConfirmInvoiceImport) bu AYNI fonksiyonu paylasir -- ikinci bir alis fisi olusturma yolu
+// YOKTUR (bkz. docs/invoice-ocr.md).
+func createPurchaseReceiptInTx(ctx context.Context, tx *sql.Tx, req domain.CreatePurchaseReceiptRequest) (receiptID string, lotIDs []string, err error) {
+	if ok, err := exists(ctx, tx, "supplier", req.SupplierID); err != nil {
+		return "", nil, err
+	} else if !ok {
+		return "", nil, domain.Invalid("supplier_id bulunamadi")
+	}
+	docNo := req.DocNo
+	if docNo == nil {
+		generated, err := nextSequenceNo(ctx, tx, "AF")
+		if err != nil {
+			return "", nil, err
+		}
+		docNo = &generated
+	}
+	lotIDs = make([]string, 0, len(req.Lines))
+	for _, line := range req.Lines {
+		lotID, rID, err := createPurchaseLotInTx(ctx, tx, domain.PurchaseLotRequest{
+			ID:                line.ID,
+			LotNo:             line.LotNo,
+			ItemID:            line.ItemID,
+			SupplierID:        req.SupplierID,
+			WarehouseID:       line.WarehouseID,
+			ReceivedAt:        req.ReceivedAt,
+			ExpiryDate:        line.ExpiryDate,
+			Qty:               line.Qty,
+			UnitPrice:         line.UnitPrice,
+			DeclaredLineTotal: line.DeclaredLineTotal,
+			DocNo:             docNo,
+			InvoiceNo:         req.InvoiceNo,
+		})
+		if err != nil {
+			return "", nil, err
+		}
+		receiptID, lotIDs = rID, append(lotIDs, lotID)
+	}
+	return receiptID, lotIDs, nil
+}
+
+// CreatePurchaseReceipt createPurchaseReceiptInTx'i TEK transaction'da calistirir, sonra en iyi
+// gayretle anomali tespiti yapar (commit sonrasi, bkz. repo/anomaly.go detectPurchaseCostAnomaly).
 func (s *Store) CreatePurchaseReceipt(ctx context.Context, req domain.CreatePurchaseReceiptRequest) (*domain.PurchaseReceiptDetail, error) {
 	var receiptID string
-	lotIDs := make([]string, 0, len(req.Lines))
+	var lotIDs []string
 	err := s.InTx(ctx, func(tx *sql.Tx) error {
-		if ok, err := exists(ctx, tx, "supplier", req.SupplierID); err != nil {
-			return err
-		} else if !ok {
-			return domain.Invalid("supplier_id bulunamadi")
-		}
-		docNo := req.DocNo
-		if docNo == nil {
-			generated, err := nextSequenceNo(ctx, tx, "AF")
-			if err != nil {
-				return err
-			}
-			docNo = &generated
-		}
-		for _, line := range req.Lines {
-			lotID, rID, err := createPurchaseLotInTx(ctx, tx, domain.PurchaseLotRequest{
-				ID:                line.ID,
-				LotNo:             line.LotNo,
-				ItemID:            line.ItemID,
-				SupplierID:        req.SupplierID,
-				WarehouseID:       line.WarehouseID,
-				ReceivedAt:        req.ReceivedAt,
-				ExpiryDate:        line.ExpiryDate,
-				Qty:               line.Qty,
-				UnitPrice:         line.UnitPrice,
-				DeclaredLineTotal: line.DeclaredLineTotal,
-				DocNo:             docNo,
-				InvoiceNo:         req.InvoiceNo,
-			})
-			if err != nil {
-				return err
-			}
-			receiptID, lotIDs = rID, append(lotIDs, lotID)
-		}
-		return nil
+		var err error
+		receiptID, lotIDs, err = createPurchaseReceiptInTx(ctx, tx, req)
+		return err
 	})
 	if err != nil {
 		return nil, err
 	}
-	// anomali tespiti en iyi gayrettir, commit sonrasi (bkz. repo/anomaly.go detectPurchaseCostAnomaly)
 	for i, line := range req.Lines {
 		s.detectPurchaseCostAnomaly(ctx, receiptID, line.ItemID, lotIDs[i], line.UnitPrice.Decimal)
 	}
