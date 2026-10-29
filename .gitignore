@@ -15,3 +15,6 @@ web/dist/
 backend/*.exe
 backend/api.exe
 backend/seed.exe
+
+# yuklenen fatura/irsaliye dosyalari (UPLOADS_DIR varsayilani ./uploads)
+backend/uploads/
