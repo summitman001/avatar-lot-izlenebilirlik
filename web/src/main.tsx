@@ -4,7 +4,9 @@ import { BrowserRouter } from 'react-router-dom'
 import { MantineProvider } from '@mantine/core'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import '@mantine/core/styles.css'
+import './app.css'
 import App from './App'
+import { theme } from './theme'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -12,7 +14,7 @@ const queryClient = new QueryClient({
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <MantineProvider defaultColorScheme="light">
+    <MantineProvider theme={theme} defaultColorScheme="light">
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
           <App />
