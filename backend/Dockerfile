@@ -9,6 +9,9 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api \
 
 FROM alpine:3.20 AS base
 RUN apk add --no-cache ca-certificates tzdata
+WORKDIR /app
+# Fatura/irsaliye OCR yuklemeleri (bkz. docs/invoice-ocr.md, UPLOADS_DIR varsayilani "./uploads").
+RUN mkdir -p /app/uploads && chown -R nobody:nobody /app
 USER nobody
 
 FROM base AS seed

@@ -14,6 +14,7 @@ type Config struct {
 	CORSOrigins []string // "*" = hepsi
 	GoldenDir   string   // seed: docs/golden dizini
 	MLURL       string   // ML tahmin servisi (bkz. internal/mlclient); erisilemezse tahmin atlanir
+	UploadsDir  string   // fatura/irsaliye OCR yuklemeleri (bkz. docs/invoice-ocr.md)
 }
 
 func env(key, def string) string {
@@ -47,5 +48,6 @@ func Load() Config {
 		CORSOrigins: origins,
 		GoldenDir:   env("GOLDEN_DIR", "../docs/golden"),
 		MLURL:       env("ML_URL", "http://localhost:8000"),
+		UploadsDir:  env("UPLOADS_DIR", "./uploads"),
 	}
 }

@@ -142,6 +142,13 @@ func NewRouter(d Deps) nethttp.Handler {
 		r.Post("/purchase-receipts", h.createPurchaseReceipt)
 		r.Get("/purchase-receipts/{id}", h.getPurchaseReceipt)
 
+		r.Get("/invoice-imports", h.listInvoiceImports)
+		r.Post("/invoice-imports", h.createInvoiceImport)
+		r.Get("/invoice-imports/{id}", h.getInvoiceImport)
+		r.Get("/invoice-imports/{id}/file", h.getInvoiceImportFile)
+		r.Post("/invoice-imports/{id}/confirm", h.confirmInvoiceImport)
+		r.Post("/invoice-imports/{id}/discard", h.discardInvoiceImport)
+
 		r.Get("/predictions", h.listPredictions)
 		r.Get("/predictions/summary", h.predictionsSummary)
 

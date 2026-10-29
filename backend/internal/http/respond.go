@@ -48,6 +48,7 @@ func writeError(w nethttp.ResponseWriter, r *nethttp.Request, err error) {
 		ve *domain.ValidationError
 		br *badRequestError
 		ce *domain.ConflictError
+		ue *domain.UnavailableError
 	)
 	switch {
 	case errors.As(err, &br):
@@ -58,6 +59,8 @@ func writeError(w nethttp.ResponseWriter, r *nethttp.Request, err error) {
 		writeErrorStatus(w, nethttp.StatusNotFound, "not_found", "kayit bulunamadi")
 	case errors.As(err, &ce):
 		writeErrorStatus(w, nethttp.StatusConflict, "conflict", ce.Msg)
+	case errors.As(err, &ue):
+		writeErrorStatus(w, nethttp.StatusServiceUnavailable, "unavailable", ue.Msg)
 	default:
 		slog.Error("istek hatasi", "method", r.Method, "path", r.URL.Path, "err", err)
 		writeErrorStatus(w, nethttp.StatusInternalServerError, "internal", "beklenmeyen hata")

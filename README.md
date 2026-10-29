@@ -62,6 +62,23 @@ edilmiş) baştan sona kurar (ayrıntı: [`docs/cutting.md`](docs/cutting.md)):
 5. `curl -s "http://localhost:8080/api/v1/cutting-orders?status=draft" | jq .` ile taslak emirleri
    API'den de doğrulayabilirsiniz.
 
+## İsteğe bağlı özellikler
+
+### Fatura/irsaliye okuma (OCR → insan onayı)
+
+Sol menüden **Fatura Okuma**'ya tıklayıp bir fatura/irsaliye görseli yükleyin (örnek belgeler:
+[`docs/samples/`](docs/samples/) — `invoice_clean.png`, `invoice_mismatch.png` (`KZ-2026-001`
+tutarsızlığının OCR üzerinden yakalanışı), `invoice_low_quality.png`). Açılan ekranda solda yüklenen
+görsel, sağda **Tesseract OCR**'ın çıkardığı alanlar güven rozetleriyle (öneri, "dogru" diye
+sunulmaz) düzenlenebilir biçimde görünür; **"Onayla ve alış fişi oluştur"**'a basmadan hiçbir
+lot/stok hareketi/alış fişi oluşmaz. Ayrıntı: [`docs/invoice-ocr.md`](docs/invoice-ocr.md).
+
+### Anomali tespiti
+
+ML servisinin tahmin kalıntılarına ve basit eşik kurallarına dayanan 5 kural (`VERIM_DUSUK`,
+`FIRE_YUKSEK`, `MALIYET_ARTISI`, `EKP_SAPMA`, `KUTLE_DENGESI`); sol menüde **Uyarılar** sayfası.
+Ayrıntı: [`docs/anomaly-integration.md`](docs/anomaly-integration.md).
+
 ## Klasör yapısı
 
 ```
@@ -71,7 +88,7 @@ backend/    Go 1.23 API (chi, database/sql, golang-migrate, shopspring/decimal; 
   migrations/           SQL migration'lar (000001_init)
   api/openapi.yaml      elle yazılmış OpenAPI 3.1
 web/        React 18 + Vite + TypeScript + TanStack Query + React Router + Mantine
-ml/         Python 3.11 FastAPI: maliyet oracle'ı (golden dosyaları üretir) + baseline tahmin modelleri
+ml/         Python 3.11 FastAPI: maliyet oracle'ı (golden dosyaları üretir) + baseline tahmin modelleri + fatura/irsaliye OCR (Tesseract, isteğe bağlı)
 android/    Kotlin Android saha satış uygulaması (Compose, Room, WorkManager; offline-first) — android/README.md
 docs/       api-contract.md, data-model.md, sync.md, cutting.md, assumptions.md, ml-data.md, android-integration.md, HANDOFF.md, golden/
 docker/     MySQL ilk kurulum betiği (test veritabanı)
@@ -114,3 +131,5 @@ Backend testleri `TEST_DATABASE_URL` ile Docker'daki ayrı `avatar_test` veritab
 - [`docs/cutting.md`](docs/cutting.md) — parçalama: dağıtım yöntemleri, fire/yan ürün muamelesi, yuvarlama, ağırlık dengesi
 - [`docs/ml-data.md`](docs/ml-data.md) — ML sentetik verisi; `docs/golden/` — hesap doğruluk referansları
 - [`docs/android-integration.md`](docs/android-integration.md) — Kotlin geliştirici için: kullanılacak uç noktalar, örnek gövdeler, sync sonuç durumlarına göre istemci davranışı
+- [`docs/anomaly-integration.md`](docs/anomaly-integration.md) — anomali tespiti: kurallar, eşikler, Go entegrasyonu
+- [`docs/invoice-ocr.md`](docs/invoice-ocr.md) — fatura/irsaliye okuma: OCR yaklaşımı, onay akışı, sınırlılıklar
