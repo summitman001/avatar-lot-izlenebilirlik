@@ -323,6 +323,73 @@ eklenir (`POST /lots` ile aynı kural), başka tedarikçiye aitse `409`. `201` y
 
 ---
 
+## Fatura/irsaliye okuma (`invoice-imports`) — isteğe bağlı özellik
+
+Ayrıntılı: [`docs/invoice-ocr.md`](invoice-ocr.md). **KESİN KURAL**: ML (Tesseract) sadece **öneri**
+üretir; `confirm` olmadan hiçbir lot/stok hareketi/alış fişi oluşmaz.
+
+### `POST /invoice-imports` — fatura/irsaliye yükle, OCR önerisi çıkar
+
+`multipart/form-data`, dosya alanı `file` (jpg/png/pdf, azami 15 MB). ML servisine
+(`/extract/invoice`) iletilir; sonuç **öneri** olarak `status=extracted` ile kaydedilir. **ML
+kapalıysa/hata verirse `503` döner, hiçbir kayıt oluşmaz** (diğer ML entegrasyonlarından farklı
+olarak burada "en iyi gayret" yoktur — OCR olmadan öneri üretilemez).
+
+`201` yanıtı (kısaltılmış):
+
+```json
+{
+  "id": "01a1...", "file_name": "fatura.jpg", "status": "extracted", "overall_confidence": 0.87,
+  "ocr": {
+    "supplier_name": { "value": "Yayla Hayvancılık", "confidence": 0.95, "source_text": "Yayla Hayvancılık", "warnings": [] },
+    "document_no": { "value": "HY-F-0001", "confidence": 0.9, "source_text": "Fatura No: HY-F-0001", "warnings": [] },
+    "document_date": { "value": "2026-03-02", "confidence": 0.9, "source_text": "02.03.2026", "warnings": [] },
+    "currency": { "value": "EUR", "confidence": 0.8, "source_text": "€", "warnings": [] },
+    "lines": [
+      {
+        "product_name": { "value": "Bütün Kuzu", "confidence": 0.92, "source_text": "Bütün Kuzu", "warnings": [] },
+        "quantity": { "value": "25.000", "confidence": 0.9, "source_text": "25,000 kg", "warnings": [] },
+        "unit": { "value": "kg", "confidence": 0.9, "source_text": "kg", "warnings": [] },
+        "unit_price": { "value": "11.50", "confidence": 0.9, "source_text": "11,50", "warnings": [] },
+        "line_total": { "value": "351.00", "confidence": 0.9, "source_text": "351,00", "warnings": ["TUTAR_UYUSMAZLIGI: ..."] },
+        "lot_no": { "value": "KZ-2026-001", "confidence": 0.8, "source_text": "LOT: KZ-2026-001", "warnings": [] },
+        "expiry_date": { "value": null, "confidence": 0.0, "source_text": "", "warnings": [] },
+        "warnings": ["TUTAR_UYUSMAZLIGI: 25.000 x 11.50 = 287.50, okunan satir tutari 351.00"]
+      }
+    ],
+    "overall_confidence": 0.87, "raw_text": "...", "warnings": []
+  },
+  "purchase_receipt_id": null, "confirmed_at": null, "discarded_at": null
+}
+```
+
+### `GET /invoice-imports` / `GET /invoice-imports/{id}`
+
+Liste: dosya adı, tarih, durum (`extracted|confirmed|discarded`), genel güven, onaylandıysa
+`purchase_receipt_id`/`purchase_receipt_doc_no`. Detay: yukarıdaki `ocr` + **taze hesaplanan**
+(DB'de saklanmaz) `supplier_candidates` ve `line_item_candidates` (basit normalize + Levenshtein
+benzerliğiyle mevcut tedarikçi/ürün kayıtlarından en iyi 3 aday, skor `0`–`1`; eşleşme yoksa boş
+dizi — **otomatik seçim yapılmaz**).
+
+### `GET /invoice-imports/{id}/file`
+
+Yüklenen görseli/PDF'i olduğu gibi döner (web'de sol panel önizlemesi).
+
+### `POST /invoice-imports/{id}/confirm` — onayla, alış fişi oluştur
+
+Gövde **OCR çıktısı DEĞİL, kullanıcının düzelttiği** veridir — `POST /purchase-receipts` ile
+**AYNI şekil** (`CreatePurchaseReceiptRequest`) ve **AYNI yazma yolu** kullanılır (ikinci bir alış
+fişi oluşturma yolu yoktur). `200` yanıtı `GET /invoice-imports/{id}` ile aynı biçimdedir,
+`purchase_receipt_id` artık doludur. `status != extracted` ise `409` (zaten `confirmed` ya da
+`discarded`); alan doğrulaması `422`.
+
+### `POST /invoice-imports/{id}/discard` — vazgeç
+
+Sadece `status=extracted` bir kaydı `discarded` yapar; hiçbir lot/hareket/fiş etkilenmez.
+`status != extracted` ise `409`.
+
+---
+
 ## Satış / Sevkiyat / İade
 
 Ayrıntılı: [`backend/api/openapi.yaml`](../backend/api/openapi.yaml) (`sales` tag'i).
