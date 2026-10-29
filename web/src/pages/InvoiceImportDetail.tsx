@@ -182,7 +182,7 @@ export default function InvoiceImportDetailPage() {
       <Group justify="space-between">
         <div>
           <Title order={3}>{r.file_name}</Title>
-          <Text c="dimmed" size="sm">
+          <Text component="div" c="dimmed" size="sm">
             Genel güven:{' '}
             <Badge color={confidenceColor(r.overall_confidence)} variant="light">%{Math.round(r.overall_confidence * 100)}</Badge>
             {'  '}
@@ -256,7 +256,7 @@ export default function InvoiceImportDetailPage() {
               value={receivedAt} onChange={(e) => setReceivedAt(e.currentTarget.value)}
               styles={{ input: lowConfidenceStyle(r.ocr.document_date) }}
             />
-            <Text size="xs" c="dimmed" mt={4}>
+            <Text component="div" size="xs" c="dimmed" mt={4}>
               Para birimi (öneri): {r.ocr.currency.value ?? '—'} <ConfidenceBadge field={r.ocr.currency} />
               {' '}— sistem tüm tutarları € olarak kaydeder.
             </Text>

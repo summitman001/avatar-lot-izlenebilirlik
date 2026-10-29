@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ApiError, apiGet, apiPost, type Item, type List, type ProductionOrder, type Supplier, type Warehouse } from '../lib/api'
 
-const STATUS: Record<ProductionOrder['status'], { label: string; color: string }> = {
+export const STATUS: Record<ProductionOrder['status'], { label: string; color: string }> = {
   draft: { label: 'Taslak', color: 'gray' },
   materials_sent: { label: 'Sevk Edildi', color: 'blue' },
   received: { label: 'Teslim Alındı', color: 'teal' },
