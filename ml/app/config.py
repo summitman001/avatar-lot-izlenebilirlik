@@ -20,3 +20,18 @@ class AnomalyThresholds:
 
 
 THRESHOLDS = AnomalyThresholds()
+
+
+# Fatura/irsaliye OCR (bkz. docs/invoice-ocr.md). Harici API/internet GEREKTIRMEZ: Tesseract
+# (pytesseract) imaj icinde kuruludur. Esikler sabit kodlanmaz, ortam degiskeniyle degisir.
+@dataclass(frozen=True)
+class OcrConfig:
+    languages: str = os.environ.get("OCR_LANGUAGES", "tur+eng")
+    # Belge/alan guveni bu esiklerin USTUNDEYSE yuksek/orta, aksi halde dusuk sayilir (web'de de
+    # ayni esikler kullanilir, bkz. docs/invoice-ocr.md).
+    confidence_high: float = _float_env("OCR_CONFIDENCE_HIGH", 0.80)
+    confidence_medium: float = _float_env("OCR_CONFIDENCE_MEDIUM", 0.50)
+    max_file_size_bytes: int = int(_float_env("OCR_MAX_FILE_SIZE_BYTES", 15_000_000))
+
+
+OCR = OcrConfig()

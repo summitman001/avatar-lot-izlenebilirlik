@@ -8,13 +8,14 @@ from contextlib import asynccontextmanager
 from datetime import date
 from decimal import Decimal
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 
 from oracle.decimal_utils import dstr, qty3, ratio4
 
 from . import anomaly
-from .config import THRESHOLDS
+from . import ocr as ocr_module
+from .config import OCR, THRESHOLDS
 from .models.base import CUTTING, PRODUCTION
 from .service import ModelService, frame
 
@@ -238,3 +239,68 @@ def detect_anomaly(req: AnomalyRequest, request: Request) -> AnomalyResponse:
             findings.append(finding)
 
     return AnomalyResponse(reference_id=req.reference_id, findings=[AnomalyFindingOut(**f.to_json()) for f in findings])
+
+
+# ---------------------------------------------------------------------------
+# Fatura/irsaliye OCR (bkz. docs/invoice-ocr.md). Model yuklenmesine (ModelService) DAYANMAZ:
+# ML modelleri kapali/yuklenmemis olsa da (health degraded) bu uc nokta calisir.
+# ---------------------------------------------------------------------------
+
+
+class OcrFieldOut(BaseModel):
+    value: str | None
+    confidence: float
+    source_text: str
+    warnings: list[str]
+
+
+class OcrLineOut(BaseModel):
+    product_name: OcrFieldOut
+    quantity: OcrFieldOut
+    unit: OcrFieldOut
+    unit_price: OcrFieldOut
+    line_total: OcrFieldOut
+    lot_no: OcrFieldOut
+    expiry_date: OcrFieldOut
+    warnings: list[str]
+
+
+class InvoiceExtractionResponse(BaseModel):
+    supplier_name: OcrFieldOut
+    document_no: OcrFieldOut
+    document_date: OcrFieldOut
+    currency: OcrFieldOut
+    lines: list[OcrLineOut]
+    overall_confidence: float
+    raw_text: str
+    warnings: list[str]
+
+
+def _field_out(f: ocr_module.FieldResult) -> OcrFieldOut:
+    return OcrFieldOut(value=f.value, confidence=f.confidence, source_text=f.source_text, warnings=f.warnings)
+
+
+def _line_out(l: ocr_module.LineResult) -> OcrLineOut:
+    return OcrLineOut(
+        product_name=_field_out(l.product_name), quantity=_field_out(l.quantity), unit=_field_out(l.unit),
+        unit_price=_field_out(l.unit_price), line_total=_field_out(l.line_total),
+        lot_no=_field_out(l.lot_no), expiry_date=_field_out(l.expiry_date), warnings=l.warnings,
+    )
+
+
+@app.post("/extract/invoice", response_model=InvoiceExtractionResponse)
+async def extract_invoice(file: UploadFile = File(...)) -> InvoiceExtractionResponse:
+    content = await file.read()
+    if len(content) > OCR.max_file_size_bytes:
+        raise HTTPException(status_code=413, detail="dosya boyutu siniri asildi")
+    result = ocr_module.extract_invoice(content, file.content_type or "", file.filename or "")
+    return InvoiceExtractionResponse(
+        supplier_name=_field_out(result.supplier_name),
+        document_no=_field_out(result.document_no),
+        document_date=_field_out(result.document_date),
+        currency=_field_out(result.currency),
+        lines=[_line_out(l) for l in result.lines],
+        overall_confidence=result.overall_confidence,
+        raw_text=result.raw_text,
+        warnings=result.warnings,
+    )
