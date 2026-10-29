@@ -57,7 +57,7 @@ func run(ctx context.Context) error {
 	if err := s.customers(ctx); err != nil {
 		return err
 	}
-	if err := s.items(ctx); err != nil {
+	if err := s.items(ctx, cfg.GoldenDir); err != nil {
 		return err
 	}
 	if err := s.recipe(ctx, cfg.GoldenDir); err != nil {
@@ -203,23 +203,36 @@ func (s *seeder) customers(ctx context.Context) error {
 	return nil
 }
 
-func (s *seeder) items(ctx context.Context) error {
+func (s *seeder) items(ctx context.Context, goldenDir string) error {
+	// VARSAYIM: parca VKP'si = recete referans satis fiyati; raf omurleri sogutulmus urun icin tipik
+	// degerlerdir, yarisma dokumanindan gelmez (docs/assumptions.md, "VKP varsayımı", "Raf ömrü").
+	partPrice := map[string]*domain.Amount{}
+	for _, p := range loadRecipe(goldenDir) {
+		if !p.IsWaste {
+			partPrice[recipePartItem[p.Part]] = amtP(p.ReferenceSalePrice)
+		}
+	}
+	days := func(n int) *int { return &n }
+	cutPart := func(code, name string, shelfLife int) domain.Item {
+		return domain.Item{Code: code, Name: name, ItemType: "cut_part", BaseUOM: "kg", DefaultSalePrice: partPrice[code], ShelfLifeDays: days(shelfLife)}
+	}
 	for _, v := range []domain.Item{
 		// material_category Gorev 1 maliyet hesabinin kategori alanidir (meat|spice|casing|other);
 		// bkz. migrations/000002_item_material_category, docs/assumptions.md.
-		{Code: "ET-DANA", Name: "Dana Eti", ItemType: "raw", BaseUOM: "kg", MaterialCategory: str("meat")},
-		{Code: "BAHARAT-SUCUK", Name: "Sucuk Baharatı", ItemType: "raw", BaseUOM: "kg", MaterialCategory: str("spice")},
-		{Code: "BAGIRSAK", Name: "Bağırsak", ItemType: "raw", BaseUOM: "kg", MaterialCategory: str("casing")},
+		{Code: "ET-DANA", Name: "Dana Eti", ItemType: "raw", BaseUOM: "kg", MaterialCategory: str("meat"), ShelfLifeDays: days(7)},
+		{Code: "BAHARAT-SUCUK", Name: "Sucuk Baharatı", ItemType: "raw", BaseUOM: "kg", MaterialCategory: str("spice"), ShelfLifeDays: days(365)},
+		{Code: "BAGIRSAK", Name: "Bağırsak", ItemType: "raw", BaseUOM: "kg", MaterialCategory: str("casing"), ShelfLifeDays: days(180)},
 		// VARSAYIM: default_sale_price 24.90 yarışma dokümanından gelmez (docs/assumptions.md, "VKP varsayımı").
-		{Code: "SUCUK-NARIN-1KG", Name: "Narin Sucuk 1 kg", ItemType: "finished", BaseUOM: "adet", UnitWeightKg: qtyP("1.000"), DefaultSalePrice: amtP("24.9000")},
-		{Code: "KUZU-BUTUN", Name: "Bütün Kuzu", ItemType: "raw", BaseUOM: "kg"},
-		{Code: "KUZU-BUT", Name: "Kuzu But", ItemType: "cut_part", BaseUOM: "kg"},
-		{Code: "KUZU-KOL", Name: "Kuzu Kol", ItemType: "cut_part", BaseUOM: "kg"},
-		{Code: "KUZU-SIRT", Name: "Kuzu Sırt", ItemType: "cut_part", BaseUOM: "kg"},
-		{Code: "KUZU-KABURGA", Name: "Kuzu Kaburga", ItemType: "cut_part", BaseUOM: "kg"},
-		{Code: "KUZU-GERDAN", Name: "Kuzu Gerdan", ItemType: "cut_part", BaseUOM: "kg"},
-		{Code: "KUZU-KIYMA", Name: "Kuzu Kıyma", ItemType: "cut_part", BaseUOM: "kg"},
-		{Code: "KUZU-FIRE", Name: "Kuzu Fire", ItemType: "waste", BaseUOM: "kg"},
+		{Code: "SUCUK-NARIN-1KG", Name: "Narin Sucuk 1 kg", ItemType: "finished", BaseUOM: "adet", UnitWeightKg: qtyP("1.000"),
+			DefaultSalePrice: amtP("24.9000"), ShelfLifeDays: days(90)},
+		{Code: "KUZU-BUTUN", Name: "Bütün Kuzu", ItemType: "raw", BaseUOM: "kg", ShelfLifeDays: days(5)},
+		cutPart("KUZU-BUT", "Kuzu But", 5),
+		cutPart("KUZU-KOL", "Kuzu Kol", 5),
+		cutPart("KUZU-SIRT", "Kuzu Sırt", 5),
+		cutPart("KUZU-KABURGA", "Kuzu Kaburga", 5),
+		cutPart("KUZU-GERDAN", "Kuzu Gerdan", 5),
+		cutPart("KUZU-KIYMA", "Kuzu Kıyma", 2),
+		{Code: "KUZU-FIRE", Name: "Kuzu Fire", ItemType: "waste", BaseUOM: "kg"}, // fire: satilmaz, SKT'siz
 	} {
 		v.IsActive = true
 		existing, err := s.lookup(ctx, "item", v.Code)

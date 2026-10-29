@@ -625,6 +625,9 @@ func (s *Store) SendMaterials(ctx context.Context, orderID string, req domain.Se
 			}); err != nil {
 				return err
 			}
+			if err := appendLotBalance(ctx, tx, line.LotID); err != nil {
+				return err
+			}
 			if _, err := tx.ExecContext(ctx,
 				`INSERT INTO production_input (id, production_order_id, lot_id, qty_sent, unit_cost_at_send)
 				 VALUES (?, ?, ?, ?, ?)`,
@@ -748,6 +751,9 @@ func (s *Store) ReceiveProduction(ctx context.Context, orderID string, req domai
 				domain.NewQty(consumed), in.ID); err != nil {
 				return mapErr(err)
 			}
+			if err := appendLotBalance(ctx, tx, in.LotID); err != nil {
+				return err
+			}
 
 			materialLots = append(materialLots, domain.MaterialLot{
 				Name: in.ItemName, Category: *in.MaterialCategory, Quantity: consumed, UnitCost: in.UnitCostAtSend.Decimal,
@@ -788,7 +794,8 @@ func (s *Store) ReceiveProduction(ctx context.Context, orderID string, req domai
 			                  expiry_date, initial_qty, uom, unit_cost, status)
 			 VALUES (?, ?, ?, ?, 'production', ?, ?, ?, ?, ?, ?, 'active')`,
 			outputLotID, lotNo, productItemID, producerSupplierID, orderID,
-			domain.Today(), req.ExpiryDate, req.ReceivedQty, product.BaseUOM, domain.NewAmount(ekp)); err != nil {
+			domain.Today(), domain.ExpiryFrom(req.ExpiryDate, domain.Today(), product.ShelfLifeDays),
+			req.ReceivedQty, product.BaseUOM, domain.NewAmount(ekp)); err != nil {
 			return mapErr(err)
 		}
 		if _, err := insertMovement(ctx, tx, domain.StockMovement{

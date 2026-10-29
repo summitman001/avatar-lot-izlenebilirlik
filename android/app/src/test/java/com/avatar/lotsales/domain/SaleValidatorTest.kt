@@ -85,4 +85,19 @@ class SaleValidatorTest {
         // FEFO: SKT'si en yakin once, SKT'siz en sonda
         assertEquals(listOf("d", "c", "a", "b"), views.values.sortedWith(fefoOrder).map { it.lot.id })
     }
+
+    @Test
+    fun onlySellableItemTypesWithStockAreForSale() {
+        fun item(id: String, type: String) = ItemEntity(id, id, id, type, "kg", null, null)
+        fun lot(id: String, itemId: String, qty: String, status: String = "active") =
+            LotEntity(id, "LOT-$id", itemId, status, null, d("1.0000"), d(qty), 1)
+        val items = listOf(item("mamul", "finished"), item("parca", "cut_part"), item("ham", "raw"), item("fire", "waste"))
+        val lots = listOf(
+            lot("m", "mamul", "5.000"), lot("p", "parca", "2.500"), lot("h", "ham", "25.000"), lot("f", "fire", "3.000"),
+            lot("bos", "mamul", "0.000"), lot("bloke", "parca", "1.000", status = "recalled"), lot("yetim", "bilinmeyen", "1.000"),
+        )
+        val forSale = buildLotViews(lots, items, emptyList(), emptyList()).filter { it.forSale }.map { it.lot.id }
+        // hammadde, fire, stoksuz ve urunu henuz gelmemis lot listelenmez; bloke lot stoklu oldugu icin gorunur (satilamaz)
+        assertEquals(listOf("m", "p", "bloke"), forSale)
+    }
 }

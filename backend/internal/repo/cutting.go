@@ -721,6 +721,9 @@ func (s *Store) CloseCuttingOrder(ctx context.Context, orderID string) (*domain.
 		}); err != nil {
 			return err
 		}
+		if err := appendLotBalance(ctx, tx, inputLotID); err != nil {
+			return err
+		}
 
 		for i, part := range selected.Parts {
 			rl := o.Outputs[i] // buildCuttingPreview Outputs'u recipeLines ile AYNI sirada doner
@@ -739,13 +742,18 @@ func (s *Store) CloseCuttingOrder(ctx context.Context, orderID string) (*domain.
 			outputLotID := domain.NewID()
 			unitCost := domain.NewAmount(decimal.RequireFromString(part.UnitCost))
 			allocatedCost := domain.NewAmount(decimal.RequireFromString(part.AllocatedCost))
+			partItem, err := getItem(ctx, tx, rl.PartItemID)
+			if err != nil {
+				return err
+			}
+			today := domain.Today()
 
 			if _, err := tx.ExecContext(ctx,
 				`INSERT INTO lot (id, lot_no, item_id, supplier_id, origin_type, origin_id, received_or_produced_at,
-				                  initial_qty, uom, unit_cost, status)
-				 VALUES (?, ?, ?, ?, 'cutting', ?, ?, ?, 'kg', ?, 'active')`,
-				outputLotID, lotNo, rl.PartItemID, inputLot.SupplierID, orderID, domain.Today(),
-				domain.NewQty(actualKg), unitCost); err != nil {
+				                  expiry_date, initial_qty, uom, unit_cost, status)
+				 VALUES (?, ?, ?, ?, 'cutting', ?, ?, ?, ?, 'kg', ?, 'active')`,
+				outputLotID, lotNo, rl.PartItemID, inputLot.SupplierID, orderID, today,
+				domain.ExpiryFrom(nil, today, partItem.ShelfLifeDays), domain.NewQty(actualKg), unitCost); err != nil {
 				return mapErr(err)
 			}
 			if _, err := insertMovement(ctx, tx, domain.StockMovement{

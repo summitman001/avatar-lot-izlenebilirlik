@@ -224,7 +224,7 @@ func TestAnomalyAlertListPatchAndSummary(t *testing.T) {
 // stogu negatife dusurdugunde uyari olusur -- bu kontrol ML'e hic bagimli degildir.
 func TestNegativeStockRuleIndependentOfML(t *testing.T) {
 	e := newEnvML(t) // ML_URL erisilemez
-	f := e.fixture()
+	f := e.sellable(e.fixture())
 	cust := e.customer("MKT-A", "Market A")
 	lot := e.must(e.do("POST", "/api/v1/lots", f.lotBody("ET-2026-900", "10.000", "9.7000", nil)), 201)
 

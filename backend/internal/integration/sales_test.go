@@ -190,7 +190,7 @@ func TestSalesScenarioThreeWaySplit(t *testing.T) {
 // Offline (sync): bloke lot satisi YINE KAYDEDILIR, flagged + recall_violation=true.
 func TestSyncSalesOrderBlockedLotFlagged(t *testing.T) {
 	e := newEnv(t)
-	f := e.fixture()
+	f := e.sellable(e.fixture())
 	cust := e.customer("MKT-A", "Market A")
 	lot := e.must(e.do("POST", "/api/v1/lots", f.lotBody("ET-2026-001", "100.000", "9.7000", nil)), 201)
 	e.must(e.do("POST", "/api/v1/lots/"+lot.str("id")+"/block", map[string]any{"reason": "geri cagirma"}), 200)
@@ -215,7 +215,7 @@ func TestSyncSalesOrderBlockedLotFlagged(t *testing.T) {
 // Offline (sync): yetersiz bakiye YINE KAYDEDILIR, flagged, stok negatife duser, anomaly_alert acilir.
 func TestSyncSalesOrderNegativeStockFlagged(t *testing.T) {
 	e := newEnv(t)
-	f := e.fixture()
+	f := e.sellable(e.fixture())
 	cust := e.customer("MKT-A", "Market A")
 	lot := e.must(e.do("POST", "/api/v1/lots", f.lotBody("ET-2026-001", "10.000", "9.7000", nil)), 201)
 
@@ -241,7 +241,7 @@ func TestSyncSalesOrderNegativeStockFlagged(t *testing.T) {
 // Bozuk payload / bilinmeyen referans: rejected, hicbir kayit yazilmaz (processed_request dahil).
 func TestSyncRejectedUnknownReferenceWritesNothing(t *testing.T) {
 	e := newEnv(t)
-	f := e.fixture()
+	f := e.sellable(e.fixture())
 	lot := e.must(e.do("POST", "/api/v1/lots", f.lotBody("ET-2026-001", "10.000", "9.7000", nil)), 201)
 
 	op := domain.NewID()
@@ -272,7 +272,7 @@ func TestSyncRejectedUnknownReferenceWritesNothing(t *testing.T) {
 // 3 operasyonlu batch'te ortadaki rejected olsa da digerleri islenir (operasyon basina ayri transaction).
 func TestSyncBatchPartialRejection(t *testing.T) {
 	e := newEnv(t)
-	f := e.fixture()
+	f := e.sellable(e.fixture())
 	cust := e.customer("MKT-A", "Market A")
 	lot := e.must(e.do("POST", "/api/v1/lots", f.lotBody("ET-2026-001", "100.000", "9.7000", nil)), 201)
 

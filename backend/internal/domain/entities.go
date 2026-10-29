@@ -77,6 +77,7 @@ type Item struct {
 	MaterialCategory *string   `json:"material_category"`
 	UnitWeightKg     *Qty      `json:"unit_weight_kg"`
 	DefaultSalePrice *Amount   `json:"default_sale_price"`
+	ShelfLifeDays    *int      `json:"shelf_life_days"` // raf omru (gun); lot SKT'si verilmezse turetilir (ExpiryFrom)
 	IsActive         bool      `json:"is_active"`
 	CreatedAt        time.Time `json:"created_at"`
 }
@@ -114,6 +115,9 @@ func (i *Item) Validate() error {
 	}
 	if i.DefaultSalePrice != nil && i.DefaultSalePrice.IsNegative() {
 		return Invalid("default_sale_price negatif olamaz")
+	}
+	if i.ShelfLifeDays != nil && (*i.ShelfLifeDays < 1 || *i.ShelfLifeDays > 3650) {
+		return Invalid("shelf_life_days 1..3650 araliginda olmali")
 	}
 	return nil
 }

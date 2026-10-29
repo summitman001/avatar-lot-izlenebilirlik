@@ -219,6 +219,15 @@ func (f fixture) lotBody(lotNo, qty, price string, declared *string) map[string]
 	return b
 }
 
+// sellable fixture'in urununu cihazdan satilabilir bir mamulle degistirir: sync push satis testleri
+// bunu kullanir (cihaz hammadde/fire satamaz, bkz. repo.checkDeviceSale).
+func (e *env) sellable(f fixture) fixture {
+	e.t.Helper()
+	item := e.must(e.do("POST", "/api/v1/items", map[string]any{
+		"code": "SUCUK-TEST", "name": "Test Sucuk", "item_type": "finished", "base_uom": "adet"}), 201)
+	return fixture{item.str("id"), f.supplier, f.warehouse}
+}
+
 func sp(s string) *string { return &s }
 
 // ---------------------------------------------------------------------------
@@ -527,7 +536,7 @@ func salesSyncOp(opID, customerID, warehouseID, itemID, lotID string) map[string
 // Ayni op_id iki kez gelirse ikincisi "duplicate"; ikinci kez stok DUSMEZ (bkz. TestSyncPushSalesOrder).
 func TestSyncPushDuplicateOpID(t *testing.T) {
 	e := newEnv(t)
-	f := e.fixture()
+	f := e.sellable(e.fixture())
 	cust := e.must(e.do("POST", "/api/v1/customers", map[string]any{"code": "MKT-A", "name": "Market A", "customer_type": "market"}), 201)
 	lot := e.must(e.do("POST", "/api/v1/lots", f.lotBody("ET-2026-001", "100.000", "9.7000", nil)), 201)
 

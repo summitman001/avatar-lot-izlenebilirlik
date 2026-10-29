@@ -61,6 +61,17 @@ func scanLot(row interface{ Scan(...any) error }, withQty bool) (*domain.Lot, er
 	return &l, nil
 }
 
+// appendLotBalance lotun guncel (bakiyeli) halini change_log'a yazar. Lot bakiyesini degistiren ve
+// lotu kendisi yazmayan her yol (tuketim, sevk, iade transferi, geri alma) hareketten SONRA cagirir;
+// yoksa cihazdaki depo bakiyesi bir sonraki bakiyeli kayda kadar bayat kalir (docs/sync.md).
+func appendLotBalance(ctx context.Context, q DBTX, lotID string) error {
+	l, err := getLot(ctx, q, lotID, true)
+	if err != nil {
+		return err
+	}
+	return appendChange(ctx, q, "lot", lotID, "upsert", l)
+}
+
 // getLot: withDetail=true ise toplam bakiye ve depo kirilimi de dolar. change_log payload'i detaysizdir
 // (bakiye hareketle degisir, lot varligiyla senkronlanmaz).
 func getLot(ctx context.Context, q DBTX, id string, withDetail bool) (*domain.Lot, error) {
@@ -212,7 +223,7 @@ func createPurchaseLotInTx(ctx context.Context, tx *sql.Tx, in domain.PurchaseLo
 		`INSERT INTO lot (id, lot_no, item_id, supplier_id, origin_type, origin_id, received_or_produced_at,
 		                  expiry_date, initial_qty, uom, unit_cost, status)
 		 VALUES (?, ?, ?, ?, 'purchase', ?, ?, ?, ?, ?, ?, 'active')`,
-		lotID, in.LotNo, in.ItemID, in.SupplierID, receiptID, in.ReceivedAt, in.ExpiryDate,
+		lotID, in.LotNo, in.ItemID, in.SupplierID, receiptID, in.ReceivedAt, domain.ExpiryFrom(in.ExpiryDate, in.ReceivedAt, item.ShelfLifeDays),
 		in.Qty, item.BaseUOM, in.UnitPrice); err != nil {
 		return "", "", mapErr(err)
 	}

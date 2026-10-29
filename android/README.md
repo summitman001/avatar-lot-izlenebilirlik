@@ -23,7 +23,7 @@ APK: `app/build/outputs/apk/debug/app-debug.apk` → `adb install -r app/build/o
 
 ### FakeApi (backend olmadan)
 
-Debug build varsayılan olarak **FakeApi** ile çalışır: OkHttp interceptor'ı istekleri ağa çıkarmadan `app/src/debug/assets/fakeapi/pull.json`'dan başlayan bellek içi bir sunucu gibi cevaplar. Fixture'da depolar `WH-VAN-01` (stoklu araç) ve `WH-MAIN` (stoksuz) var. Lotlar:
+Debug build varsayılan olarak **FakeApi** ile çalışır: OkHttp interceptor'ı istekleri ağa çıkarmadan `app/src/debug/assets/fakeapi/pull.json`'dan başlayan bellek içi bir sunucu gibi cevaplar. Fixture'da depolar `WH-VAN-01` (stoklu araç), `WH-MAIN` (stoksuz) ve `WH-QUAR` (karantina; seçicide görünmez) var. Sucuk lotlarına ek olarak kg ile satılan kuzu parçaları (`KUZ-BUT-2026-001`, `KUZ-KIYMA-2026-001`) ile listede görünmemesi gereken bir hammadde (`KZ-2026-002`) ve stoksuz bir lot (`SUC-2026-046`) bulunur. Lotlar:
 
 - `SUC-2026-045`: aktif, 85 adet
 - `SUC-2026-040`: aktif, 20 adet, SKT'si daha yakın (FEFO gösterimi için)
@@ -85,10 +85,10 @@ Bu değerler verilmezse release imzasız derlenir.
 
 ## Ekranlar
 
-1. **Lotlar**: arama, ürün, lot no, SKT, kullanılabilir miktar ve Türkçe durum rozeti. Bloke lot kırmızıdır ve tıklanamaz; aktif lota dokununca o lotla yeni satış açılır.
+1. **Lotlar**: arama, ürün, lot no, SKT, kullanılabilir miktar ve Türkçe durum rozeti. Yalnız mamul/parça/yan ürün lotları ve cihaz deposunda stoğu olanlar listelenir; hammadde ve fire satılmaz (sunucu da reddeder, `docs/assumptions.md` "Cihazdan satış kuralları"). Bloke lot kırmızıdır ve tıklanamaz; aktif lota dokununca o lotla yeni satış açılır.
 2. **Yeni satış**: müşteri → ürün → lot (FEFO önerili) → miktar ve fiyat → satır ekle → onayla.
 3. **Satışlar**: satış listesi (Bekliyor / Senkronlandı / İncelemede / Reddedildi). Detayda satırlar ve lotları görünür, satırdan **iade alınır** (miktar + neden).
-4. **Senkron**: cihaz deposu seçimi, bekleyen işlem sayısı, son başarılı senkron, son hata, "Şimdi senkronla" butonu, inceleme listesi (flagged → Tamam, rejected → Vazgeç).
+4. **Senkron**: cihaz deposu seçimi (yalnız iç depo ve araçlar), bekleyen işlem sayısı, son başarılı senkron, son hata, "Şimdi senkronla" butonu, inceleme listesi (flagged → Tamam, rejected → Vazgeç).
 
 Üst barda her zaman bir gösterge vardır: `Çevrimdışı` / `Bekleyen N` / `Güncel`. Gerekirse ek olarak kırmızı `Depo seçilmedi` ve `İnceleme N` görünür. Arayüz metinleri `res/values/strings.xml`'dedir; iş kuralı mesajları ise saf JVM testlerinde doğrulandığı için `domain/SaleValidator.kt`'de durur.
 
@@ -101,7 +101,7 @@ Bu değerler verilmezse release imzasız derlenir.
 
 ## Testler
 
-`./gradlew test` (AGP 9'da varsayılan olarak yalnız debug varyantı), toplam 31 test:
+`./gradlew test` (AGP 9'da varsayılan olarak yalnız debug varyantı), toplam 33 test (+2 gerçek API testi):
 
 - `Uuid7Test`, `DecimalsTest`, `SaleValidatorTest`: UUIDv7 sırası/geçerliliği, TypeConverter round-trip, yuvarlama, satış ve iade kuralları, ihlal kodu metinleri, FEFO.
 - `SalesRepositoryTest` (Robolectric): onay 4 tabloya birlikte yazar, transaction ortasında hata olursa hiçbiri yazılmaz; depo zorunlu; iade satılanı aşamaz; reddedilen satıştan vazgeçince stok geri gelir.
@@ -127,7 +127,7 @@ Robolectric testleri API 36'da koşar (`src/test/resources/robolectric.propertie
 ## Açık konular
 
 - **Cihaz kaydı yok** (backend TODO). `device_id` yalnızca istemcide üretilir; satışın deposu kullanıcının Senkron ekranında seçtiği depodur.
-- **Lot bakiyesi her stok değişikliğinde gelmiyor.** Bakiyeli lot kaydı lot oluşunca ve satış, iade veya bloke/açma işlemlerinde yazılır. Depolar arası transfer, üretim sevki ve parçalama tüketimi lot kaydı yazmaz; bu lotların cihazdaki bakiyesi bir sonraki bakiyeli kayda kadar eski kalabilir. Araçta satılan mamul ve parça lotlarını etkilemez.
+- **Genel depo transferi yok** (backend). Araç deposuna mal aktarmanın uç noktası olmadığından gerçek veride satış ana depodan (`WH-MAIN`) yapılır.
 - `items.is_active` Room'da yok; pasif ürün de listelenir.
 - `order_no` cihazda üretilir: `S-` + UUIDv7'nin rastgele kısmının son 10 hanesi. Sunucu bunu aynen kullanır.
 - Kimlik doğrulama yok (backend'de de yok).

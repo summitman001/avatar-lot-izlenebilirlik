@@ -50,6 +50,7 @@ import com.avatar.lotsales.core.Decimals
 import com.avatar.lotsales.data.DraftLine
 import com.avatar.lotsales.data.LotRepository
 import com.avatar.lotsales.data.LotView
+import com.avatar.lotsales.data.SELLABLE_ITEM_TYPES
 import com.avatar.lotsales.data.SalesRepository
 import com.avatar.lotsales.data.db.CustomerEntity
 import com.avatar.lotsales.data.db.ItemEntity
@@ -64,6 +65,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -108,10 +110,11 @@ class NewSaleViewModel @Inject constructor(
 ) : ViewModel() {
     private val form = MutableStateFlow(SaleForm())
     private val lots = lotRepo.observeLots().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
-    private val items = lotRepo.observeItems().stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    private val items = lotRepo.observeItems().map { all -> all.filter { it.itemType in SELLABLE_ITEM_TYPES } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val ui = combine(form, lotRepo.observeCustomers(), items, lots) { f, customers, items, all ->
-        NewSaleUi(f, customers, items, all.filter { it.lot.itemId == f.itemId }.sortedWith(fefoOrder))
+        NewSaleUi(f, customers, items, all.filter { it.forSale && it.lot.itemId == f.itemId }.sortedWith(fefoOrder))
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), NewSaleUi())
 
     /** Lot listesinden gelindiyse o lot; lot karti daha yuklenmeden secici kartla eslesir (sharedCard). */

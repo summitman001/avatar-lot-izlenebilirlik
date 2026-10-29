@@ -825,6 +825,9 @@ components:
         base_uom: { $ref: "#/components/schemas/Uom" }
         unit_weight_kg: { oneOf: [{ $ref: "#/components/schemas/Qty" }, { type: "null" }] }
         default_sale_price: { oneOf: [{ $ref: "#/components/schemas/Amount" }, { type: "null" }] }
+        shelf_life_days:
+          description: Raf ömrü (gün). Lot oluşurken expiry_date verilmezse lot tarihi + shelf_life_days olarak türetilir.
+          oneOf: [{ type: integer, minimum: 1, maximum: 3650 }, { type: "null" }]
         is_active: { type: boolean, default: true }
         created_at: { $ref: "#/components/schemas/DateTime" }
     Supplier:

@@ -96,12 +96,13 @@ Enum'lar: `item_type` ∈ `raw|finished|cut_part|by_product|waste`, `base_uom` �
   "base_uom": "adet",
   "unit_weight_kg": "1.000",
   "default_sale_price": "24.9000",
+  "shelf_life_days": 90,
   "is_active": true,
   "created_at": "2026-10-23T18:28:27.473Z"
 }
 ```
 
-`unit_weight_kg` (adet → kg çevrimi, verim hesabı için) ve `default_sale_price` `null` olabilir. Müşteri/tedarikçi: `contact_name`, `phone`, `email`, `address` opsiyonel (`null`).
+`unit_weight_kg` (adet → kg çevrimi, verim hesabı için), `default_sale_price` ve `shelf_life_days` `null` olabilir. `shelf_life_days` (1–3650, raf ömrü): lot oluşurken `expiry_date` verilmezse SKT lot tarihinden türetilir — alışta `received_at + shelf_life_days`, üretim kabulünde ve parçalama çıktısında işlem günü + `shelf_life_days`. Açıkça verilen `expiry_date` her zaman kazanır; raf ömrü tanımsızsa lot SKT'siz kalır. Müşteri/tedarikçi: `contact_name`, `phone`, `email`, `address` opsiyonel (`null`).
 
 `item`, `customer`, `warehouse` ve `lot` değişiklikleri senkron akışına (`change_log`) da yazılır; tedarikçiler yazılmaz.
 
