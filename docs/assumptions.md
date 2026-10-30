@@ -229,17 +229,16 @@ Uygulama: `backend/internal/repo/traceability.go`, istek/varlık tipleri
 `backend/internal/domain/traceability.go`. Veri modeli ve recursive CTE mantığı ayrıntılı olarak
 `docs/traceability.md`'dedir; burada yalnızca BİLİNÇLİ kararlar özetlenir.
 
-1. **ET-2026-001'in miktarı 112 kg'dır (100 kg değil).** Yarışma dokümanı 100 kg der; izlenebilirlik
-   grafının ÇOK YOLLU (bir hammadde lotunun birden fazla mamul lotuna dağıldığı) çalıştığını kanıtlamak
-   için kasıtlı olarak eklenen bir senaryo gereği 12 kg daha seed'lendi: 100 kg `URT-2026-045`'te,
-   kalan 12 kg ikinci bir üretim emrinde (`URT-2026-046`, 10 adet `SUC-2026-046`) kullanılır. Bu, görev
-   talimatının açıkça istediği bir varsayımdır; gerçek değer netleşince yalnızca seed'deki miktar
-   güncellenir.
-2. **`downstream_known` HER ZAMAN `false`'dur.** Şema, bir marketin (müşterinin) kendi müşterisine ne
-   kadar sattığını (ikinci kademe dağıtım) hiçbir yerde modellemez/kaydetmez -- bu tür bir kayıt hiçbir
-   zaman var olmayacağı için `downstream_known=true` dönecek bir kod yolu YOKTUR (uydurma rakam riskini
-   yapısal olarak ortadan kaldırır). Sabit `downstream_note` metni (`domain.DownstreamNoteText`) her
-   zaman eşlik eder. Web bunu kesin veriden (satış/sevkiyat miktarı) görsel olarak AYRI bir rozetle
+1. **ET-2026-001 senaryosu dokümanla birebirdir.** 100 kg, tamamı `URT-2026-045`'te kullanılır →
+   85 paket `SUC-2026-045` → Market A/B/C 30/25/30. Dokümandaki "bir hammadde lotu birden fazla mamul
+   lotuna dönüşebilir" ilişkisi, ET-2026-001'i değiştirmemek için AYRI bir et lotunda (`ET-2026-002`,
+   32 kg → `SUC-2026-046` ve `SUC-2026-047`) gösterilir; bu lotlar ET-2026-001'in geri çağrılmasından
+   etkilenmez (bağımsız kontrol).
+2. **İkinci kademe dağıtım yalnızca kaydedilmişse gösterilir.** Marketin kendi alıcısına dağıttığı
+   miktar `downstream_distribution`'a (migration `000012`) kaydedilir; kayıt yoksa `downstream_known`
+   `false`'dur ve sabit `downstream_note` (`domain.DownstreamNoteText`) eşlik eder. Kayıt varsa
+   yalnızca kayıtlı alıcılar ve miktarlar kesin olarak gösterilir; kayıtsız kalan miktar için rakam
+   uydurulmaz, not döner. Toplam kayıt müşteriye giden net miktarı (sevk − iade) aşamaz. Web bunu kesin veriden (satış/sevkiyat miktarı) görsel olarak AYRI bir rozetle
    (dolgu yeşil = kesin, çerçeveli gri = bilinmiyor) gösterir; aynı renk kullanılmaz.
 3. **Geri çağırma, bloke lot mekanizmasını `setLotStatusInTx` ortak yardımcısıyla yeniden kullanır.**
    `SetLotBlocked`'ın (Görev 2) iç mantığı `setLotStatusInTx(tx, lotID, status, reason)`'a çıkarıldı;

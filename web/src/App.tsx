@@ -4,9 +4,9 @@ import {
 } from '@mantine/core'
 import { useHotkeys, useLocalStorage } from '@mantine/hooks'
 import {
-  IconAlertTriangle, IconArrowBackUp, IconBell, IconBox, IconBuildingFactory2, IconChartLine, IconFileInvoice,
+  IconAlertTriangle, IconArrowBackUp, IconArrowsExchange, IconBell, IconBox, IconBuildingFactory2, IconChartLine, IconFileInvoice,
   IconLayoutDashboard, IconLayoutSidebarLeftCollapse, IconLayoutSidebarLeftExpand, IconMeat, IconMoon, IconRoute, IconSearch, IconServer, IconShoppingCart, IconStack2,
-  IconSun, IconTruckDelivery,
+  IconRecycle, IconSun, IconTruckDelivery,
 } from '@tabler/icons-react'
 import { useQuery } from '@tanstack/react-query'
 import { useRef, useState, type MouseEvent } from 'react'
@@ -28,9 +28,11 @@ import Predictions from './pages/Predictions'
 import PurchaseReceiptDetail from './pages/PurchaseReceiptDetail'
 import Purchases from './pages/Purchases'
 import RecallDetail from './pages/RecallDetail'
+import Reprocess from './pages/Reprocess'
 import Recalls from './pages/Recalls'
 import SalesOrderDetail from './pages/SalesOrderDetail'
 import SalesOrders from './pages/SalesOrders'
+import StockMovements from './pages/StockMovements'
 import Traceability from './pages/Traceability'
 
 // Sol menü (ikon rayı). `ready: false` olanlar "Yakında" placeholder'ıdır (docs/HANDOFF.md sıradaki işler).
@@ -38,10 +40,12 @@ const MENU = [
   { path: '/', label: 'Dashboard', icon: IconLayoutDashboard, ready: true },
   { path: '/urunler', label: 'Ürünler', icon: IconBox, ready: true },
   { path: '/lotlar', label: 'Lotlar', icon: IconStack2, ready: true },
+  { path: '/stok-hareketleri', label: 'Stok Hareketleri', icon: IconArrowsExchange, ready: true },
   { path: '/alislar', label: 'Alışlar', icon: IconTruckDelivery, ready: true },
   { path: '/fatura-okuma', label: 'Fatura Okuma', icon: IconFileInvoice, ready: true },
   { path: '/dis-uretim', label: 'Dış Üretim', icon: IconBuildingFactory2, ready: true },
   { path: '/parcalama', label: 'Parçalama', icon: IconMeat, ready: true },
+  { path: '/yeniden-isleme', label: 'Yeniden İşleme', icon: IconRecycle, ready: true },
   { path: '/satis-sevkiyat', label: 'Satış/Sevkiyat', icon: IconShoppingCart, ready: true },
   { path: '/izlenebilirlik', label: 'İzlenebilirlik', icon: IconRoute, ready: true },
   { path: '/geri-cagirma', label: 'Geri Çağırma', icon: IconArrowBackUp, ready: true },
@@ -256,6 +260,8 @@ export default function App() {
           <Route path="/uyarilar" element={<AnomalyAlertsPage />} />
           <Route path="/urunler" element={<Products />} />
           <Route path="/lotlar" element={<Lots />} />
+          <Route path="/stok-hareketleri" element={<StockMovements />} />
+          <Route path="/yeniden-isleme" element={<Reprocess />} />
           <Route path="/alislar" element={<Purchases />} />
           <Route path="/alislar/:id" element={<PurchaseReceiptDetail />} />
           <Route path="/fatura-okuma" element={<InvoiceImports />} />

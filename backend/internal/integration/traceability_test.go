@@ -13,9 +13,10 @@ import (
 	"github.com/summitman001/avatar-lot-izlenebilirlik/backend/internal/domain"
 )
 
-// recallScenario: yarışma dokümanındaki ET-2026-001 senaryosu + izlenebilirlik demo eklentileri
-// (ikinci üretim yolu, ikinci kademe satış, iade, bağımsız kontrol lotu) -- gerçek HTTP uç
-// noktalarıyla (POST /lots, /production-orders, /sales-orders, /customer-returns) kurulur.
+// recallScenario: yarışma dokümanındaki ET-2026-001 senaryosu BİREBİR (100 kg -> URT-2026-045 ->
+// 85 paket SUC-2026-045 -> Market A/B/C 30/25/30) + ondan bağımsız ikinci bir et lotu ET-2026-002
+// (bir hammadde lotunun birden fazla mamul lotuna dönüşmesi: SUC-2026-046 ve SUC-2026-047) + iade --
+// gerçek HTTP uç noktalarıyla (POST /lots, /production-orders, /sales-orders, /customer-returns) kurulur.
 type recallScenario struct {
 	f                      prodFixture
 	et1, et2               string
@@ -42,10 +43,10 @@ func (e *env) buildRecallScenario() recallScenario {
 			"received_at": "2026-03-02", "qty": qty, "unit_price": price,
 		}
 	}
-	et1 := e.must(e.do("POST", "/api/v1/lots", lotBody("ET-2026-001", f.meatItem, f.supplier, "112.000", "9.7000")), 201).str("id")
+	et1 := e.must(e.do("POST", "/api/v1/lots", lotBody("ET-2026-001", f.meatItem, f.supplier, "100.000", "9.7000")), 201).str("id")
 	bhrLot := e.must(e.do("POST", "/api/v1/lots", lotBody("BHR-2026-001", f.spiceItem, supBhr, "2.000", "24.0000")), 201).str("id")
 	bgrLot := e.must(e.do("POST", "/api/v1/lots", lotBody("BGR-2026-001", f.casingItem, supBgr, "5.000", "11.6000")), 201).str("id")
-	et2 := e.must(e.do("POST", "/api/v1/lots", lotBody("ET-2026-002", f.meatItem, f.supplier, "20.000", "9.7000")), 201).str("id")
+	et2 := e.must(e.do("POST", "/api/v1/lots", lotBody("ET-2026-002", f.meatItem, f.supplier, "32.000", "9.7000")), 201).str("id")
 
 	prodOrder := func(orderNo, plannedQty string) string {
 		return e.must(e.do("POST", "/api/v1/production-orders", map[string]any{
@@ -69,14 +70,15 @@ func (e *env) buildRecallScenario() recallScenario {
 	}), 200)
 	suc045 := receive(order1, "SUC-2026-045", "85")
 
-	// URT-2026-046 (ikinci yol): ET-2026-001'in KALAN 12 kg'ı -> 10 adet SUC-2026-046.
+	// URT-2026-046: ET-2026-002'nin 12 kg'ı -> 10 adet SUC-2026-046.
 	order2 := prodOrder("URT-2026-046", "10")
 	e.must(e.do("POST", "/api/v1/production-orders/"+order2+"/send-materials", map[string]any{
-		"lines": []map[string]any{{"lot_id": et1, "qty": "12.000"}},
+		"lines": []map[string]any{{"lot_id": et2, "qty": "12.000"}},
 	}), 200)
 	suc046 := receive(order2, "SUC-2026-046", "10")
 
-	// URT-2026-047 (bağımsız kontrol lotu): ET-2026-002 (ET-2026-001'den TAMAMEN ayrı) -> SUC-2026-047.
+	// URT-2026-047: ET-2026-002'nin kalan 20 kg'ı -> SUC-2026-047. ET-2026-002 böylece İKİ mamul
+	// lotuna dönüşür; ikisi de ET-2026-001'den TAMAMEN bağımsızdır (geri çağırma kontrolü).
 	order3 := prodOrder("URT-2026-047", "10")
 	e.must(e.do("POST", "/api/v1/production-orders/"+order3+"/send-materials", map[string]any{
 		"lines": []map[string]any{{"lot_id": et2, "qty": "20.000"}},
@@ -89,7 +91,7 @@ func (e *env) buildRecallScenario() recallScenario {
 			"lines": []map[string]any{{"item_id": f.product, "lot_id": lotID, "qty": qty, "unit_price": "24.9000"}},
 		}
 	}
-	// SUC-045 -> MKT-A 30, MKT-B 25, MKT-C 30; SUC-046 -> MKT-A 10 (MKT-A toplam 40); SUC-047 -> MKT-C 10.
+	// SUC-045 -> MKT-A 30, MKT-B 25, MKT-C 30 (doküman); SUC-046 -> MKT-A 10; SUC-047 -> MKT-C 10.
 	for _, v := range []struct{ cust, lot, qty string }{
 		{mktA, suc045, "30"}, {mktB, suc045, "25"}, {mktC, suc045, "30"}, {mktA, suc046, "10"}, {mktC, suc047, "10"},
 	} {
@@ -122,8 +124,8 @@ func insertLotLink(t *testing.T, parent, child, processType string) {
 // trace-forward
 // ---------------------------------------------------------------------------
 
-// ET-2026-001 -> SUC-2026-045 VE SUC-2026-046 (çok yollu) bulunur, SUC-2026-047 BULUNMAZ (bağımsız
-// lot). Müşteri dağılımı: MKT-A 30+10=40, MKT-B 25 (2 iade AYRI gösterilir), MKT-C 30.
+// Doküman senaryosu: ET-2026-001 -> yalnızca SUC-2026-045; ET-2026-002'nin mamulleri (SUC-046/047)
+// BULUNMAZ. Müşteri dağılımı dokümandaki gibi: MKT-A 30, MKT-B 25 (2 iade AYRI gösterilir), MKT-C 30.
 func TestTraceForwardMultiPathAndCustomerSummary(t *testing.T) {
 	e := newEnv(t)
 	sc := e.buildRecallScenario()
@@ -134,18 +136,20 @@ func TestTraceForwardMultiPathAndCustomerSummary(t *testing.T) {
 	for _, n := range nodes {
 		lotNos[n.(map[string]any)["lot_no"].(string)] = true
 	}
-	for _, want := range []string{"ET-2026-001", "SUC-2026-045", "SUC-2026-046"} {
+	for _, want := range []string{"ET-2026-001", "SUC-2026-045"} {
 		if !lotNos[want] {
 			t.Errorf("%s bulunmali: %s", want, r.Raw)
 		}
 	}
-	if lotNos["SUC-2026-047"] {
-		t.Errorf("SUC-2026-047 bagimsiz lot, BULUNMAMALI: %s", r.Raw)
+	for _, other := range []string{"SUC-2026-046", "SUC-2026-047"} {
+		if lotNos[other] {
+			t.Errorf("%s baska et lotundan (ET-2026-002), BULUNMAMALI: %s", other, r.Raw)
+		}
 	}
 
 	summary := r.JSON["summary"].(map[string]any)
-	if int(summary["affected_lot_count"].(float64)) != 3 {
-		t.Errorf("3 etkilenen lot (ET-001, SUC-045, SUC-046) beklenirdi: %v", summary)
+	if int(summary["affected_lot_count"].(float64)) != 2 {
+		t.Errorf("2 etkilenen lot (ET-001, SUC-045) beklenirdi: %v", summary)
 	}
 	custs, _ := summary["customers"].([]any)
 	got := map[string]struct{ shipped, returned string }{}
@@ -157,10 +161,10 @@ func TestTraceForwardMultiPathAndCustomerSummary(t *testing.T) {
 		}
 	}
 	if len(custs) != 3 {
-		t.Fatalf("3 musteri (MKT-A/B/C) beklenirdi, MKT-C'nin SUC-047 alisi DAHIL degil: %v", custs)
+		t.Fatalf("3 musteri (MKT-A/B/C) beklenirdi: %v", custs)
 	}
-	if got["Market A"].shipped != "40.000" {
-		t.Errorf("Market A sevk: 40.000 beklenirdi, %s geldi", got["Market A"].shipped)
+	if got["Market A"].shipped != "30.000" {
+		t.Errorf("Market A sevk: 30.000 beklenirdi (SUC-046'nin 10'u DAHIL degil), %s geldi", got["Market A"].shipped)
 	}
 	if got["Market B"].shipped != "25.000" || got["Market B"].returned != "2.000" {
 		t.Errorf("Market B: sevk 25.000/iade 2.000 beklenirdi, %v geldi", got["Market B"])
@@ -186,6 +190,16 @@ func TestTraceForwardMultiPathAndCustomerSummary(t *testing.T) {
 	}
 	if suc045Node["returned_qty"] != "2.000" {
 		t.Errorf("SUC-2026-045 returned_qty=2.000 beklenirdi: %v", suc045Node["returned_qty"])
+	}
+
+	// Çok yollu: bir hammadde lotu (ET-2026-002) birden fazla mamul lotuna dönüşür.
+	r2 := e.must(e.do("GET", "/api/v1/lots/"+sc.et2+"/trace-forward", nil), 200)
+	lotNos2 := map[string]bool{}
+	for _, n := range r2.JSON["nodes"].([]any) {
+		lotNos2[n.(map[string]any)["lot_no"].(string)] = true
+	}
+	if !lotNos2["SUC-2026-046"] || !lotNos2["SUC-2026-047"] || lotNos2["SUC-2026-045"] {
+		t.Errorf("ET-2026-002 -> SUC-2026-046 ve SUC-2026-047 (SUC-045 degil): %s", r2.Raw)
 	}
 }
 
@@ -287,22 +301,22 @@ func TestGenealogyLevelsAndEdges(t *testing.T) {
 	e := newEnv(t)
 	sc := e.buildRecallScenario()
 
-	r := e.must(e.do("GET", "/api/v1/lots/"+sc.et1+"/genealogy", nil), 200)
+	r := e.must(e.do("GET", "/api/v1/lots/"+sc.et2+"/genealogy", nil), 200)
 	nodes, _ := r.JSON["nodes"].([]any)
 	levelByLot := map[string]float64{}
 	for _, n := range nodes {
 		m := n.(map[string]any)
 		levelByLot[m["lot_no"].(string)] = m["level"].(float64)
 	}
-	if levelByLot["ET-2026-001"] != 0 {
+	if levelByLot["ET-2026-002"] != 0 {
 		t.Errorf("kok lot level=0 olmali: %v", levelByLot)
 	}
-	if levelByLot["SUC-2026-045"] != 1 || levelByLot["SUC-2026-046"] != 1 {
+	if levelByLot["SUC-2026-046"] != 1 || levelByLot["SUC-2026-047"] != 1 {
 		t.Errorf("mamul lotlar level=1 olmali: %v", levelByLot)
 	}
 	edges, _ := r.JSON["edges"].([]any)
 	if len(edges) < 2 {
-		t.Fatalf("en az 2 kenar (ET->SUC-045, ET->SUC-046) beklenirdi: %v", edges)
+		t.Fatalf("en az 2 kenar (ET-002->SUC-046, ET-002->SUC-047) beklenirdi: %v", edges)
 	}
 }
 
@@ -310,7 +324,8 @@ func TestGenealogyLevelsAndEdges(t *testing.T) {
 // geri çağırma
 // ---------------------------------------------------------------------------
 
-// ET-2026-001 için recall açılınca yalnızca etkilenen lotlar 'recalled' olur; SUC-2026-047 etkilenmez.
+// ET-2026-001 için recall açılınca yalnızca etkilenen lotlar (ET-001, SUC-045) 'recalled' olur;
+// ET-2026-002'nin mamulleri (SUC-046/047) etkilenmez.
 // Aynı lot için ikinci recall 409.
 func TestRecallCreateBlocksOnlyAffectedLots(t *testing.T) {
 	e := newEnv(t)
@@ -326,19 +341,21 @@ func TestRecallCreateBlocksOnlyAffectedLots(t *testing.T) {
 		m := a.(map[string]any)
 		statusByLot[m["lot_no"].(string)] = m["status"].(string)
 	}
-	for _, want := range []string{"ET-2026-001", "SUC-2026-045", "SUC-2026-046"} {
+	for _, want := range []string{"ET-2026-001", "SUC-2026-045"} {
 		if statusByLot[want] != "recalled" {
 			t.Errorf("%s recalled olmali: %v", want, statusByLot)
 		}
 	}
-	if _, ok := statusByLot["SUC-2026-047"]; ok {
-		t.Errorf("SUC-2026-047 etkilenmemeli: %v", statusByLot)
+	for _, other := range []string{"SUC-2026-046", "SUC-2026-047"} {
+		if _, ok := statusByLot[other]; ok {
+			t.Errorf("%s etkilenmemeli: %v", other, statusByLot)
+		}
 	}
-	if n := count(t, `SELECT COUNT(*) FROM lot WHERE id = ? AND status = 'active'`, sc.suc047); n != 1 {
-		t.Fatalf("SUC-2026-047 DB'de aktif kalmali")
+	if n := count(t, `SELECT COUNT(*) FROM lot WHERE id IN (?, ?) AND status = 'active'`, sc.suc046, sc.suc047); n != 2 {
+		t.Fatalf("SUC-2026-046/047 DB'de aktif kalmali")
 	}
-	if n := count(t, `SELECT COUNT(*) FROM lot WHERE id IN (?, ?, ?) AND status = 'recalled'`, sc.et1, sc.suc045, sc.suc046); n != 3 {
-		t.Fatalf("3 lot DB'de recalled olmali, %d oldu", n)
+	if n := count(t, `SELECT COUNT(*) FROM lot WHERE id IN (?, ?) AND status = 'recalled'`, sc.et1, sc.suc045); n != 2 {
+		t.Fatalf("2 lot DB'de recalled olmali, %d oldu", n)
 	}
 
 	custs, _ := rc.JSON["customers"].([]any)
@@ -397,8 +414,8 @@ func TestRecallBlockReflectedInSyncAndOfflineViolation(t *testing.T) {
 	for _, id := range ids {
 		blocked[id.(string)] = true
 	}
-	if !blocked[sc.suc045] || !blocked[sc.suc046] || !blocked[sc.et1] {
-		t.Fatalf("blocked_lot_ids etkilenen lotlari icermeli: %v", ids)
+	if !blocked[sc.suc045] || !blocked[sc.et1] || blocked[sc.suc046] {
+		t.Fatalf("blocked_lot_ids yalniz etkilenen lotlari (ET-001, SUC-045) icermeli: %v", ids)
 	}
 
 	rest := e.do("POST", "/api/v1/sales-orders", map[string]any{

@@ -251,9 +251,12 @@ func (s *Store) TraceForward(ctx context.Context, lotID string) (*domain.TraceFo
 	custSlice := make([]domain.TraceForwardCustomerSummary, 0, len(custIDs))
 	for _, id := range custIDs {
 		c := *custAgg[id]
-		c.DownstreamKnown = false
-		note := domain.DownstreamNoteText
-		c.DownstreamNote = &note
+		entries, err := loadDownstream(ctx, s.db, id, order)
+		if err != nil {
+			return nil, err
+		}
+		c.Downstream = entries
+		c.DownstreamKnown, c.DownstreamNote = downstreamStatus(entries, c.QtyShipped.Decimal.Sub(c.QtyReturned.Decimal))
 		custSlice = append(custSlice, c)
 	}
 
@@ -314,8 +317,8 @@ func fetchBackwardEdges(ctx context.Context, q DBTX, rootLotID string) ([]backwa
 }
 
 // resolveProcessOrderNo: lot_link.process_id, process_type'a göre hangi tabloya işaret ettiğini
-// (production_order | cutting_order) çözüp o belgenin insan okunur numarasını döner (yoksa nil;
-// reprocess/repack bu görevde henüz servis/tablo olmadığı için nil kalır).
+// (production_order | cutting_order | reprocess_order) çözüp o belgenin insan okunur numarasını döner
+// (yoksa nil; repack için servis/tablo olmadığından nil kalır).
 func resolveProcessOrderNo(ctx context.Context, q DBTX, processType, processID string) *string {
 	var table string
 	switch processType {
@@ -323,6 +326,8 @@ func resolveProcessOrderNo(ctx context.Context, q DBTX, processType, processID s
 		table = "production_order"
 	case "cutting":
 		table = "cutting_order"
+	case "reprocess":
+		table = "reprocess_order"
 	default:
 		return nil
 	}
@@ -713,12 +718,21 @@ func loadRecallCustomers(ctx context.Context, q DBTX, recallID string) ([]domain
 			return nil, err
 		}
 		v.RemainingRisk = domain.NewQty(v.QtyShipped.Decimal.Sub(v.QtyReturned.Decimal))
-		v.DownstreamKnown = false
-		note := domain.DownstreamNoteText
-		v.DownstreamNote = &note
 		out = append(out, v)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	for i := range out { // ikinci kademe kayitlari: rows kapandiktan SONRA (ayni tx/baglanti)
+		entries, err := loadDownstream(ctx, q, out[i].CustomerID, []string{out[i].LotID})
+		if err != nil {
+			return nil, err
+		}
+		out[i].Downstream = entries
+		out[i].DownstreamKnown, out[i].DownstreamNote = downstreamStatus(entries, out[i].RemainingRisk.Decimal)
+	}
+	return out, nil
 }
 
 func (s *Store) GetRecall(ctx context.Context, id string) (*domain.Recall, error) {

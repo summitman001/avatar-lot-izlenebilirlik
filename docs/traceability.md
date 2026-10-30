@@ -21,12 +21,18 @@ lot_link(id, parent_lot_id, child_lot_id, qty_from_parent, uom, process_type, pr
   `child_lot_id` lotuna aktarılmıştır.
 - **Çoktan çoğa**: bir mamul lotu birden fazla hammadde lotundan türeyebilir (SUC-2026-045 ← ET + BHR +
   BGR, üç ayrı `lot_link` satırı) VE bir hammadde lotu birden fazla mamul lotuna dağılabilir
-  (ET-2026-001 → SUC-2026-045 **ve** SUC-2026-046, iki ayrı `lot_link` satırı — izlenebilirlik demo
-  senaryosu, bkz. aşağı). Bu yüzden şema **ayrı bir `lot.parent_id` kolonu değil**, kendi tablosudur.
-- Bugün yazan tek servis `ReceiveProduction`'dır (dış üretim, `process_type='production'`). Parçalama/
-  yeniden işleme servisleri henüz yok (bkz. `docs/HANDOFF.md`); test (`TestTraceForwardThreeLevelsDeep`,
-  `TestTraceForwardCycleGuard`) bu süreçleri **doğrudan `lot_link` satırı ekleyerek** simüle eder — görev
-  talimatının öngördüğü gibi.
+  (seed'de ET-2026-002 → SUC-2026-046 **ve** SUC-2026-047, iki ayrı `lot_link` satırı — bkz. aşağı). Bu yüzden şema **ayrı bir `lot.parent_id` kolonu değil**, kendi tablosudur.
+- `lot_link` yazan servisler: `ReceiveProduction` (dış üretim, `process_type='production'`),
+  `CloseCuttingOrder` (parçalama, `'cutting'`) ve `CreateReprocessOrder` (yeniden işleme, `'reprocess'`,
+  migration `000012`, `POST /reprocess-orders`). Yeniden işlemede girdi lotları `reprocess_consume` ile
+  tüketilir, yeni lot `reprocess_in` ile girer ve her girdi için bir kenar yazılır; ileri/geri izleme
+  ve geri çağırma bu yüzden yeniden işlenmiş lotları **ek kod olmadan** kapsar (`TestReprocessOrder`).
+  `repack` için servis yoktur (PDF'de geçmez). Döngü/derinlik testleri (`TestTraceForwardThreeLevelsDeep`,
+  `TestTraceForwardCycleGuard`) kenarları doğrudan `lot_link` satırı ekleyerek kurar.
+- Lot bazında kaydedilen diğer hareketler: depo transferi (`transfer_out`/`transfer_in`,
+  `POST /stock-transfers`), satış, iade ve **fire** (`waste_out`, `POST /lots/{id}/waste`; geri
+  çağrılmış lotun imhası da bu yoldur). Hepsi `GET /stock-movements` ve web'deki **Stok Hareketleri**
+  sayfasında lot bazında listelenir.
 
 ## 2. Recursive CTE'ler (MySQL 8 `WITH RECURSIVE`)
 
@@ -74,11 +80,19 @@ SELECT ... FROM fwd
    gösterilir — "kalan risk" hesaplaması web'de `qty_shipped - qty_returned` ile yapılır).
 
 Müşteri bazlı özet (`summary.customers`) bu düğümlerin satış satırlarından toplanır. **İkinci kademe
-dağıtım kuralı:** sistemde marketin (müşterinin) kendi müşterisine ne kadar sattığına dair HİÇBİR KAYIT
-YOKTUR (şema bunu modellemez) — bu yüzden `downstream_known` **her zaman `false`**'dur ve
-`downstream_note` sabit bir açıklama taşır ("İkinci kademe dağıtım kaydı yok, market ile iletişime
-geçilmeli"). Uydurma bir rakam asla üretilmez; web bu ayrımı gri/outline rozetle (bilinen yeşil dolgu
-rozetten görsel olarak farklı) gösterir.
+dağıtım kuralı** (PDF: "İkinci kademe dağıtım yalnızca kaydedilmişse kesin olarak gösterilir"): marketin
+kendi alıcılarına dağıttığı miktar `downstream_distribution` tablosuna (`POST /downstream-distributions`,
+web: Geri Çağırma detayında "+") kaydedilebilir. Toplam kayıt, müşteriye o lottan giden net miktarı
+(sevk − iade) aşamaz (`422`).
+
+- **Kayıt yoksa:** `downstream_known=false`, `downstream` boş, `downstream_note` sabit açıklama
+  ("İkinci kademe dağıtım kaydı yok, market ile iletişime geçilmeli"). Uydurma rakam üretilmez.
+- **Kayıt varsa:** `downstream_known=true` ve kayıtlı alıcılar miktarlarıyla `downstream` listesinde
+  kesin olarak gösterilir. Kayıtlar net miktarı karşılamıyorsa kalan kısım için not döner
+  (`DownstreamPartialNoteText`); kayıtsız kısım için yine rakam uydurulmaz.
+
+Aynı kayıtlar geri çağırmanın müşteri satırlarında (`customers[].downstream`) ve iletişim listesi
+CSV'sinde (`kademe=2`, `dagitan_musteri` dolu satırlar) yer alır.
 
 ## 4. Geri çağırma akışı
 
@@ -113,25 +127,26 @@ flowchart TD
 
 ## 5. ET-2026-001 senaryosu — adım adım beklenen çıktı
 
-Seed (`backend/cmd/seed/main.go`, servisler üzerinden): `ET-2026-001` (112 kg et) **iki** üretim emrinde
-kullanılır — `URT-2026-045` (100 kg → 85 adet `SUC-2026-045`, baharat+bağırsakla birlikte) ve
-`URT-2026-046` (kalan 12 kg → 10 adet `SUC-2026-046`). Bağımsız bir kontrol lotu
-(`ET-2026-002` → `URT-2026-047` → `SUC-2026-047` → Market C) `ET-2026-001`'den TAMAMEN ayrı bir zincirdir.
+Seed (`backend/cmd/seed/main.go`, servisler üzerinden), yarışma dokümanıyla birebir: `ET-2026-001`
+(100 kg et) `URT-2026-045`'te (baharat+bağırsakla birlikte) kullanılır → 85 paket `SUC-2026-045` →
+Market A/B/C 30/25/30. Ondan TAMAMEN ayrı ikinci bir et lotu `ET-2026-002` (32 kg) dokümandaki "bir
+hammadde lotu birden fazla mamul lotuna dönüşebilir" ilişkisini gösterir: 12 kg `URT-2026-046` →
+10 adet `SUC-2026-046` (Market A), 20 kg `URT-2026-047` → 10 adet `SUC-2026-047` (Market C).
 
-| Lot | Market A | Market B | Market C |
-|---|---|---|---|
-| SUC-2026-045 | 30 | 25 (−2 iade) | 30 |
-| SUC-2026-046 | 10 | — | — |
-| SUC-2026-047 (bağımsız) | — | — | 10 |
+| Lot | Hammadde | Market A | Market B | Market C |
+|---|---|---|---|---|
+| SUC-2026-045 | ET-2026-001 | 30 | 25 (−2 iade) | 30 |
+| SUC-2026-046 | ET-2026-002 | 10 | — | — |
+| SUC-2026-047 | ET-2026-002 | — | — | 10 |
 
 1. `GET /lots?q=ET-2026-001` → lot id bulunur.
-2. `GET /lots/{id}/trace-forward` → `nodes`: `ET-2026-001` (depth 0), `SUC-2026-045` (depth 1, 100 kg),
-   `SUC-2026-046` (depth 1, 12 kg). **`SUC-2026-047` listede YOKTUR.** `summary.customers`: Market A
-   **40** (30+10), Market B **25** (iade 2 AYRI gösterilir), Market C **30** (SUC-047'nin 10'u dahil
-   DEĞİL, çünkü o lot bu izlemenin parçası değil).
-3. `POST /recalls {root_lot_id, reason}` → `affected_lot_count=3`, 3 lot `recalled` olur
-   (`SUC-2026-047` `active` kalır), `customers` listesi Market A/B/C satırlarını (lot başına) içerir.
-4. `GET /sync/pull?since_seq=0` → `blocked_lot_ids` üç lotu da içerir.
+2. `GET /lots/{id}/trace-forward` → `nodes`: `ET-2026-001` (depth 0), `SUC-2026-045` (depth 1, 100 kg).
+   **`SUC-2026-046`/`SUC-2026-047` listede YOKTUR** (başka et lotundan). `summary.customers`: Market A
+   **30**, Market B **25** (iade 2 AYRI gösterilir), Market C **30**.
+3. `POST /recalls {root_lot_id, reason}` → `affected_lot_count=2`, `ET-2026-001` ve `SUC-2026-045`
+   `recalled` olur (`SUC-2026-046`/`SUC-2026-047` `active` kalır), `customers` listesi Market A/B/C
+   satırlarını içerir.
+4. `GET /sync/pull?since_seq=0` → `blocked_lot_ids` iki lotu da içerir.
 5. O lottan REST ile satış denemesi `422 LOT_BLOCKED`; `/sync/push` ile (offline) gönderilirse
    `flagged` + `LOT_BLOCKED_AT_SALE` + `recall_customer`'da `has_violation=true`.
 6. `PATCH .../customers/{id}` ile her müşteri `confirmed` yapılır; `POST .../close` → `closed`.

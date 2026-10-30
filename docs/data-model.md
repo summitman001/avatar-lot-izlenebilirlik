@@ -226,6 +226,10 @@ Tabloların ER'de gösterilmeyen küçük alanları (adres, telefon vb.) migrati
 | Alış tutarsızlığı | `purchase_receipt_line.has_mismatch = (line_total <> declared_line_total)`. |
 | Geri çağırma | `recall.root_lot_id` → `recall_lot` (etkilenen tüm lotlar, `depth` ve `path`) → `recall_customer` (hangi müşteriye ne kadar gitti/döndü). |
 | Offline satış | `sales_order.device_id`, `stock_movement.device_id/client_created_at`; geri çağrılmış lotun satışı `sales_line.recall_violation = TRUE` ile işaretlenir. |
+| Depolar arası transfer | `stock_transfer` (başlık, `TRF-YYYY-NNN`; migration `000011`); satırlar ayrı tablo değil, `ref_type='stock_transfer'` olan `transfer_out`/`transfer_in` hareket çiftleridir. |
+| Yeniden işleme | `reprocess_order` (`YIS-YYYY-NNN`, depo, çıktı lotu, toplam maliyet; migration `000012`); girdiler `lot_link` (`process_type='reprocess'`), hareketler `reprocess_consume`/`reprocess_in`. Çıktı lotu `origin_type='reprocess'`. |
+| Fire | Ayrı tablo yok: `stock_movement` `movement_type='waste_out'`, `ref_type='lot_waste'`, `ref_id`=lot, `note`=sebep. |
+| İkinci kademe dağıtım | `downstream_distribution` (müşteri, lot, alıcı, telefon, miktar, tarih; migration `000012`). Yalnızca kayıtlıysa izleme/geri çağırmada gösterilir. |
 
 ## Bilinen sınırlar
 

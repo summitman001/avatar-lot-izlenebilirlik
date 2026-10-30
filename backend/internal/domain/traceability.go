@@ -15,10 +15,14 @@ var (
 	RecallContactStatuses = set("pending", "contacted", "confirmed")
 )
 
-// DownstreamNoteText: markete sevk edilen miktarın ÖTESİNDE (marketin kendi müşterisine ne kadar
-// sattığı) sistemde hiçbir zaman kayıtlı değildir -- bu şema ikinci kademe dağıtımı modellemez.
-// DownstreamKnown bu yüzden her zaman false'dur; uydurma bir rakam üretmek yerine bu not döner.
+// İkinci kademe dağıtım (marketin kendi alıcılarına dağıttığı miktar) YALNIZCA kaydedilmişse
+// (downstream_distribution, POST /downstream-distributions) kesin olarak gösterilir. Kayıt yoksa
+// DownstreamKnown=false ve DownstreamNoteText döner; uydurma bir rakam üretilmez. Kayıt var ama
+// müşteriye giden net miktarı karşılamıyorsa kayıtlı kısım gösterilir, kalan için
+// DownstreamPartialNoteText döner.
 const DownstreamNoteText = "İkinci kademe dağıtım kaydı yok, market ile iletişime geçilmeli"
+
+const DownstreamPartialNoteText = "Kayıtlı ikinci kademe dağıtım gösteriliyor; kaydedilmeyen kalan miktar için market ile iletişime geçilmeli"
 
 // ---------------------------------------------------------------------------
 // trace-forward
@@ -77,6 +81,8 @@ type TraceForwardCustomerSummary struct {
 	QtyReturned     Qty     `json:"qty_returned"`
 	DownstreamKnown bool    `json:"downstream_known"`
 	DownstreamNote  *string `json:"downstream_note,omitempty"`
+	// Downstream: kayıtlı ikinci kademe dağıtımlar (etkilenen lotlardan; kayıt yoksa boş).
+	Downstream []DownstreamDistribution `json:"downstream"`
 }
 
 type TraceForwardSummary struct {
@@ -190,6 +196,8 @@ type RecallCustomerView struct {
 	DownstreamKnown bool    `json:"downstream_known"`
 	DownstreamNote  *string `json:"downstream_note,omitempty"`
 	HasViolation    bool    `json:"has_violation"`
+	// Downstream: bu müşterinin bu lottan kayıtlı ikinci kademe dağıtımları (kayıt yoksa boş).
+	Downstream []DownstreamDistribution `json:"downstream"`
 }
 
 // Recall: GET/POST /recalls API JSON'u. AffectedLots/Customers yalnızca detay görünümünde

@@ -127,7 +127,7 @@ Robolectric testleri API 36'da koşar (`src/test/resources/robolectric.propertie
 ## Açık konular
 
 - **Cihaz kaydı yok** (backend TODO). `device_id` yalnızca istemcide üretilir; satışın deposu kullanıcının Senkron ekranında seçtiği depodur.
-- **Genel depo transferi yok** (backend). Araç deposuna mal aktarmanın uç noktası olmadığından gerçek veride satış ana depodan (`WH-MAIN`) yapılır.
+- Araç deposuna mal aktarmak için panelde **Lotlar → Transfer** veya `POST /stock-transfers` kullanılır; aktarılan bakiye pull ile cihaza gelir.
 - `items.is_active` Room'da yok; pasif ürün de listelenir.
 - `order_no` cihazda üretilir: `S-` + UUIDv7'nin rastgele kısmının son 10 hanesi. Sunucu bunu aynen kullanır.
 - Kimlik doğrulama yok (backend'de de yok).

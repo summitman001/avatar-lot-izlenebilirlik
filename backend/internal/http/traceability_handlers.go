@@ -136,7 +136,8 @@ func (h *handlers) recallContactList(w nethttp.ResponseWriter, r *nethttp.Reques
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 	w.Header().Set("Content-Disposition", `attachment; filename="`+rc.RecallNo+`-iletisim.csv"`)
 	wtr := csv.NewWriter(w)
-	_ = wtr.Write([]string{"musteri", "telefon", "mail", "lot", "sevk_miktari", "iade_miktari", "kalan_risk", "durum"})
+	// kademe: 1 = dogrudan musteri (market), 2 = musterinin KAYITLI ikinci kademe alicisi (dagitan_musteri dolu).
+	_ = wtr.Write([]string{"musteri", "telefon", "mail", "lot", "sevk_miktari", "iade_miktari", "kalan_risk", "durum", "kademe", "dagitan_musteri"})
 	for _, c := range rc.Customers {
 		phone, email := "", ""
 		if c.CustomerPhone != nil {
@@ -148,8 +149,18 @@ func (h *handlers) recallContactList(w nethttp.ResponseWriter, r *nethttp.Reques
 		_ = wtr.Write([]string{
 			c.CustomerName, phone, email, c.LotNo,
 			c.QtyShipped.StringFixed(domain.QtyScale), c.QtyReturned.StringFixed(domain.QtyScale),
-			c.RemainingRisk.StringFixed(domain.QtyScale), c.ContactStatus,
+			c.RemainingRisk.StringFixed(domain.QtyScale), c.ContactStatus, "1", "",
 		})
+		for _, d := range c.Downstream {
+			recipientPhone := ""
+			if d.RecipientPhone != nil {
+				recipientPhone = *d.RecipientPhone
+			}
+			_ = wtr.Write([]string{
+				d.RecipientName, recipientPhone, "", d.LotNo, d.Qty.StringFixed(domain.QtyScale), "",
+				d.Qty.StringFixed(domain.QtyScale), "", "2", c.CustomerName,
+			})
+		}
 	}
 	wtr.Flush()
 }

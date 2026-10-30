@@ -8,6 +8,7 @@ import {
   type GenealogyResponse, type List, type Lot,
   type TraceBackwardResponse, type TraceForwardResponse,
 } from '../lib/api'
+import { DownstreamCell } from '../components/Downstream'
 
 function err(e: unknown): string {
   return e instanceof ApiError ? e.message : 'Bilinmeyen hata'
@@ -115,13 +116,7 @@ function ForwardPanel({ data }: { data: TraceForwardResponse }) {
                 <Table.Td ta="right">{c.qty_shipped}</Table.Td>
                 <Table.Td ta="right">{c.qty_returned}</Table.Td>
                 <Table.Td>
-                  {c.downstream_known ? (
-                    <Badge color="green" variant="light">Kayıtlı</Badge>
-                  ) : (
-                    <Tooltip label={c.downstream_note}>
-                      <Badge color="gray" variant="outline">Bilinmiyor</Badge>
-                    </Tooltip>
-                  )}
+                  <DownstreamCell known={c.downstream_known} note={c.downstream_note} entries={c.downstream ?? []} />
                 </Table.Td>
               </Table.Tr>
             ))}

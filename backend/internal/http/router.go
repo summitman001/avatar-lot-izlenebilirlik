@@ -157,6 +157,14 @@ func NewRouter(d Deps) nethttp.Handler {
 		r.Get("/lots/{id}", h.getLot)
 		r.Post("/lots/{id}/block", h.blockLot)
 		r.Post("/lots/{id}/unblock", h.unblockLot)
+		r.Post("/lots/{id}/waste", h.recordWaste)
+
+		r.Get("/reprocess-orders", h.listReprocessOrders)
+		r.Post("/reprocess-orders", h.createReprocessOrder)
+		r.Get("/reprocess-orders/{id}", h.getReprocessOrder)
+
+		r.Get("/downstream-distributions", h.listDownstream)
+		r.Post("/downstream-distributions", h.createDownstream)
 		r.Get("/lots/{id}/trace-forward", h.traceForward)
 		r.Get("/lots/{id}/trace-backward", h.traceBackward)
 		r.Get("/lots/{id}/genealogy", h.genealogy)
@@ -168,6 +176,10 @@ func NewRouter(d Deps) nethttp.Handler {
 		r.Post("/recalls/{id}/close", h.closeRecall)
 		r.Post("/recalls/{id}/reopen", h.reopenRecall)
 		r.Get("/recalls/{id}/contact-list", h.recallContactList)
+
+		r.Get("/stock-transfers", h.listStockTransfers)
+		r.Post("/stock-transfers", h.createStockTransfer)
+		r.Get("/stock-transfers/{id}", h.getStockTransfer)
 
 		r.Get("/stock-movements", h.listMovements)
 		r.Post("/stock-movements/{id}/reverse", h.reverseMovement)
