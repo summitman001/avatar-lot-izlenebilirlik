@@ -128,8 +128,8 @@ function NewReprocessModal({ onClose }: { onClose: () => void }) {
           onChange={(v) => setOutQty(typeof v === 'number' ? v : '')} />
       </Group>
       <Group grow mb="md">
-        <TextInput label="Çıktı lot no (opsiyonel)" placeholder="YIL-2026-NNN" value={lotNo} onChange={(e) => setLotNo(e.currentTarget.value)} />
-        <TextInput label="Not" value={note} onChange={(e) => setNote(e.currentTarget.value)} />
+        <TextInput label="Çıktı lot no (opsiyonel)" placeholder="YIL-2026-NNN" maxLength={40} value={lotNo} onChange={(e) => setLotNo(e.currentTarget.value)} />
+        <TextInput label="Not" maxLength={400} value={note} onChange={(e) => setNote(e.currentTarget.value)} />
       </Group>
       <Group justify="flex-end">
         <Button variant="default" onClick={onClose}>Vazgeç</Button>

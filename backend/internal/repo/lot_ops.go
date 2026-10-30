@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/shopspring/decimal"
 
@@ -16,6 +17,23 @@ import (
 //     CreateReprocessOrder (reprocess_consume + reprocess_in + lot_link 'reprocess', migration 000012)
 //   - "ikinci kademe dagitim yalnizca kaydedilmisse kesin olarak gosterilir": downstream_distribution
 //     kaydi; izleme ve geri cagirma yalnizca bu kayitlari kesin olarak gosterir (uydurma rakam yok).
+
+// ownWarehouseType depoyu dogrular ve tipini doner. Dis uretici deposundaki stok uretim emrine aittir:
+// yalnizca sevk/teslim/iade ile hareket eder. Transfer/fire/yeniden isleme ona dokunursa teslimdeki
+// production_consume dis depoyu eksiye dusurur (ayni malzeme hem tuketilmis hem bizde gorunur).
+func ownWarehouseType(ctx context.Context, tx *sql.Tx, field, id string) (string, error) {
+	var typ string
+	err := tx.QueryRowContext(ctx, `SELECT warehouse_type FROM warehouse WHERE id = ?`, id).Scan(&typ)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", domain.Invalid("%s bulunamadi", field)
+	} else if err != nil {
+		return "", err
+	}
+	if typ == "external_producer" {
+		return "", domain.Invalid("%s: dis uretici deposundaki stok yalnizca uretim emriyle (sevk/teslim/iade) hareket eder", field)
+	}
+	return typ, nil
+}
 
 // ---------------------------------------------------------------------------
 // fire
@@ -43,10 +61,8 @@ func (s *Store) RecordWaste(ctx context.Context, lotID string, req domain.WasteR
 		if err != nil {
 			return err
 		}
-		if ok, err := exists(ctx, tx, "warehouse", req.WarehouseID); err != nil {
+		if _, err := ownWarehouseType(ctx, tx, "warehouse_id", req.WarehouseID); err != nil {
 			return err
-		} else if !ok {
-			return domain.Invalid("warehouse_id bulunamadi")
 		}
 		var onHand domain.Qty
 		if err := tx.QueryRowContext(ctx,
@@ -180,10 +196,8 @@ func (s *Store) CreateReprocessOrder(ctx context.Context, req domain.CreateRepro
 		return nil, err
 	}
 	err = s.InTx(ctx, func(tx *sql.Tx) error {
-		if ok, err := exists(ctx, tx, "warehouse", req.WarehouseID); err != nil {
+		if _, err := ownWarehouseType(ctx, tx, "warehouse_id", req.WarehouseID); err != nil {
 			return err
-		} else if !ok {
-			return domain.Invalid("warehouse_id bulunamadi")
 		}
 		item, err := getItem(ctx, tx, req.Output.ItemID)
 		if errors.Is(err, domain.ErrNotFound) {
@@ -244,12 +258,23 @@ func (s *Store) CreateReprocessOrder(ctx context.Context, req domain.CreateRepro
 			return err
 		}
 		unitCost := domain.NewAmount(domain.Round4(total.Div(req.Output.Qty.Decimal)))
+		// Yeniden isleme raf omrunu uzatamaz: cikti lotunun SKT'si en erken SKT'li girdiyi gecemez.
+		expiry := domain.ExpiryFrom(req.Output.ExpiryDate, domain.Today(), item.ShelfLifeDays)
+		for _, l := range inputLots {
+			if l.ExpiryDate == nil || (expiry != nil && !l.ExpiryDate.Before(expiry.Time)) {
+				continue
+			}
+			if req.Output.ExpiryDate != nil {
+				return domain.Invalid("output.expiry_date, girdi lotu %s'in SKT'sinden (%s) sonra olamaz",
+					l.LotNo, l.ExpiryDate.Format(time.DateOnly))
+			}
+			expiry = l.ExpiryDate
+		}
 		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO lot (id, lot_no, item_id, supplier_id, origin_type, origin_id, received_or_produced_at,
 			                  expiry_date, initial_qty, uom, unit_cost, status)
 			 VALUES (?, ?, ?, NULL, 'reprocess', ?, ?, ?, ?, ?, ?, 'active')`,
-			outputLotID, lotNo, item.ID, id, domain.Today(),
-			domain.ExpiryFrom(req.Output.ExpiryDate, domain.Today(), item.ShelfLifeDays),
+			outputLotID, lotNo, item.ID, id, domain.Today(), expiry,
 			req.Output.Qty, item.BaseUOM, unitCost); err != nil {
 			return mapErr(err)
 		}
@@ -331,7 +356,7 @@ func loadDownstream(ctx context.Context, q DBTX, customerID string, lotIDs []str
 }
 
 // downstreamStatus kayitli dagitimlarin durumunu belirler: kayit yoksa bilinmiyor (sabit not); kayit
-// varsa gosterilir ve kesindir; kayitlar musteriye giden net miktari karsilamiyorsa kalan kisim icin not.
+// varsa gosterilir ve kesindir; kayitlar musteriye giden net miktari karsilamiyor ya da asiyorsa not.
 func downstreamStatus(entries []domain.DownstreamDistribution, netShipped decimal.Decimal) (bool, *string) {
 	if len(entries) == 0 {
 		note := domain.DownstreamNoteText
@@ -341,11 +366,16 @@ func downstreamStatus(entries []domain.DownstreamDistribution, netShipped decima
 	for _, e := range entries {
 		recorded = recorded.Add(e.Qty.Decimal)
 	}
-	if recorded.LessThan(netShipped) {
-		note := domain.DownstreamPartialNoteText
-		return true, &note
+	var note string
+	switch {
+	case recorded.LessThan(netShipped):
+		note = domain.DownstreamPartialNoteText
+	case recorded.GreaterThan(netShipped): // dagitim kaydindan sonra iade gelmis
+		note = domain.DownstreamExceedsNoteText
+	default:
+		return true, nil
 	}
-	return true, nil
+	return true, &note
 }
 
 func (s *Store) ListDownstream(ctx context.Context, customerID, lotID string) ([]domain.DownstreamDistribution, error) {
@@ -405,16 +435,17 @@ func (s *Store) CreateDownstream(ctx context.Context, req domain.CreateDownstrea
 		} else if !ok {
 			return domain.Invalid("lot_id bulunamadi")
 		}
-		var shipped, returned, recorded domain.Qty
-		if err := tx.QueryRowContext(ctx,
-			`SELECT COALESCE(SUM(shl.qty), 0) FROM shipment_line shl JOIN shipment sh ON sh.id = shl.shipment_id
-			 WHERE sh.customer_id = ? AND shl.lot_id = ?`, req.CustomerID, req.LotID).Scan(&shipped); err != nil {
+		// Sevk/iade, geri cagirmayla AYNI kaynaktan (satis satirlari + siparissiz sevkiyatlar): sevkiyatsiz
+		// satisin alicisi da dagitim kaydedebilir, iki ekran ayni rakami gorur.
+		aggs, err := aggregateCustomersForLot(ctx, tx, req.LotID)
+		if err != nil {
 			return err
 		}
-		if err := tx.QueryRowContext(ctx,
-			`SELECT COALESCE(SUM(qty), 0) FROM customer_return WHERE customer_id = ? AND lot_id = ?`,
-			req.CustomerID, req.LotID).Scan(&returned); err != nil {
-			return err
+		var shipped, returned, recorded domain.Qty
+		for _, a := range aggs {
+			if strings.EqualFold(a.customerID, req.CustomerID) {
+				shipped, returned = domain.NewQty(a.qtyShipped), domain.NewQty(a.qtyReturned)
+			}
 		}
 		if err := tx.QueryRowContext(ctx,
 			`SELECT COALESCE(SUM(qty), 0) FROM downstream_distribution WHERE customer_id = ? AND lot_id = ?`,
@@ -427,7 +458,7 @@ func (s *Store) CreateDownstream(ctx context.Context, req domain.CreateDownstrea
 				shipped.StringFixed(domain.QtyScale), returned.StringFixed(domain.QtyScale),
 				recorded.StringFixed(domain.QtyScale), req.Qty.StringFixed(domain.QtyScale))
 		}
-		_, err := tx.ExecContext(ctx,
+		_, err = tx.ExecContext(ctx,
 			`INSERT INTO downstream_distribution (id, customer_id, lot_id, recipient_name, recipient_phone, qty, distributed_at, note)
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 			id, req.CustomerID, req.LotID, req.RecipientName, req.RecipientPhone, req.Qty, req.DistributedAt, req.Note)

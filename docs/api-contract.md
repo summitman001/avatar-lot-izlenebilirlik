@@ -908,7 +908,9 @@ Her satır aynı transaction'da kaynak depoda `transfer_out` (−) ve hedef depo
 Lot bakiyesi değiştiği için `change_log`'a yazılır; cihaz yeni bakiyeyi pull ile görür. Aynı `id` ile
 tekrar gelen istek mevcut transferi döner. Hatalar: kaynak depoda yetersiz stok `409`
 (`INSUFFICIENT_STOCK`); bloke veya geri çağrılmış lot karantina dışı bir depoya `422` (`LOT_BLOCKED`);
-tükenmiş lot `422`; kaynak ve hedef aynıysa `422`.
+tükenmiş lot `422`; kaynak ve hedef aynıysa `422`; not 400 karakteri aşarsa `422`. **Dış üretici deposu
+(`external_producer`) kaynak da hedef de olamaz (`422`):** oradaki stok üretim emrine aittir ve yalnızca
+sevk/teslim/iade ile hareket eder (aksi halde teslimdeki tüketim dış depoyu eksiye düşürür).
 
 ### `GET /stock-transfers?warehouse_id=&lot_id=` / `GET /stock-transfers/{id}`
 
@@ -928,7 +930,8 @@ Görev 3: "fire hareketleri lot bazında kaydedilir".
 Lotun seçilen depodaki miktarı tek bir `waste_out` (−) hareketiyle, lotun birim maliyetiyle düşülür
 (`ref_type = lot_waste`, `ref_id` = lot, `note` = sebep). `201` yanıtı oluşan `StockMovement`'tır.
 Lot satırı kilitlenir; depo bakiyesi yetmezse `409` (`INSUFFICIENT_STOCK`), sebep boşsa `422`. Bloke
-veya geri çağrılmış lotun imhası da bu yoldur. Aynı `id` ile tekrar gelen istek aynı hareketi döner.
+veya geri çağrılmış lotun imhası da bu yoldur. Dış üretici deposundan fire kaydedilemez (`422`; fire üretim
+teslimiyle tüketime dahil olur). Aynı `id` ile tekrar gelen istek aynı hareketi döner.
 
 ---
 
@@ -953,8 +956,10 @@ Tek transaction'da: her girdi depodan `reprocess_consume` (−) ile tüketilir, 
 `lot_link` (`process_type = reprocess`) yazılır. Emir numarası `YIS-<yıl>-NNN`. **Maliyet:** her girdi
 satırı `round2(miktar × birim maliyet)`, `total_cost` = satır toplamı, çıktı birim maliyeti
 `round4(total_cost / çıktı miktarı)` (dış üretimdeki EKP kuralıyla aynı). SKT verilmezse ürünün raf
-ömründen türetilir. Hatalar: girdi lotu aktif değilse `422` (bloke/geri çağrılmış lot yeniden
-işlenemez), depoda yetersiz stok `409`, pasif ürün `422`. Aynı `id` ile tekrar gelen istek mevcut emri
+ömründen türetilir; **yeniden işleme raf ömrünü uzatamaz**: türetilen SKT en erken SKT'li girdiden sonraysa
+o girdinin SKT'si kullanılır, açıkça verilen `expiry_date` ondan sonraysa `422`. Hatalar: girdi lotu aktif
+değilse `422` (bloke/geri çağrılmış lot yeniden işlenemez), depoda yetersiz stok `409`, pasif ürün `422`,
+dış üretici deposu `422`. Aynı `id` ile tekrar gelen istek mevcut emri
 döner.
 
 ### `GET /reprocess-orders` / `GET /reprocess-orders/{id}`
@@ -984,10 +989,14 @@ Görev 3: "İkinci kademe dağıtım yalnızca kaydedilmişse kesin olarak göst
 ```
 
 Müşterinin (market) bu lottan kendi alıcısına dağıttığı miktarı kaydeder. Müşteri × lot için toplam
-kayıt, müşteriye giden net miktarı (sevkiyat − iade) aşamaz (`422`). Kayıt sonrasında `trace-forward`
+kayıt, müşteriye giden net miktarı aşamaz (`422`). Net miktar geri çağırmayla aynı hesaplanır: satış
+satırları + siparişe bağlı olmayan sevkiyatlar − iadeler (sevkiyatsız satışın alıcısı da kaydedebilir). Kayıt sonrasında `trace-forward`
 özetinde ve geri çağırma müşteri satırlarında `downstream_known=true` olur ve kayıtlar `downstream`
-listesinde döner; kayıtsız kalan miktar için `downstream_note` açıklama taşır. İletişim listesi CSV'si
-kayıtlı alıcıları `kademe=2` satırları olarak içerir (`dagitan_musteri` sütunu dolu).
+listesinde döner; kayıtsız kalan miktar için `downstream_note` açıklama taşır. Dağıtım kaydından sonra
+iade gelip kayıtlar net miktarı aşarsa kayıtlar yine gösterilir, `downstream_note` teyit gerektiğini
+söyler. İletişim listesi CSV'si kayıtlı alıcıları `kademe=2` satırları olarak içerir (`dagitan_musteri`
+sütunu dolu); alıcıya giden miktar `sevk_miktari`'dadır, `kalan_risk` boştur (o miktar dağıtan müşterinin
+kalan riskinin içindedir, sütun toplanınca iki kez sayılmaz).
 
 ### `GET /downstream-distributions?customer_id=&lot_id=`
 

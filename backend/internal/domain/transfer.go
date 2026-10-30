@@ -38,6 +38,9 @@ func (r *CreateStockTransferRequest) Validate() error {
 		return Invalid("kaynak ve hedef depo ayni olamaz")
 	}
 	trimPtr(&r.Note)
+	if r.Note != nil && len(*r.Note) > 400 {
+		return Invalid("note en fazla 400 karakter olabilir")
+	}
 	if len(r.Lines) == 0 {
 		return Invalid("en az bir satir (lines) gerekli")
 	}

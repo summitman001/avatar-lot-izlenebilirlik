@@ -11,7 +11,8 @@ import (
 // Package repo (transfer.go): depolar arasi transfer (migration 000011). Her satir AYNI transaction'da
 // kaynak depoda transfer_out (-) ve hedef depoda transfer_in (+) hareketi yazar; lot satiri FOR UPDATE
 // kilitlenir, kaynak depo bakiyesi yetmezse 409 (negatif stok yok). Lot maliyeti degismez. Bloke /
-// geri cagrilmis lot yalnizca karantina deposuna tasinabilir. Bakiye degistigi icin lot change_log'a
+// geri cagrilmis lot yalnizca karantina deposuna tasinabilir. Dis uretici deposu ne kaynak ne hedef
+// olabilir (bkz. ownWarehouseType). Bakiye degistigi icin lot change_log'a
 // yazilir: arac deposundaki cihaz yeni stogu pull'da gorur (bkz. docs/sync.md).
 
 const stockTransferCols = `t.id, t.transfer_no, t.from_warehouse_id, fw.code, t.to_warehouse_id, tw.code, t.note, t.created_at`
@@ -121,18 +122,12 @@ func (s *Store) CreateStockTransfer(ctx context.Context, req domain.CreateStockT
 		return nil, err
 	}
 	err = s.InTx(ctx, func(tx *sql.Tx) error {
-		var toType string
-		for field, whID := range map[string]string{"from_warehouse_id": req.FromWarehouseID, "to_warehouse_id": req.ToWarehouseID} {
-			var whType string
-			err := tx.QueryRowContext(ctx, `SELECT warehouse_type FROM warehouse WHERE id = ?`, whID).Scan(&whType)
-			if errors.Is(err, sql.ErrNoRows) {
-				return domain.Invalid("%s bulunamadi", field)
-			} else if err != nil {
-				return err
-			}
-			if field == "to_warehouse_id" {
-				toType = whType
-			}
+		if _, err := ownWarehouseType(ctx, tx, "from_warehouse_id", req.FromWarehouseID); err != nil {
+			return err
+		}
+		toType, err := ownWarehouseType(ctx, tx, "to_warehouse_id", req.ToWarehouseID)
+		if err != nil {
+			return err
 		}
 		transferNo, err := nextSequenceNo(ctx, tx, "TRF")
 		if err != nil {

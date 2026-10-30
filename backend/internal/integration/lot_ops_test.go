@@ -111,7 +111,7 @@ func TestDownstreamDistributionShownOnlyWhenRecorded(t *testing.T) {
 	f := e.fixture()
 	cust := e.customer("MKT-A", "Market A")
 	lot := e.must(e.do("POST", "/api/v1/lots", f.lotBody("ET-2026-001", "100.000", "9.7000", nil)), 201).str("id")
-	e.must(e.do("POST", "/api/v1/sales-orders", salesOrderBody(cust, f.warehouse, saleLine(f.item, lot, "10.000", "24.9000"))), 201)
+	order := e.must(e.do("POST", "/api/v1/sales-orders", salesOrderBody(cust, f.warehouse, saleLine(f.item, lot, "10.000", "24.9000"))), 201)
 
 	customerSummary := func() map[string]any {
 		r := e.must(e.do("GET", "/api/v1/lots/"+lot+"/trace-forward", nil), 200)
@@ -135,6 +135,14 @@ func TestDownstreamDistributionShownOnlyWhenRecorded(t *testing.T) {
 		t.Fatalf("kayitli kisim kesin gosterilmeli, kalan icin not: %v", c)
 	}
 
+	// Dagitim kaydindan SONRA 8 iade: net 2 < kayitli 4. Kayitlar gosterilir, teyit notu doner.
+	lineID := order.JSON["lines"].([]any)[0].(map[string]any)["id"].(string)
+	e.must(e.do("POST", "/api/v1/customer-returns", map[string]any{
+		"customer_id": cust, "sales_line_id": lineID, "qty": "8.000", "reason": "bozuk"}), 201)
+	if c := customerSummary(); c["downstream_known"] != true || c["downstream_note"] != domain.DownstreamExceedsNoteText {
+		t.Fatalf("iade sonrasi kayit net miktari asiyor notu beklenirdi: %v", c)
+	}
+
 	rc := e.must(e.do("POST", "/api/v1/recalls", map[string]any{"root_lot_id": lot, "reason": "kalite"}), 201)
 	got := e.must(e.do("GET", "/api/v1/recalls/"+rc.str("id"), nil), 200)
 	rcCust := got.JSON["customers"].([]any)[0].(map[string]any)
@@ -142,7 +150,46 @@ func TestDownstreamDistributionShownOnlyWhenRecorded(t *testing.T) {
 		t.Fatalf("geri cagirma musteri satirinda kayitli dagitim olmali: %v", rcCust)
 	}
 	csv := e.do("GET", "/api/v1/recalls/"+rc.str("id")+"/contact-list?format=csv", nil)
-	if !strings.Contains(csv.Raw, "Şube 1,0555 000 00 01,,ET-2026-001,4.000,,4.000,,2,Market A") {
+	// kademe 2 satirinin kalan_risk'i bos: miktar marketin kalan riskinin icinde, iki kez sayilmaz
+	if !strings.Contains(csv.Raw, "Şube 1,0555 000 00 01,,ET-2026-001,4.000,,,,2,Market A") {
 		t.Fatalf("iletisim listesinde ikinci kademe alici olmali:\n%s", csv.Raw)
+	}
+}
+
+// Sevkiyatsiz satis (create_shipment=false): izleme/geri cagirma satisi gosterir, dagitim da kaydedilebilmeli.
+func TestDownstreamForSaleWithoutShipment(t *testing.T) {
+	e := newEnv(t)
+	f := e.fixture()
+	cust := e.customer("MKT-A", "Market A")
+	lot := e.must(e.do("POST", "/api/v1/lots", f.lotBody("ET-2026-001", "100.000", "9.7000", nil)), 201).str("id")
+	body := salesOrderBody(cust, f.warehouse, saleLine(f.item, lot, "10.000", "24.9000"))
+	body["create_shipment"] = false
+	e.must(e.do("POST", "/api/v1/sales-orders", body), 201)
+	e.must(e.do("POST", "/api/v1/downstream-distributions", map[string]any{
+		"customer_id": cust, "lot_id": lot, "recipient_name": "Şube 1", "qty": "10.000", "distributed_at": "2026-03-11"}), 201)
+}
+
+// Yeniden isleme raf omrunu uzatamaz: cikti SKT'si en erken SKT'li girdiyi gecemez.
+func TestReprocessKeepsEarliestInputExpiry(t *testing.T) {
+	e := newEnv(t)
+	f := e.fixture()
+	body := f.lotBody("ET-2026-001", "100.000", "9.7000", nil)
+	body["expiry_date"] = "2026-03-20"
+	lot := e.must(e.do("POST", "/api/v1/lots", body), 201).str("id")
+	out := e.must(e.do("POST", "/api/v1/items", map[string]any{
+		"code": "KIYMA", "name": "Kıyma", "item_type": "finished", "base_uom": "kg", "shelf_life_days": 30}), 201).str("id")
+	output := map[string]any{"item_id": out, "qty": "10.000", "expiry_date": "2026-04-01"}
+	req := map[string]any{
+		"warehouse_id": f.warehouse,
+		"inputs":       []map[string]any{{"lot_id": lot, "qty": "10.000"}},
+		"output":       output,
+	}
+	if r := e.do("POST", "/api/v1/reprocess-orders", req); r.Status != 422 {
+		t.Fatalf("girdiden gec verilen SKT 422 olmali: %d %s", r.Status, r.Raw)
+	}
+	delete(output, "expiry_date") // raf omrunden turetilen (bugun+30) girdinin SKT'sine cekilir
+	ro := e.must(e.do("POST", "/api/v1/reprocess-orders", req), 201)
+	if got := e.must(e.do("GET", "/api/v1/lots/"+ro.str("output_lot_id"), nil), 200); got.str("expiry_date") != "2026-03-20" {
+		t.Fatalf("cikti SKT'si girdinin SKT'si olmali: %s", got.Raw)
 	}
 }

@@ -137,6 +137,8 @@ func (h *handlers) recallContactList(w nethttp.ResponseWriter, r *nethttp.Reques
 	w.Header().Set("Content-Disposition", `attachment; filename="`+rc.RecallNo+`-iletisim.csv"`)
 	wtr := csv.NewWriter(w)
 	// kademe: 1 = dogrudan musteri (market), 2 = musterinin KAYITLI ikinci kademe alicisi (dagitan_musteri dolu).
+	// Kademe 2 satirinin kalan_risk'i bostur: o miktar dagitan musterinin kalan riskinin icindedir,
+	// sutun toplanirsa iki kez sayilmasin. Aliciya giden miktar sevk_miktari sutunundadir.
 	_ = wtr.Write([]string{"musteri", "telefon", "mail", "lot", "sevk_miktari", "iade_miktari", "kalan_risk", "durum", "kademe", "dagitan_musteri"})
 	for _, c := range rc.Customers {
 		phone, email := "", ""
@@ -158,7 +160,7 @@ func (h *handlers) recallContactList(w nethttp.ResponseWriter, r *nethttp.Reques
 			}
 			_ = wtr.Write([]string{
 				d.RecipientName, recipientPhone, "", d.LotNo, d.Qty.StringFixed(domain.QtyScale), "",
-				d.Qty.StringFixed(domain.QtyScale), "", "2", c.CustomerName,
+				"", "", "2", c.CustomerName,
 			})
 		}
 	}

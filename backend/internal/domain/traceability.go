@@ -24,6 +24,10 @@ const DownstreamNoteText = "İkinci kademe dağıtım kaydı yok, market ile ile
 
 const DownstreamPartialNoteText = "Kayıtlı ikinci kademe dağıtım gösteriliyor; kaydedilmeyen kalan miktar için market ile iletişime geçilmeli"
 
+// DownstreamExceedsNoteText: kayıtlı dağıtım, müşteriye giden net miktarı aşıyor (dağıtım kaydından
+// sonra iade gelmiş). Kayıtlar gösterilir ama kesinliği market ile teyit edilmelidir.
+const DownstreamExceedsNoteText = "Kayıtlı ikinci kademe dağıtım, müşteriye giden net miktarı aşıyor (sonradan iade gelmiş olabilir); market ile teyit edilmeli"
+
 // ---------------------------------------------------------------------------
 // trace-forward
 // ---------------------------------------------------------------------------

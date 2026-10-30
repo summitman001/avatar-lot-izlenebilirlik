@@ -168,6 +168,14 @@ export default function Lots() {
   )
 }
 
+// Dış üretici deposundaki stok üretim emrine aittir (yalnızca sevk/teslim/iade): transfer/fire kaynağı
+// olamaz, sunucu da reddeder. Depolar yüklenmeden liste boş kalır.
+function ownBalances(lot: Lot | undefined, warehouses: Warehouse[] | undefined) {
+  if (!warehouses) return []
+  const external = new Set(warehouses.filter((w) => w.warehouse_type === 'external_producer').map((w) => w.id))
+  return (lot?.balances ?? []).filter((b) => Number(b.qty_on_hand) > 0 && !external.has(b.warehouse_id))
+}
+
 // Depolar arasi transfer: kaynak depo lotun bakiyeli depolarindan secilir. Bloke/geri cagrilmis lot
 // yalnizca karantina deposuna tasinabilir (sunucu da zorlar).
 function TransferModal({ lot, onClose }: { lot: Lot; onClose: () => void }) {
@@ -181,7 +189,7 @@ function TransferModal({ lot, onClose }: { lot: Lot; onClose: () => void }) {
   const [formError, setFormError] = useState<string | null>(null)
   const [transferId] = useState(uuidv7) // idempotency anahtari
 
-  const sources = (detail.data?.balances ?? []).filter((b) => Number(b.qty_on_hand) > 0)
+  const sources = ownBalances(detail.data, warehouses.data?.items)
   const source = sources.find((b) => b.warehouse_id === fromId)
   const targets = (warehouses.data?.items ?? [])
     .filter((w) => w.id !== fromId && w.warehouse_type !== 'external_producer')
@@ -209,7 +217,7 @@ function TransferModal({ lot, onClose }: { lot: Lot; onClose: () => void }) {
       <NumberInput label={`Miktar (${lot.uom})`} required mb="sm" min={0} decimalScale={3} value={qty}
         onChange={(v) => setQty(typeof v === 'number' ? v : '')}
         description={source ? `En fazla ${source.qty_on_hand}` : undefined} />
-      <TextInput label="Not" mb="md" value={note} onChange={(e) => setNote(e.currentTarget.value)} />
+      <TextInput label="Not" mb="md" maxLength={400} value={note} onChange={(e) => setNote(e.currentTarget.value)} />
       <Group justify="flex-end">
         <Button variant="default" onClick={onClose}>Vazgeç</Button>
         <Button loading={create.isPending} disabled={!fromId || !toId || qty === '' || qty <= 0}
@@ -226,13 +234,14 @@ function TransferModal({ lot, onClose }: { lot: Lot; onClose: () => void }) {
 function WasteModal({ lot, onClose }: { lot: Lot; onClose: () => void }) {
   const qc = useQueryClient()
   const detail = useQuery({ queryKey: ['lot', lot.id], queryFn: () => apiGet<Lot>(`/lots/${lot.id}`) })
+  const warehouses = useQuery({ queryKey: ['warehouses'], queryFn: () => apiGet<List<Warehouse>>('/warehouses') })
   const [warehouseId, setWarehouseId] = useState<string | null>(null)
   const [qty, setQty] = useState<number | ''>('')
   const [reason, setReason] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
   const [movementId] = useState(uuidv7) // idempotency anahtarı
 
-  const sources = (detail.data?.balances ?? []).filter((b) => Number(b.qty_on_hand) > 0)
+  const sources = ownBalances(detail.data, warehouses.data?.items)
   const source = sources.find((b) => b.warehouse_id === warehouseId)
   const save = useMutation({
     mutationFn: () => apiPost<StockMovement>(`/lots/${lot.id}/waste`, {
@@ -250,7 +259,7 @@ function WasteModal({ lot, onClose }: { lot: Lot; onClose: () => void }) {
       <NumberInput label={`Fire miktarı (${lot.uom})`} required mb="sm" min={0} decimalScale={3} value={qty}
         onChange={(v) => setQty(typeof v === 'number' ? v : '')}
         description={source ? `En fazla ${source.qty_on_hand}` : undefined} />
-      <TextInput label="Sebep" required mb="md" placeholder="bozulma, imha, …" value={reason} onChange={(e) => setReason(e.currentTarget.value)} />
+      <TextInput label="Sebep" required mb="md" maxLength={400} placeholder="bozulma, imha, …" value={reason} onChange={(e) => setReason(e.currentTarget.value)} />
       <Group justify="flex-end">
         <Button variant="default" onClick={onClose}>Vazgeç</Button>
         <Button color="red" loading={save.isPending} disabled={!warehouseId || qty === '' || qty <= 0 || !reason.trim()}
