@@ -1,11 +1,13 @@
 import {
   ActionIcon, Alert, Badge, Button, Group, Loader, Modal, NumberInput, Select, Table, Text,
-  TextInput, Title, Tooltip,
+  TextInput, Tooltip,
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
+import { IconAlertTriangle, IconCash, IconFileInvoice, IconPlus, IconTruckDelivery } from '@tabler/icons-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { FilterChips, PageHeader, StatCard, StatGrid, SUMMARY_LIMIT, eur } from '../components/Page'
 import {
   ApiError, apiGet, apiPost, type CreatePurchaseReceiptRequest, type Item, type List,
   type PurchaseReceiptListItem, type Supplier, type Warehouse,
@@ -31,29 +33,35 @@ export default function Purchases() {
       }),
     refetchInterval: 10_000,
   })
+  const all = useQuery({
+    queryKey: ['purchase-receipts', 'summary'],
+    queryFn: () => apiGet<List<PurchaseReceiptListItem>>('/purchase-receipts', { limit: String(SUMMARY_LIMIT) }),
+    refetchInterval: 10_000,
+  })
+  const receipts = all.data?.items
+  const mismatches = receipts?.filter((r) => r.has_mismatch).length
+  const n = (v?: number) => (all.isLoading ? '…' : v ?? 0)
 
   return (
     <>
+      <PageHeader eyebrow="Tedarikçiden gelen hammadde ve malzeme belgeleri" title="Alışlar"
+        actions={<Button leftSection={<IconPlus size={16} />} onClick={open}>Yeni Alış</Button>} />
+      <StatGrid capped={receipts?.length === SUMMARY_LIMIT}>
+        <StatCard label="Alış belgesi" value={n(receipts?.length)} icon={IconFileInvoice} />
+        <StatCard label="Toplam tutar" icon={IconCash}
+          value={receipts ? eur(receipts.reduce((sum, r) => sum + Number(r.total_amount), 0)) : '…'} />
+        <StatCard label="Tutar uyuşmazlığı" value={n(mismatches)} icon={IconAlertTriangle} color={mismatches ? 'red' : 'gray'} />
+        <StatCard label="Tedarikçi" value={n(receipts && new Set(receipts.map((r) => r.supplier_name)).size)} icon={IconTruckDelivery} color="orange" />
+      </StatGrid>
       <Group justify="space-between" mb="md">
-        <Title order={2}>Alışlar</Title>
-        <Button onClick={open}>Yeni Alış</Button>
-      </Group>
-      <Group mb="md">
-        <Select
-          placeholder="Tedarikçi"
-          clearable
-          searchable
+        <FilterChips value={onlyMismatch} onChange={setOnlyMismatch} allCount={receipts?.length}
+          options={[
+            { value: 'true', label: 'Uyuşmazlıklı', count: mismatches, color: 'red' },
+            { value: 'false', label: 'Uyuşmazlıksız', count: receipts && receipts.length - (mismatches ?? 0), color: 'green' },
+          ]} />
+        <Select radius="xl" w={240} placeholder="Tedarikçi" clearable searchable
           data={suppliers.data?.items.map((s) => ({ value: s.id, label: s.name })) ?? []}
-          value={supplierId}
-          onChange={setSupplierId}
-        />
-        <Select
-          placeholder="Tutar uyuşmazlığı"
-          clearable
-          data={[{ value: 'true', label: 'Sadece uyuşmazlıklı' }, { value: 'false', label: 'Sadece uyuşmazlıksız' }]}
-          value={onlyMismatch}
-          onChange={setOnlyMismatch}
-        />
+          value={supplierId} onChange={setSupplierId} />
       </Group>
       {error && <Alert color="red">{err(error)}</Alert>}
       {isLoading && <Loader />}

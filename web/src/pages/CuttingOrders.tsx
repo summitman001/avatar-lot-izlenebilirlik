@@ -1,8 +1,10 @@
-import { Alert, Badge, Button, Group, Loader, Modal, NumberInput, Select, Table, Text, Textarea, TextInput, Title } from '@mantine/core'
+import { Alert, Badge, Button, Group, Loader, Modal, NumberInput, Select, Table, Text, Textarea, TextInput } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
+import { IconCircleCheck, IconMeat, IconPencil, IconPlus, IconScale } from '@tabler/icons-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { FilterChips, PageHeader, StatCard, StatGrid, SUMMARY_LIMIT, countBy } from '../components/Page'
 import {
   ApiError, apiGet, apiPost, type CuttingOrder, type CuttingRecipe, type List, type Lot,
 } from '../lib/api'
@@ -21,16 +23,33 @@ export default function CuttingOrders() {
   const navigate = useNavigate()
   const { data, isLoading, error } = useQuery({
     queryKey: ['cutting-orders'],
-    queryFn: () => apiGet<List<CuttingOrder>>('/cutting-orders'),
+    queryFn: () => apiGet<List<CuttingOrder>>('/cutting-orders', { limit: String(SUMMARY_LIMIT) }),
     refetchInterval: 10_000,
   })
   const [opened, { open, close }] = useDisclosure(false)
+  const [status, setStatus] = useState<string | null>(null)
+  const byStatus = countBy(data?.items, (o) => o.status)
+  const unbalanced = data?.items.filter((o) => o.status === 'draft' && !o.closable).length
+  const rows = data?.items.filter((o) => !status || o.status === status) ?? []
+  const n = (v?: number) => (isLoading ? '…' : v ?? 0)
+  const totalKg = data?.items.reduce((sum, o) => sum + Number(o.input_weight_kg), 0)
 
   return (
     <>
-      <Group justify="space-between" mb="md">
-        <Title order={2}>Parçalama</Title>
-        <Button onClick={open}>Yeni Parçalama Emri</Button>
+      <PageHeader eyebrow="Karkası parçalara ayır, maliyeti parçalara dağıt" title="Parçalama"
+        actions={<Button leftSection={<IconPlus size={16} />} onClick={open}>Yeni Parçalama Emri</Button>} />
+      <StatGrid capped={data?.items.length === SUMMARY_LIMIT}>
+        <StatCard label="Toplam emir" value={n(data?.items.length)} icon={IconMeat} />
+        <StatCard label="Taslak" value={n(byStatus.draft)} icon={IconPencil} color="gray"
+          hint={unbalanced ? `${unbalanced} dengesiz` : undefined} hintColor="orange" />
+        <StatCard label="Kapandı" value={n(byStatus.closed)} icon={IconCircleCheck} color="green" />
+        <StatCard label="Toplam giriş" icon={IconScale} color="orange"
+          value={totalKg == null ? '…' : `${totalKg.toLocaleString('tr-TR', { maximumFractionDigits: 3 })} kg`} />
+      </StatGrid>
+      <Group mb="md">
+        <FilterChips value={status} onChange={setStatus} allCount={data?.items.length}
+          options={(Object.keys(STATUS) as CuttingOrder['status'][]).map((s) => (
+            { value: s, label: STATUS[s].label, count: byStatus[s] ?? 0, color: STATUS[s].color }))} />
       </Group>
       {error && <Alert color="red">{err(error)}</Alert>}
       {isLoading && <Loader />}
@@ -47,7 +66,7 @@ export default function CuttingOrders() {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {data.items.map((o) => (
+            {rows.map((o) => (
               <Table.Tr key={o.id} onClick={() => navigate(`/parcalama/${o.id}`)} style={{ cursor: 'pointer' }}>
                 <Table.Td>{o.order_no}</Table.Td>
                 <Table.Td>{o.input_lot_no}</Table.Td>

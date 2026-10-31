@@ -1,6 +1,7 @@
-import { Alert, Badge, Card, Group, Loader, SimpleGrid, Stack, Table, Text, Title, Tooltip } from '@mantine/core'
+import { Alert, Anchor, Badge, Card, Loader, SimpleGrid, Stack, Table, Text, Tooltip } from '@mantine/core'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
+import { PageHeader } from '../components/Page'
 import { ApiError, apiGet, type PurchaseReceiptDetail } from '../lib/api'
 
 function err(e: unknown): string {
@@ -29,13 +30,9 @@ export default function PurchaseReceiptDetailPage() {
 
   return (
     <Stack>
-      <Group justify="space-between">
-        <div>
-          <Title order={2}>{r.doc_no}</Title>
-          <Text c="dimmed">{r.supplier_name} — {r.received_at}</Text>
-        </div>
-        {r.has_mismatch && <Badge color="red" variant="filled">Tutar uyuşmazlığı</Badge>}
-      </Group>
+      <PageHeader mb="xs" title={r.doc_no}
+        eyebrow={<><Anchor component={Link} to="/alislar" size="sm">Alışlar</Anchor> · {r.supplier_name} — {r.received_at}</>}
+        badges={r.has_mismatch && <Badge color="red" variant="filled">Tutar uyuşmazlığı</Badge>} />
 
       <Card withBorder>
         <SimpleGrid cols={{ base: 2, md: 4 }}>
@@ -47,7 +44,7 @@ export default function PurchaseReceiptDetailPage() {
       </Card>
 
       <Card withBorder>
-        <Text fw={500} mb="sm">Satırlar</Text>
+        <Text fw={600} mb="sm">Satırlar</Text>
         <Table>
           <Table.Thead>
             <Table.Tr>
@@ -83,7 +80,7 @@ export default function PurchaseReceiptDetailPage() {
       </Card>
 
       <Card withBorder>
-        <Text fw={500} mb="sm">Oluşan Lotlar</Text>
+        <Text fw={600} mb="sm">Oluşan Lotlar</Text>
         <Table>
           <Table.Thead>
             <Table.Tr>
@@ -115,7 +112,7 @@ export default function PurchaseReceiptDetailPage() {
       </Card>
 
       <Card withBorder>
-        <Text fw={500} mb="sm">Stok Hareketleri</Text>
+        <Text fw={600} mb="sm">Stok Hareketleri</Text>
         <Table>
           <Table.Thead>
             <Table.Tr>

@@ -22,7 +22,7 @@ export function AnomalyAlertsCard({ alerts, queryKeysToInvalidate }: { alerts: A
   if (alerts.length === 0) return null
   return (
     <Card withBorder>
-      <Text fw={500} mb="sm">Anomali Uyarıları</Text>
+      <Text fw={600} mb="sm">Anomali Uyarıları</Text>
       <Stack gap="xs">
         {alerts.map((a) => <AlertRow key={a.id} alert={a} queryKeysToInvalidate={queryKeysToInvalidate} />)}
       </Stack>

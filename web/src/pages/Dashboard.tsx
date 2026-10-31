@@ -12,6 +12,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useState, type MouseEvent, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { SEVERITY_COLOR, SeverityBadge } from '../components/AnomalyAlerts'
+import { eur } from '../components/Page'
 import {
   ApiError, apiGet, type AnomalyAlert, type AnomalyAlertSummary, type AnomalySeverity, type List,
   type Lot, type ProductionOrder, type Recall, type SalesOrder,
@@ -33,7 +34,6 @@ function utcDay(offsetDays = 0): string {
   return d.toISOString().slice(0, 10)
 }
 
-const eur = (n: number) => n.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
 const shortDate = (day: string) =>
   new Date(day).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', timeZone: 'UTC' })
 
@@ -155,7 +155,7 @@ function Kpi({ to, label, value, sub, icon: Icon, color, valueColor, children }:
   to: string; label: string; value: ReactNode; sub: ReactNode; icon: TablerIcon; color: string; valueColor?: string; children?: ReactNode
 }) {
   return (
-    <Card withBorder component={Link} to={to} className="kpi-card" h="100%">
+    <Card withBorder component={Link} to={to} h="100%">
       <Group justify="space-between" align="flex-start" wrap="nowrap">
         <Text size="sm" fw={500} c="dimmed">{label}</Text>
         <ThemeIcon variant="light" color={color} radius="xl" size={36}><Icon size={18} /></ThemeIcon>

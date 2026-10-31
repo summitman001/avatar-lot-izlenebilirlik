@@ -1,8 +1,10 @@
 import { Alert, Badge, Button, Card, Group, Loader, Modal, Stack, Table, Tabs, Text, TextInput, Textarea, Title, Tooltip } from '@mantine/core'
 import { useDebouncedValue, useDisclosure } from '@mantine/hooks'
+import { IconSearch } from '@tabler/icons-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { PageHeader } from '../components/Page'
 import {
   ApiError, apiGet, apiPost,
   type GenealogyResponse, type List, type Lot,
@@ -76,7 +78,7 @@ function ForwardPanel({ data }: { data: TraceForwardResponse }) {
   return (
     <Stack>
       <Card withBorder>
-        <Text fw={500} mb="sm">Etkilenen Lotlar ({data.summary.affected_lot_count})</Text>
+        <Text fw={600} mb="sm">Etkilenen Lotlar ({data.summary.affected_lot_count})</Text>
         <Table striped>
           <Table.Thead>
             <Table.Tr>
@@ -100,7 +102,7 @@ function ForwardPanel({ data }: { data: TraceForwardResponse }) {
       </Card>
 
       <Card withBorder>
-        <Text fw={500} mb="sm">Müşteri Dağılımı</Text>
+        <Text fw={600} mb="sm">Müşteri Dağılımı</Text>
         <Table>
           <Table.Thead>
             <Table.Tr>
@@ -134,7 +136,7 @@ function ForwardPanel({ data }: { data: TraceForwardResponse }) {
 
       {data.nodes.filter((n) => n.sales.length > 0).map((n) => (
         <Card withBorder key={n.lot_id}>
-          <Text fw={500} mb="sm">{n.lot_no} — Satışlar</Text>
+          <Text fw={600} mb="sm">{n.lot_no} — Satışlar</Text>
           <Table fz="sm">
             <Table.Thead>
               <Table.Tr><Table.Th>Sipariş</Table.Th><Table.Th>Müşteri</Table.Th><Table.Th ta="right">Miktar</Table.Th><Table.Th>Tarih</Table.Th><Table.Th></Table.Th></Table.Tr>
@@ -160,7 +162,7 @@ function ForwardPanel({ data }: { data: TraceForwardResponse }) {
 function BackwardPanel({ data }: { data: TraceBackwardResponse }) {
   return (
     <Card withBorder>
-      <Text fw={500} mb="sm">
+      <Text fw={600} mb="sm">
         Hammadde Lotları ({data.summary.raw_lot_count}) — {data.summary.supplier_count} tedarikçi
       </Text>
       <Table striped>
@@ -239,8 +241,11 @@ export default function Traceability() {
 
   return (
     <Stack>
-      <Title order={2}>İzlenebilirlik</Title>
+      <PageHeader mb="xs" eyebrow="Bir lotun nereden geldiğini ve nereye gittiğini izle" title="İzlenebilirlik" />
       <TextInput
+        radius="xl"
+        size="md"
+        leftSection={<IconSearch size={18} />}
         placeholder="Lot no veya ürün adı ara"
         value={q}
         onChange={(e) => setQ(e.currentTarget.value)}

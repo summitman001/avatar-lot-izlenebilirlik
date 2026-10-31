@@ -1,6 +1,9 @@
-import { Alert, Badge, Button, FileButton, Group, Loader, Table, Text, Title } from '@mantine/core'
+import { Alert, Badge, Button, FileButton, Group, Loader, Table, Text } from '@mantine/core'
+import { IconCircleCheck, IconClock, IconFileInvoice, IconUpload, IconX } from '@tabler/icons-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { FilterChips, PageHeader, StatCard, StatGrid, SUMMARY_LIMIT, countBy } from '../components/Page'
 import {
   ApiError, apiGet, apiUpload, type InvoiceImportDetail, type InvoiceImportListItem, type List,
 } from '../lib/api'
@@ -19,11 +22,15 @@ export default function InvoiceImports() {
   const navigate = useNavigate()
   const qc = useQueryClient()
 
+  const [status, setStatus] = useState<string | null>(null)
   const { data, isLoading, error } = useQuery({
     queryKey: ['invoice-imports'],
-    queryFn: () => apiGet<List<InvoiceImportListItem>>('/invoice-imports'),
+    queryFn: () => apiGet<List<InvoiceImportListItem>>('/invoice-imports', { limit: String(SUMMARY_LIMIT) }),
     refetchInterval: 10_000,
   })
+  const byStatus = countBy(data?.items, (i) => i.status)
+  const rows = data?.items.filter((i) => !status || i.status === status) ?? []
+  const n = (v?: number) => (isLoading ? '…' : v ?? 0)
 
   const upload = useMutation({
     mutationFn: (file: File) => apiUpload<InvoiceImportDetail>('/invoice-imports', file),
@@ -35,16 +42,22 @@ export default function InvoiceImports() {
 
   return (
     <>
-      <Group justify="space-between" mb="md">
-        <Title order={2}>Fatura Okuma</Title>
-        <FileButton onChange={(f) => f && upload.mutate(f)} accept="image/png,image/jpeg,application/pdf">
-          {(props) => (
-            <Button {...props} loading={upload.isPending}>
-              Fatura/İrsaliye Yükle
-            </Button>
-          )}
-        </FileButton>
-      </Group>
+      <PageHeader eyebrow="Fatura ve irsaliyeden okunan öneriler; onaylanınca alış fişi olur" title="Fatura Okuma"
+        actions={
+          <FileButton onChange={(f) => f && upload.mutate(f)} accept="image/png,image/jpeg,application/pdf">
+            {(props) => (
+              <Button {...props} leftSection={<IconUpload size={16} />} loading={upload.isPending}>
+                Fatura/İrsaliye Yükle
+              </Button>
+            )}
+          </FileButton>
+        } />
+      <StatGrid capped={data?.items.length === SUMMARY_LIMIT}>
+        <StatCard label="Yüklenen belge" value={n(data?.items.length)} icon={IconFileInvoice} />
+        <StatCard label="Öneri bekliyor" value={n(byStatus.extracted)} icon={IconClock} color="yellow" />
+        <StatCard label="Onaylandı" value={n(byStatus.confirmed)} icon={IconCircleCheck} color="green" />
+        <StatCard label="İptal" value={n(byStatus.discarded)} icon={IconX} color="gray" />
+      </StatGrid>
 
       <Alert color="blue" mb="md">
         Bunlar OCR önerileridir. Onaylamadan hiçbir kayıt oluşturulmaz.
@@ -52,6 +65,10 @@ export default function InvoiceImports() {
 
       {upload.isError && <Alert color="red" mb="md">{err(upload.error)}</Alert>}
       {error && <Alert color="red">{err(error)}</Alert>}
+      <Group mb="md">
+        <FilterChips value={status} onChange={setStatus} allCount={data?.items.length}
+          options={Object.entries(STATUS_LABEL).map(([value, st]) => ({ value, label: st.label, count: byStatus[value] ?? 0, color: st.color }))} />
+      </Group>
       {isLoading && <Loader />}
       {data && (
         <Table striped highlightOnHover withTableBorder>
@@ -65,7 +82,7 @@ export default function InvoiceImports() {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {data.items.map((it) => {
+            {rows.map((it) => {
               const st = STATUS_LABEL[it.status] ?? { label: it.status, color: 'gray' }
               return (
                 <Table.Tr key={it.id} onClick={() => navigate(`/fatura-okuma/${it.id}`)} style={{ cursor: 'pointer' }}>
@@ -86,8 +103,8 @@ export default function InvoiceImports() {
                 </Table.Tr>
               )
             })}
-            {data.items.length === 0 && (
-              <Table.Tr><Table.Td colSpan={5}><Text c="dimmed" ta="center">Henüz yüklenen fatura yok</Text></Table.Td></Table.Tr>
+            {rows.length === 0 && (
+              <Table.Tr><Table.Td colSpan={5}><Text c="dimmed" ta="center">{status ? 'Bu durumda belge yok' : 'Henüz yüklenen fatura yok'}</Text></Table.Td></Table.Tr>
             )}
           </Table.Tbody>
         </Table>

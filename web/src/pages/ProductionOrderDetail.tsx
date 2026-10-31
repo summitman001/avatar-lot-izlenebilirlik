@@ -1,11 +1,12 @@
 import {
-  ActionIcon, Alert, Badge, Button, Card, Group, Loader, NumberInput, Select, SimpleGrid,
-  Stack, Stepper, Table, Text, TextInput, Timeline, Title, Tooltip,
+  ActionIcon, Alert, Anchor, Badge, Button, Card, Group, Loader, NumberInput, Select, SimpleGrid, Stack,
+  Stepper, Table, Text, TextInput, Timeline, Tooltip,
 } from '@mantine/core'
 import { IconPlus, IconTrash } from '@tabler/icons-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { PageHeader } from '../components/Page'
 import { AnomalyAlertsCard } from '../components/AnomalyAlerts'
 import {
   ApiError, apiGet, apiPost, type List, type Lot, type ProductionCostReport,
@@ -55,17 +56,9 @@ export default function ProductionOrderDetail() {
 
   return (
     <Stack>
-      <Group justify="space-between">
-        <div>
-          <Title order={2}>{order.order_no}</Title>
-          <Text c="dimmed">{order.product_item_name}</Text>
-        </div>
-        {order.warnings.length > 0 && (
-          <Group>
-            {order.warnings.map((w) => <Badge key={w} color="orange">{w}</Badge>)}
-          </Group>
-        )}
-      </Group>
+      <PageHeader mb="xs" title={order.order_no}
+        eyebrow={<><Anchor component={Link} to="/dis-uretim" size="sm">Dış Üretim</Anchor> · {order.product_item_name}</>}
+        badges={order.warnings.map((w) => <Badge key={w} color="orange" variant="light">{w}</Badge>)} />
 
       <Stepper active={STEPS.indexOf(order.status)} size="sm">
         {STEPS.map((s) => <Stepper.Step key={s} label={STEP_LABEL[s]} />)}
@@ -164,7 +157,7 @@ function PredictionCard({ prediction: p }: { prediction: NonNullable<ProductionO
 function InputsTable({ order }: { order: ProductionOrder }) {
   return (
     <Card withBorder>
-      <Text fw={500} mb="sm">Sevk Edilen Hammaddeler</Text>
+      <Text fw={600} mb="sm">Sevk Edilen Hammaddeler</Text>
       <Table>
         <Table.Thead>
           <Table.Tr>
@@ -193,7 +186,7 @@ function InputsTable({ order }: { order: ProductionOrder }) {
 function CostReportCard({ report: r }: { report: ProductionCostReport }) {
   return (
     <Card withBorder>
-      <Text fw={500} mb="sm">Maliyet Raporu</Text>
+      <Text fw={600} mb="sm">Maliyet Raporu</Text>
       <Table mb="sm">
         <Table.Thead>
           <Table.Tr><Table.Th>Maliyet Unsuru</Table.Th><Table.Th ta="right">Miktar</Table.Th><Table.Th ta="right">Birim Fiyat</Table.Th><Table.Th ta="right">Tutar</Table.Th></Table.Tr>
@@ -236,7 +229,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 function MovementsTimeline({ movements }: { movements: StockMovement[] }) {
   return (
     <Card withBorder>
-      <Text fw={500} mb="sm">Hareket Zaman Çizelgesi</Text>
+      <Text fw={600} mb="sm">Hareket Zaman Çizelgesi</Text>
       <Timeline bulletSize={14} lineWidth={2}>
         {movements.slice().reverse().map((m) => (
           <Timeline.Item key={m.id} title={`${MOVEMENT_LABEL[m.movement_type] ?? m.movement_type} — ${m.lot_no}`}>
@@ -280,7 +273,7 @@ function SendMaterialsForm({ orderId, externalWarehouseId, onDone }: { orderId: 
 
   return (
     <Card withBorder>
-      <Text fw={500} mb="sm">Hammadde Sevk Et{' '}
+      <Text fw={600} mb="sm">Hammadde Sevk Et{' '}
         <Text span c="dimmed" size="sm">(→ {externalWarehouseId ? 'dış üretici deposu' : ''})</Text>
       </Text>
       {formError && <Alert color="red" mb="sm">{formError}</Alert>}
@@ -340,7 +333,7 @@ function ReceiveForm({ orderId, onDone }: { orderId: string; onDone: () => void 
 
   return (
     <Card withBorder>
-      <Text fw={500} mb="sm">Mamulü Teslim Al</Text>
+      <Text fw={600} mb="sm">Mamulü Teslim Al</Text>
       {formError && <Alert color="red" mb="sm">{formError}</Alert>}
       <Group grow mb="sm">
         <NumberInput label="Teslim Alınan Adet" required min={0} decimalScale={3} value={receivedQty} onChange={(v) => setReceivedQty(v as number)} />
@@ -369,7 +362,7 @@ function CloseForm({ orderId, invoiceSet, onDone }: { orderId: string; invoiceSe
 
   return (
     <Card withBorder>
-      <Text fw={500} mb="sm">Siparişi Kapat</Text>
+      <Text fw={600} mb="sm">Siparişi Kapat</Text>
       {formError && <Alert color="red" mb="sm">{formError}</Alert>}
       {!invoiceSet && (
         <TextInput
