@@ -341,12 +341,13 @@ func (s *seeder) purchases(ctx context.Context) error {
 		declared                          *domain.Amount
 		invoice                           string
 	}{
-		// VARSAYIM: 112 kg (100 kg değil) -- URT-2026-045'te 100 kg, URT-2026-046'da (izlenebilirlik
-		// demo senaryosu, bkz. docs/assumptions.md) kalan 12 kg kullanılır; aynı hammadde lotunun İKİ
-		// farklı üretim emrinde (iki ayrı dalda) kullanıldığını kanıtlamak için.
-		{"ET-2026-001", "ET-DANA", "SUP-ET", "112.000", "9.7000", nil, "ET-F-0001"},
-		// Bağımsız kontrol lotu (ET-2026-001'den TAMAMEN ayrı zincir): geri çağırma bunu ETKİLEMEMELİ.
-		{"ET-2026-002", "ET-DANA", "SUP-ET", "20.000", "9.7000", nil, "ET-F-0002"},
+		// Yarışma dokümanındaki zorunlu senaryo: 100 kg, tamamı URT-2026-045'te kullanılır.
+		{"ET-2026-001", "ET-DANA", "SUP-ET", "100.000", "9.7000", nil, "ET-F-0001"},
+		// ET-2026-001'den TAMAMEN ayrı ikinci et lotu: "bir hammadde lotu birden fazla mamul lotuna
+		// dönüşebilir" (dokümandaki çoktan çoğa ilişki) burada gösterilir -- 12 kg URT-2026-046'ya
+		// (SUC-2026-046), 20 kg URT-2026-047'ye (SUC-2026-047). ET-2026-001'in geri çağrılması bunları
+		// ETKİLEMEMELİ (bağımsız kontrol).
+		{"ET-2026-002", "ET-DANA", "SUP-ET", "32.000", "9.7000", nil, "ET-F-0002"},
 		{"BHR-2026-001", "BAHARAT-SUCUK", "SUP-BHR", "2.000", "24.0000", nil, "BH-F-0001"},
 		{"BGR-2026-001", "BAGIRSAK", "SUP-BGR", "5.000", "11.6000", nil, "BG-F-0001"},
 		// Dokümandaki KASITLI tutarsızlık: 25 kg x 11.50 = 287.50 hesaplanan, belgede 351.00 yazıyor => has_mismatch.
@@ -570,8 +571,7 @@ func (s *seeder) externalProduction(ctx context.Context) error {
 	s.created++
 	slog.Info("dis uretim siparisi olusturuldu", "order_no", order.OrderNo)
 
-	// Hammaddeler: ET-2026-001'den 100 kg (112 kg'lik lotun TAMAMI DEĞİL -- kalan 12 kg
-	// secondProductionPath'te URT-2026-046'ya gider, bkz. docs/assumptions.md "Görev 3" madde 1),
+	// Hammaddeler: ET-2026-001'in tamamı (100 kg, dokümandaki gibi),
 	// BHR-2026-001 (2 kg) ve BGR-2026-001 (5 kg) lotlarının TAMAMI (golden UR-001 ile aynı kompozisyon).
 	lines := []domain.SendMaterialsLine{}
 	for _, v := range []struct{ lotNo, qty string }{
@@ -656,9 +656,9 @@ func (s *seeder) salesAndShipments(ctx context.Context) error {
 // bağımsız kontrol lotu. Hepsi SERVİSLER ÜZERİNDEN (ham SQL yazılmadan) oluşturulur.
 // ---------------------------------------------------------------------------
 
-// secondProductionPath: ET-2026-001 lotundan KALAN 12 kg (112 kg - URT-045'te tüketilen 100 kg),
-// İKİNCİ bir üretim emrinde (URT-2026-046) kullanılır -> 10 adet SUC-2026-046. İzleme grafının aynı
-// hammadde lotundan ÇIKAN İKİ farklı dalı (SUC-045 ve SUC-046) doğru bulduğunu kanıtlar.
+// secondProductionPath: ET-2026-002 lotunun 12 kg'ı URT-2026-046'da kullanılır -> 10 adet
+// SUC-2026-046. Kalan 20 kg independentControlLot'ta URT-2026-047'ye gider; izleme grafının AYNI
+// hammadde lotundan çıkan İKİ farklı dalı (SUC-046 ve SUC-047) doğru bulduğunu kanıtlar.
 func (s *seeder) secondProductionPath(ctx context.Context) error {
 	const orderNo = "URT-2026-046"
 	var existingID string
@@ -686,17 +686,17 @@ func (s *seeder) secondProductionPath(ctx context.Context) error {
 	s.created++
 	slog.Info("ikinci dis uretim siparisi olusturuldu", "order_no", order.OrderNo)
 
-	etLot, err := s.store.LotByNo(ctx, "ET-2026-001")
+	etLot, err := s.store.LotByNo(ctx, "ET-2026-002")
 	if err != nil {
-		return fmt.Errorf("ikinci uretim yolu icin ET-2026-001 bulunamadi: %w", err)
+		return fmt.Errorf("ikinci uretim yolu icin ET-2026-002 bulunamadi: %w", err)
 	}
 	order, err = s.store.SendMaterials(ctx, order.ID, domain.SendMaterialsRequest{
-		Lines: []domain.SendMaterialsLine{{LotID: etLot.ID, Qty: *etLot.QtyOnHand}},
+		Lines: []domain.SendMaterialsLine{{LotID: etLot.ID, Qty: qty("12.000")}},
 	})
 	if err != nil {
 		return err
 	}
-	slog.Info("ikinci yol hammadde sevk edildi", "order_no", order.OrderNo, "et_kg", etLot.QtyOnHand.StringFixed(domain.QtyScale))
+	slog.Info("ikinci yol hammadde sevk edildi", "order_no", order.OrderNo, "et_kg", "12.000")
 
 	order, err = s.store.ReceiveProduction(ctx, order.ID, domain.ReceiveProductionRequest{
 		ReceivedQty:        qty("10"),
@@ -717,7 +717,7 @@ func (s *seeder) secondProductionPath(ctx context.Context) error {
 	return nil
 }
 
-// secondPathSaleAndReturn: SUC-2026-046'dan MKT-A'ya 10 paket satılır (MKT-A toplamı 30+10=40 olur);
+// secondPathSaleAndReturn: SUC-2026-046'dan MKT-A'ya 10 paket satılır (ET-2026-002 zinciri);
 // MKT-B, SUC-2026-045'ten 2 paket iade eder (MKT-B net 25-2=23 kalır -- iade sevk edileni DÜŞÜRMEZ,
 // trace-forward/recall ayrı qty_returned alanında gösterir, bkz. docs/traceability.md).
 func (s *seeder) secondPathSaleAndReturn(ctx context.Context) error {
@@ -773,9 +773,9 @@ func (s *seeder) secondPathSaleAndReturn(ctx context.Context) error {
 	return nil
 }
 
-// independentControlLot: ET-2026-002 (ET-2026-001'den TAMAMEN bağımsız bir et lotu) ile
-// URT-2026-047/SUC-2026-047 üretilip MKT-C'ye satılır. ET-2026-001 geri çağrıldığında bu lot
-// ETKİLENMEMELİDİR (ayrı bir soy ağacı) -- bkz. backend/internal/integration/traceability_test.go.
+// independentControlLot: ET-2026-002'nin (ET-2026-001'den TAMAMEN bağımsız) kalan 20 kg'ı ile
+// URT-2026-047/SUC-2026-047 üretilip MKT-C'ye satılır. ET-2026-001 geri çağrıldığında bu lot (ve
+// SUC-2026-046) ETKİLENMEMELİDİR (ayrı bir soy ağacı) -- bkz. integration/traceability_test.go.
 func (s *seeder) independentControlLot(ctx context.Context) error {
 	const orderNo = "URT-2026-047"
 	var existingID string

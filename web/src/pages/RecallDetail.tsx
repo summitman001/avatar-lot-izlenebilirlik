@@ -1,8 +1,9 @@
-import { Alert, Anchor, Badge, Button, Card, Loader, Select, Stack, Table, Text, Tooltip } from '@mantine/core'
+import { Alert, Anchor, Badge, Button, Card, Loader, Select, Stack, Table, Text } from '@mantine/core'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { IconDownload } from '@tabler/icons-react'
 import { Link, useParams } from 'react-router-dom'
+import { DownstreamCell, DownstreamModal, type DownstreamTarget } from '../components/Downstream'
 import { PageHeader } from '../components/Page'
 import { API_URL, ApiError, apiGet, apiPatch, apiPost, type Recall } from '../lib/api'
 
@@ -16,6 +17,7 @@ export default function RecallDetail() {
   const { id = '' } = useParams()
   const qc = useQueryClient()
   const [closeError, setCloseError] = useState<string | null>(null)
+  const [downstreamTarget, setDownstreamTarget] = useState<DownstreamTarget | null>(null)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['recall', id],
@@ -107,13 +109,8 @@ export default function RecallDetail() {
                 <Table.Td ta="right">{c.qty_returned}</Table.Td>
                 <Table.Td ta="right">{c.remaining_risk_qty}</Table.Td>
                 <Table.Td>
-                  {c.downstream_known ? (
-                    <Badge color="green" variant="light">Bilinen</Badge>
-                  ) : (
-                    <Tooltip label={c.downstream_note}>
-                      <Badge color="gray" variant="outline">Bilinmiyor</Badge>
-                    </Tooltip>
-                  )}
+                  <DownstreamCell known={c.downstream_known} note={c.downstream_note} entries={c.downstream ?? []}
+                    onAdd={() => setDownstreamTarget({ customerId: c.customer_id, customerName: c.customer_name, lotId: c.lot_id, lotNo: c.lot_no })} />
                 </Table.Td>
                 <Table.Td>
                   <Select
@@ -132,6 +129,10 @@ export default function RecallDetail() {
           </Table.Tbody>
         </Table>
       </Card>
+      {downstreamTarget && (
+        <DownstreamModal target={downstreamTarget} onClose={() => setDownstreamTarget(null)}
+          onSaved={() => { setDownstreamTarget(null); invalidate() }} />
+      )}
     </Stack>
   )
 }

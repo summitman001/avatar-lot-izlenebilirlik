@@ -615,8 +615,8 @@ Kök lottan türeyen TÜM alt lotları (çok seviyeli, çok yollu) döner. Kök 
 `total_produced_qty`, `ratio_from_parent`, güncel depo bakiyesi (`current_stock`/`qty_on_hand_total`),
 sevkiyatlar (`shipments`), satışlar (`sales`, `recall_violation` bayraklı) ve `returned_qty`. `summary`:
 `affected_lot_count`, depo UOM bazında `remaining_stock`, müşteri bazında `customers`
-(`qty_shipped`/`qty_returned`). `downstream_known` her zaman `false`'dur: sistem marketin kendi
-müşterisine sattığı miktarı (ikinci kademe dağıtım) hiç kaydetmez; `downstream_note` bunu açıklar.
+(`qty_shipped`/`qty_returned`) ve kayıtlı ikinci kademe dağıtımlar (`downstream`). Kayıt yoksa
+`downstream_known=false` ve `downstream_note` açıklama taşır (bkz. "İkinci kademe dağıtım").
 
 ```json
 {
@@ -624,7 +624,7 @@ müşterisine sattığı miktarı (ikinci kademe dağıtım) hiç kaydetmez; `do
   "nodes": [
     { "lot_id": "01a1...", "lot_no": "SUC-2026-045", "depth": 1, "qty_from_parent": "100.000", "returned_qty": "2.000", "sales": [ { "order_no": "SAT-2026-002", "customer_name": "Market B", "qty": "25.000", "recall_violation": false } ] }
   ],
-  "summary": { "affected_lot_count": 3, "customers": [ { "customer_name": "Market A", "qty_shipped": "40.000", "downstream_known": false, "downstream_note": "İkinci kademe dağıtım kaydı yok, market ile iletişime geçilmeli" } ] }
+  "summary": { "affected_lot_count": 2, "customers": [ { "customer_name": "Market A", "qty_shipped": "30.000", "downstream_known": false, "downstream_note": "İkinci kademe dağıtım kaydı yok, market ile iletişime geçilmeli", "downstream": [] } ] }
 }
 ```
 
@@ -884,3 +884,121 @@ kayıtlar üzerinden hesaplanır (web "Tahminler" sayfasının üst kartları):
   "cutting": { "count": 3, "count_with_actual": 1, "mae": "2.0000", "mape": "11.11" }
 }
 ```
+
+---
+
+## Depolar arası transfer (`stock-transfers`)
+
+Görev 3: "Depo transferi … hareketleri lot bazında kaydedilir."
+
+### `POST /stock-transfers`
+
+```json
+{
+  "id": "01a1...",
+  "from_warehouse_id": "01a1...",
+  "to_warehouse_id": "01a1...",
+  "note": "sabah araç yüklemesi",
+  "lines": [{ "lot_id": "01a1...", "qty": "30.000" }]
+}
+```
+
+Her satır aynı transaction'da kaynak depoda `transfer_out` (−) ve hedef depoda `transfer_in` (+) yazar
+(`ref_type = stock_transfer`). Lot maliyeti değişmez. `transfer_no` (`TRF-<yıl>-NNN`) atomik üretilir.
+Lot bakiyesi değiştiği için `change_log`'a yazılır; cihaz yeni bakiyeyi pull ile görür. Aynı `id` ile
+tekrar gelen istek mevcut transferi döner. Hatalar: kaynak depoda yetersiz stok `409`
+(`INSUFFICIENT_STOCK`); bloke veya geri çağrılmış lot karantina dışı bir depoya `422` (`LOT_BLOCKED`);
+tükenmiş lot `422`; kaynak ve hedef aynıysa `422`; not 400 karakteri aşarsa `422`. **Dış üretici deposu
+(`external_producer`) kaynak da hedef de olamaz (`422`):** oradaki stok üretim emrine aittir ve yalnızca
+sevk/teslim/iade ile hareket eder (aksi halde teslimdeki tüketim dış depoyu eksiye düşürür).
+
+### `GET /stock-transfers?warehouse_id=&lot_id=` / `GET /stock-transfers/{id}`
+
+Transfer başlığı ve satırlar (`lines`: `lot_id`, `lot_no`, `item_id`, `qty`). `warehouse_id` kaynak
+veya hedef depoya göre süzer.
+
+---
+
+## Fire (`POST /lots/{id}/waste`)
+
+Görev 3: "fire hareketleri lot bazında kaydedilir".
+
+```json
+{ "id": "01a1...", "warehouse_id": "01a1...", "qty": "5.000", "reason": "bozulma" }
+```
+
+Lotun seçilen depodaki miktarı tek bir `waste_out` (−) hareketiyle, lotun birim maliyetiyle düşülür
+(`ref_type = lot_waste`, `ref_id` = lot, `note` = sebep). `201` yanıtı oluşan `StockMovement`'tır.
+Lot satırı kilitlenir; depo bakiyesi yetmezse `409` (`INSUFFICIENT_STOCK`), sebep boşsa `422`. Bloke
+veya geri çağrılmış lotun imhası da bu yoldur. Dış üretici deposundan fire kaydedilemez (`422`; fire üretim
+teslimiyle tüketime dahil olur). Aynı `id` ile tekrar gelen istek aynı hareketi döner.
+
+---
+
+## Yeniden işleme (`reprocess-orders`)
+
+Görev 3: "yeniden işleme … hareketleri lot bazında kaydedilir".
+
+### `POST /reprocess-orders`
+
+```json
+{
+  "id": "01a1...",
+  "warehouse_id": "01a1...",
+  "inputs": [{ "lot_id": "01a1...", "qty": "10.000" }, { "lot_id": "01a1...", "qty": "5.000" }],
+  "output": { "item_id": "01a1...", "qty": "14.000", "lot_no": null, "expiry_date": null },
+  "note": "küçük parçalar kıymaya"
+}
+```
+
+Tek transaction'da: her girdi depodan `reprocess_consume` (−) ile tüketilir, yeni çıktı lotu
+(`origin_type = reprocess`, `lot_no` boşsa `YIL-<yıl>-NNN`) `reprocess_in` (+) ile girer, her girdi için
+`lot_link` (`process_type = reprocess`) yazılır. Emir numarası `YIS-<yıl>-NNN`. **Maliyet:** her girdi
+satırı `round2(miktar × birim maliyet)`, `total_cost` = satır toplamı, çıktı birim maliyeti
+`round4(total_cost / çıktı miktarı)` (dış üretimdeki EKP kuralıyla aynı). SKT verilmezse ürünün raf
+ömründen türetilir; **yeniden işleme raf ömrünü uzatamaz**: türetilen SKT en erken SKT'li girdiden sonraysa
+o girdinin SKT'si kullanılır, açıkça verilen `expiry_date` ondan sonraysa `422`. Hatalar: girdi lotu aktif
+değilse `422` (bloke/geri çağrılmış lot yeniden işlenemez), depoda yetersiz stok `409`, pasif ürün `422`,
+dış üretici deposu `422`. Aynı `id` ile tekrar gelen istek mevcut emri
+döner.
+
+### `GET /reprocess-orders` / `GET /reprocess-orders/{id}`
+
+Emir başlığı, çıktı lotu (`output_lot_no`, `output_qty`, `output_unit_cost`), `total_cost` ve girdiler
+(`inputs`: lot, miktar, birim maliyet).
+
+---
+
+## İkinci kademe dağıtım (`downstream-distributions`)
+
+Görev 3: "İkinci kademe dağıtım yalnızca kaydedilmişse kesin olarak gösterilir."
+
+### `POST /downstream-distributions`
+
+```json
+{
+  "id": "01a1...",
+  "customer_id": "01a1...",
+  "lot_id": "01a1...",
+  "recipient_name": "Şube 1",
+  "recipient_phone": "0555 000 00 01",
+  "qty": "4.000",
+  "distributed_at": "2026-03-11",
+  "note": null
+}
+```
+
+Müşterinin (market) bu lottan kendi alıcısına dağıttığı miktarı kaydeder. Müşteri × lot için toplam
+kayıt, müşteriye giden net miktarı aşamaz (`422`). Net miktar geri çağırmayla aynı hesaplanır: satış
+satırları + siparişe bağlı olmayan sevkiyatlar − iadeler (sevkiyatsız satışın alıcısı da kaydedebilir). Kayıt sonrasında `trace-forward`
+özetinde ve geri çağırma müşteri satırlarında `downstream_known=true` olur ve kayıtlar `downstream`
+listesinde döner; kayıtsız kalan miktar için `downstream_note` açıklama taşır. Dağıtım kaydından sonra
+iade gelip kayıtlar net miktarı aşarsa kayıtlar yine gösterilir, `downstream_note` teyit gerektiğini
+söyler. İletişim listesi CSV'si kayıtlı alıcıları `kademe=2` satırları olarak içerir (`dagitan_musteri`
+sütunu dolu); alıcıya giden miktar `sevk_miktari`'dadır, `kalan_risk` boştur (o miktar dağıtan müşterinin
+kalan riskinin içindedir, sütun toplanınca iki kez sayılmaz).
+
+### `GET /downstream-distributions?customer_id=&lot_id=`
+
+Kayıtlı ikinci kademe dağıtımlar.
+

@@ -14,7 +14,7 @@ MySQL → migration → seed → API → web sırasıyla kendiliğinden ayağa k
 
 | Servis | Adres | Not |
 |---|---|---|
-| Web paneli | http://localhost:3000 | Ürünler, Lotlar, Dış Üretim, Parçalama, Satış/Sevkiyat, İzlenebilirlik, Geri Çağırma canlı; diğer sayfalar "yakında" |
+| Web paneli | http://localhost:3000 | Tüm modüller canlı: Ürünler, Lotlar (transfer, fire), Stok Hareketleri, Alışlar, Fatura Okuma, Dış Üretim, Parçalama, Yeniden İşleme, Satış/Sevkiyat, İzlenebilirlik, Geri Çağırma, Tahminler, Uyarılar |
 | API | http://localhost:8080/api/v1 | `GET /health`, `GET /openapi.yaml` |
 | ML servisi | http://localhost:8000 | `GET /health`, `GET /models` |
 | MySQL | localhost:3306 | kullanıcı `app` / `app`, veritabanları `avatar` ve `avatar_test` |
@@ -29,14 +29,16 @@ tekrar üretebilir:
 
 1. **Web panelinde** sol menüden **İzlenebilirlik**'e tıklayın, arama kutusuna `ET-2026-001` yazın ve
    sonuçtan lotu seçin.
-2. Üstte açılan hiyerarşik grafikte `ET-2026-001`'in **iki** mamul lotuna (`SUC-2026-045`,
-   `SUC-2026-046`) daldığını görün; alttaki "İleri İzleme" sekmesinde etkilenen lotlar ve müşteri
-   dağılımını (Market A 40, Market B 25 − 2 iade, Market C 30) inceleyin.
+2. Üstte açılan hiyerarşik grafikte `ET-2026-001`'in (100 kg) `URT-2026-045` ile `SUC-2026-045`
+   (85 paket) mamul lotuna dönüştüğünü görün; alttaki "İleri İzleme" sekmesinde etkilenen lotlar ve
+   müşteri dağılımını (Market A 30, Market B 25 − 2 iade, Market C 30) inceleyin.
 3. **"Bu lottan geri çağırma başlat"** butonuna tıklayıp bir sebep yazın, başlatın — otomatik olarak
    **Geri Çağırma** detay sayfasına yönlendirilirsiniz.
-4. Detay sayfasında **Etkilenen Lotlar** tablosunda `ET-2026-001`, `SUC-2026-045`, `SUC-2026-046`'nın
-   bloke edildiğini, **Müşteri/Market Tablosu**'nda her marketin sevk/iade/kalan risk miktarını görün
-   (`SUC-2026-047`/Market C'nin bu tabloda **olmadığını** da doğrulayın — bağımsız kontrol lotu).
+4. Detay sayfasında **Etkilenen Lotlar** tablosunda `ET-2026-001` ve `SUC-2026-045`'in bloke
+   edildiğini, **Müşteri/Market Tablosu**'nda her marketin sevk/iade/kalan risk miktarını görün
+   (başka bir et lotundan, `ET-2026-002`'den üretilen `SUC-2026-046`/`SUC-2026-047`'nin bu tabloda
+   **olmadığını** da doğrulayın — bağımsız kontrol). Bir hammadde lotunun birden fazla mamul lotuna
+   dönüşmesini görmek için İzlenebilirlik'te `ET-2026-002`'yi arayın (→ `SUC-2026-046` ve `SUC-2026-047`).
 5. **"İletişim Listesi (CSV)"** butonuyla market bazlı iletişim listesini indirin.
 6. Her müşterinin durumunu sırayla **Onaylandı**'ya çevirip **"Kapat"** butonuyla geri çağırmayı
    kapatın (tüm müşteriler onaylanmadan kapatma `422` ile reddedilir).
@@ -127,7 +129,7 @@ Backend testleri `TEST_DATABASE_URL` ile Docker'daki ayrı `avatar_test` veritab
 - [`docs/data-model.md`](docs/data-model.md) — tablolar ve ER diyagramı (Mermaid)
 - [`docs/sync.md`](docs/sync.md) — çevrimdışı senkron sözleşmesi
 - [`docs/assumptions.md`](docs/assumptions.md) — **Varsayımlar ve Tespitler** (yuvarlama kuralları, VKP 24,90 € varsayımı, KZ-2026-001 tutarsızlığı)
-- [`docs/traceability.md`](docs/traceability.md) — izlenebilirlik veri modeli, recursive CTE mantığı, geri çağırma akışı
+- [`docs/traceability.md`](docs/traceability.md) — izlenebilirlik veri modeli, recursive CTE mantığı, geri çağırma akışı, yeniden işleme, fire ve ikinci kademe dağıtım
 - [`docs/cutting.md`](docs/cutting.md) — parçalama: dağıtım yöntemleri, fire/yan ürün muamelesi, yuvarlama, ağırlık dengesi
 - [`docs/ml-data.md`](docs/ml-data.md) — ML sentetik verisi; `docs/golden/` — hesap doğruluk referansları
 - [`docs/android-integration.md`](docs/android-integration.md) — Kotlin geliştirici için: kullanılacak uç noktalar, örnek gövdeler, sync sonuç durumlarına göre istemci davranışı

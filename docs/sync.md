@@ -106,6 +106,9 @@ UNIQUE ihlaliyle çarpışır, o transaction tamamen geri alınır (hiçbir yan 
 
 ## GET /api/v1/sync/pull?since_seq=0&device_id=...&limit=500
 
+Lot bakiyesi satış, iade, üretim ve depolar arası transfer (`POST /stock-transfers`) sonrasında
+bakiyeli olarak yeniden yazılır.
+
 ```json
 {
   "changes": [

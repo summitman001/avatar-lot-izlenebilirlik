@@ -121,6 +121,20 @@ export interface Lot {
   blocked_reason: string | null
   purchase: LotPurchase | null
   qty_on_hand?: Decimal
+  balances?: LotBalanceEntry[]
+}
+
+// Depolar arasi transfer (POST /stock-transfers)
+export interface StockTransfer {
+  id: string
+  transfer_no: string
+  from_warehouse_id: string
+  from_warehouse_code: string
+  to_warehouse_id: string
+  to_warehouse_code: string
+  note: string | null
+  created_at: string
+  lines: { lot_id: string; lot_no: string; item_id: string; qty: Decimal }[]
 }
 
 export interface List<T> {
@@ -184,6 +198,7 @@ export interface CreatePurchaseReceiptLineRequest {
 }
 
 export interface CreatePurchaseReceiptRequest {
+  id?: string
   doc_no?: string
   supplier_id: string
   invoice_no?: string
@@ -727,6 +742,40 @@ export interface TraceForwardCustomerSummary {
   qty_returned: Decimal
   downstream_known: boolean
   downstream_note?: string
+  downstream: DownstreamDistribution[]
+}
+
+// İkinci kademe dağıtım kaydı (POST /downstream-distributions)
+export interface DownstreamDistribution {
+  id: string
+  customer_id: string
+  customer_name: string
+  lot_id: string
+  lot_no: string
+  recipient_name: string
+  recipient_phone: string | null
+  qty: Decimal
+  distributed_at: string
+  note: string | null
+  created_at: string
+}
+
+// Yeniden işleme (POST /reprocess-orders)
+export interface ReprocessOrder {
+  id: string
+  order_no: string
+  warehouse_id: string
+  warehouse_code: string
+  output_lot_id: string | null
+  output_lot_no: string | null
+  output_item_name: string | null
+  output_qty: Decimal | null
+  output_uom: string | null
+  output_unit_cost: Decimal | null
+  total_cost: Decimal
+  note: string | null
+  created_at: string
+  inputs: { lot_id: string; lot_no: string; item_name: string; qty: Decimal; uom: string; unit_cost: Decimal }[]
 }
 
 export interface TraceForwardResponse {
@@ -818,6 +867,7 @@ export interface RecallCustomerView {
   downstream_known: boolean
   downstream_note?: string
   has_violation: boolean
+  downstream: DownstreamDistribution[]
 }
 
 export interface Recall {
