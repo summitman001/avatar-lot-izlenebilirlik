@@ -125,6 +125,14 @@ func (h *handlers) confirmInvoiceImport(w nethttp.ResponseWriter, r *nethttp.Req
 	writeJSON(w, nethttp.StatusOK, out)
 }
 
+func (h *handlers) deleteInvoiceImport(w nethttp.ResponseWriter, r *nethttp.Request) {
+	if err := h.store.DeleteInvoiceImport(r.Context(), chi.URLParam(r, "id")); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	w.WriteHeader(nethttp.StatusNoContent)
+}
+
 func (h *handlers) discardInvoiceImport(w nethttp.ResponseWriter, r *nethttp.Request) {
 	out, err := h.store.DiscardInvoiceImport(r.Context(), chi.URLParam(r, "id"))
 	if err != nil {

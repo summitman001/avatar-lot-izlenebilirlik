@@ -79,23 +79,30 @@ func getLot(ctx context.Context, q DBTX, id string, withDetail bool) (*domain.Lo
 	if err != nil || !withDetail {
 		return l, err
 	}
+	if l.Balances, err = lotBalances(ctx, q, id); err != nil {
+		return nil, err
+	}
+	return l, nil
+}
+
+func lotBalances(ctx context.Context, q DBTX, lotID string) ([]domain.LotBalance, error) {
 	rows, err := q.QueryContext(ctx,
 		`SELECT b.warehouse_id, w.code, b.qty_on_hand
 		 FROM v_lot_balance b JOIN warehouse w ON w.id = b.warehouse_id
-		 WHERE b.lot_id = ? ORDER BY w.code`, id)
+		 WHERE b.lot_id = ? ORDER BY w.code`, lotID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	l.Balances = []domain.LotBalance{}
+	out := []domain.LotBalance{}
 	for rows.Next() {
 		var b domain.LotBalance
 		if err := rows.Scan(&b.WarehouseID, &b.WarehouseCode, &b.QtyOnHand); err != nil {
 			return nil, err
 		}
-		l.Balances = append(l.Balances, b)
+		out = append(out, b)
 	}
-	return l, rows.Err()
+	return out, rows.Err()
 }
 
 func (s *Store) GetLot(ctx context.Context, id string) (*domain.Lot, error) {
@@ -112,6 +119,8 @@ type LotFilter struct {
 	Status      string
 	Q           string
 	HasMismatch *bool
+	// WarehouseID: yalnizca bu depoda stogu olan lotlar; yanitta depo kirilimi (balances) da doner.
+	WarehouseID string
 	Page        Page
 }
 
@@ -129,6 +138,9 @@ func (s *Store) ListLots(ctx context.Context, f LotFilter) ([]domain.Lot, error)
 	if f.HasMismatch != nil {
 		b.add(`COALESCE(prl.has_mismatch, FALSE) = ?`, *f.HasMismatch)
 	}
+	if f.WarehouseID != "" {
+		b.add(`EXISTS (SELECT 1 FROM v_lot_balance vb WHERE vb.lot_id = l.id AND vb.warehouse_id = ? AND vb.qty_on_hand > 0)`, f.WarehouseID)
+	}
 	limit, offset := f.Page.normalized()
 	rows, err := s.db.QueryContext(ctx,
 		lotSelect+b.sql()+` ORDER BY l.received_or_produced_at DESC, l.lot_no LIMIT ? OFFSET ?`,
@@ -145,7 +157,17 @@ func (s *Store) ListLots(ctx context.Context, f LotFilter) ([]domain.Lot, error)
 		}
 		out = append(out, *l)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if f.WarehouseID != "" {
+		for i := range out {
+			if out[i].Balances, err = lotBalances(ctx, s.db, out[i].ID); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return out, nil
 }
 
 func exists(ctx context.Context, q DBTX, table, id string) (bool, error) {

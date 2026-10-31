@@ -145,6 +145,7 @@ func NewRouter(d Deps) nethttp.Handler {
 		r.Get("/invoice-imports", h.listInvoiceImports)
 		r.Post("/invoice-imports", h.createInvoiceImport)
 		r.Get("/invoice-imports/{id}", h.getInvoiceImport)
+		r.Delete("/invoice-imports/{id}", h.deleteInvoiceImport)
 		r.Get("/invoice-imports/{id}/file", h.getInvoiceImportFile)
 		r.Post("/invoice-imports/{id}/confirm", h.confirmInvoiceImport)
 		r.Post("/invoice-imports/{id}/discard", h.discardInvoiceImport)

@@ -223,6 +223,34 @@ func (s *Store) ConfirmInvoiceImport(ctx context.Context, id string, req domain.
 	return s.GetInvoiceImport(ctx, id)
 }
 
+// DeleteInvoiceImport: onaylanmamis (extracted/discarded) kaydi ve dosyasini siler; bunlardan hicbir
+// lot/hareket/fis olusmamistir. Onaylanmis kayit alis fisinin kaynak belgesidir, izlenebilirlik
+// kaydi oldugu icin silinmez (409).
+func (s *Store) DeleteInvoiceImport(ctx context.Context, id string) error {
+	var storedPath string
+	err := s.InTx(ctx, func(tx *sql.Tx) error {
+		var status string
+		err := tx.QueryRowContext(ctx, `SELECT status, stored_path FROM invoice_import WHERE id = ? FOR UPDATE`, id).
+			Scan(&status, &storedPath)
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.ErrNotFound
+		} else if err != nil {
+			return err
+		}
+		if status == "confirmed" {
+			return domain.Conflict("onaylanmis belge silinemez: alis fisinin kaynagi olarak saklanir")
+		}
+		_, err = tx.ExecContext(ctx, `DELETE FROM invoice_import WHERE id = ?`, id)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	// Kayit silindi; dosya kalirsa yalnizca disk yer kaplar, istek basarisiz sayilmaz.
+	_ = os.Remove(filepath.Join(s.uploadsDir, storedPath))
+	return nil
+}
+
 // DiscardInvoiceImport: SADECE 'extracted' durumundaki bir kaydi 'discarded' yapar (zaten
 // confirmed/discarded ise 409) -- hicbir lot/hareket/fis etkilenmez, SADECE bu kaydin durumu degisir.
 func (s *Store) DiscardInvoiceImport(ctx context.Context, id string) (*domain.InvoiceImportDetail, error) {

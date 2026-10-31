@@ -101,7 +101,8 @@ func (h *handlers) listLots(w nethttp.ResponseWriter, r *nethttp.Request) {
 		return
 	}
 	lots, err := h.store.ListLots(r.Context(), repo.LotFilter{
-		ItemID: q.Get("item_id"), Status: q.Get("status"), Q: q.Get("q"), HasMismatch: mismatch, Page: p,
+		ItemID: q.Get("item_id"), Status: q.Get("status"), Q: q.Get("q"), HasMismatch: mismatch,
+		WarehouseID: q.Get("warehouse_id"), Page: p,
 	})
 	if err != nil {
 		writeError(w, r, err)
