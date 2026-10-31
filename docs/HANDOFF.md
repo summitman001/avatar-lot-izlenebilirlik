@@ -37,6 +37,12 @@ Bu dosya, backend iskeletini devralan full-stack geliştirici içindir. Branch'l
   - **Lot hareketleri raporu** (Bölüm 6 "lot hareketleri … raporları gösterilmelidir"): web Stok Hareketleri sayfası (`GET /stock-movements`; Lotlar → Hareketler).
   - **ET-2026-001 = 100 kg** (Görev 3 zorunlu senaryo): çok yollu gösterim ayrı lota (`ET-2026-002` → `SUC-2026-046`/`SUC-2026-047`) taşındı, bkz. `docs/assumptions.md` "Görev 3" madde 1.
 
+- **Kullanıcı denemesi düzeltmeleri (2026-10-31):**
+  - Boş bırakılan numara, elle kullanılmış numarayı atlar (`nextSequenceNo`); `Duplicate entry` metni kullanıcıya gitmez.
+  - `DELETE /invoice-imports/{id}`: onaylanmamış belge silinir, onaylı belge `409`.
+  - `GET /lots?warehouse_id=`: yeniden işleme formu yalnızca seçilen depoda stoğu olan lotları gösterir.
+  - Web: API kodları ve alan adları `web/src/lib/messages.ts` içinde çevrilir (API sözleşmesi değişmedi); lot araması öneriyle çalışır (`components/LotSearch.tsx`); ürün Ürünler sayfasından ve alış/fatura satırından eklenir (`components/NewItemModal.tsx`); alış satırlarında birim gösterilir.
+
 ## 2. Stub / TODO (bilerek yapılmadı)
 
 | Alan | Durum |

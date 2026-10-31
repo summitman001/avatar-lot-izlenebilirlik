@@ -118,6 +118,8 @@ geçirilir) — tek doğruluk kaynağı ML'in ürettiği öneri, Go onu dönüş
   **AYNI** fonksiyon) + `status='confirmed'`.
 - **`POST /api/v1/invoice-imports/{id}/discard`** — SADECE `extracted` durumundaki bir kaydı
   `discarded` yapar (aksi halde `409`); hiçbir lot/hareket/fiş etkilenmez.
+- **`DELETE /api/v1/invoice-imports/{id}`** — `extracted`/`discarded` kaydı ve dosyasını siler;
+  `confirmed` kayıt alış fişinin kaynak belgesi olduğu için silinemez (`409`).
 
 ### Eşleştirme yardımı (`repo/fuzzy.go`)
 
