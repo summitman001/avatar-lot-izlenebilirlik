@@ -184,6 +184,8 @@ Sol menü **İzlenebilirlik** → arama kutusuna `ET-2026-001` yazın ve önerid
 - Bağımsız kontrol: `ET-2026-002` aranırsa aynı hammaddenin iki ayrı mamul lotuna (`SUC-2026-046`,
   `SUC-2026-047`) dağıldığı görülür; bu lotlar `ET-2026-001` izlemesinde yer almaz.
 
+Ekran görüntüsü: [izlenebilirlik-et-2026-001.jpg](docs/screenshots/izlenebilirlik-et-2026-001.jpg)
+
 ### Adım 6: Geri çağırma
 
 Adım 5'teki ekranda **"Bu lottan geri çağırma başlat"** → bir sebep yazıp başlatın. `RCL-2026-001`
@@ -203,6 +205,8 @@ detayına yönlendirilirsiniz:
   sütunlu bir CSV indirir.
 - Müşteriler tek tek "Onaylandı" yapılmadan **Kapat** `422` ile reddedilir.
 - Dashboard'da "Bloke Lot 2" ve "Aktif Geri Çağırma 1" görünür.
+
+Ekran görüntüsü: [geri-cagirma-rcl-2026-001.jpg](docs/screenshots/geri-cagirma-rcl-2026-001.jpg)
 
 ### Adım 7: Android çevrimdışı satış
 
