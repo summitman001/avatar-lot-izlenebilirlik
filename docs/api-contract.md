@@ -661,6 +661,9 @@ Aynı kök lot için AÇIK bir geri çağırma zaten varsa `409` (mesajda mevcut
 Liste: `recall_no`, kök lot, sebep, durum, `affected_lot_count`, `pending_customer_count`. Detay:
 yukarıdakilere ek `affected_lots` (lot_no, item_name, depth, status) ve `customers`
 (`qty_shipped`/`qty_returned`/`remaining_risk_qty`/`contact_status`/`has_violation`/`downstream_known`).
+`has_violation`, geri çağrılan lotun O MÜŞTERİYE satıldığı anlamına gelir. `/sync/push` ile geç düşen satış
+`customers`'ı günceller: miktar artar, müşteri yoksa eklenir, `contact_status` `pending` olur, geri çağırma
+kapalıysa `open`'a döner. Sonradan gelen iade açık geri çağırmada `qty_returned`'ü günceller.
 
 ### `PATCH /recalls/{id}/customers/{recall_customer_id}`
 

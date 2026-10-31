@@ -260,6 +260,9 @@ Uygulama: `backend/internal/repo/traceability.go`, istek/varlık tipleri
    `recall.status`'u günceller (tüm müşteriler `confirmed` olmadan `422`); lotları tekrar `active` yapmak
    için AYRI `POST /lots/{id}/unblock` (Görev 2'den beri var) kullanılır -- bir recall'ın idari olarak
    kapanması ile ürünün fiilen piyasaya geri dönmesi (karantina kararı) BİLEREK ayrı işlemlerdir.
+   Geri çağrılan lota `/sync/push` ile geç düşen satış, kapalı geri çağırmayı otomatik yeniden açar (bkz.
+   `docs/traceability.md`, "Geri çağırma listesi geç satışlarla güncellenir"), çünkü haber verilmemiş
+   riskli ürün doğmuştur. Lot durumu yine değişmez.
 8. **Parçalama/yeniden işleme servisi henüz yok**, bu yüzden "çok seviyeli izleme" ve "döngü koruması"
    testleri (`TestTraceForwardThreeLevelsDeep`, `TestTraceForwardCycleGuard`) `lot_link` satırlarını
    DOĞRUDAN (ham SQL ile) oluşturur. Gerçek parçalama servisi eklenince bu testler değişmeden

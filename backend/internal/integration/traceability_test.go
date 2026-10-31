@@ -457,6 +457,159 @@ func TestRecallBlockReflectedInSyncAndOfflineViolation(t *testing.T) {
 	}
 }
 
+// offlineSale: geri çağrılan lota cihazdan geç düşen satış (/sync/push); flagged beklenir.
+func (e *env) offlineSale(sc recallScenario, customerID, qty string) {
+	e.t.Helper()
+	push := e.must(e.do("POST", "/api/v1/sync/push", map[string]any{
+		"device_id": domain.NewID(),
+		"operations": []any{map[string]any{
+			"op_id": domain.NewID(), "entity": "sales_order", "action": "create",
+			"payload": map[string]any{
+				"customer_id": customerID, "warehouse_id": sc.f.mainWh, "sold_at": "2026-03-11T09:00:00Z",
+				"lines": []any{map[string]any{"item_id": sc.f.product, "lot_id": sc.suc045, "qty": qty, "unit_price": "24.9000"}},
+			},
+			"client_created_at": "2026-03-11T09:00:00Z",
+		}},
+	}), 200)
+	if st := push.JSON["results"].([]any)[0].(map[string]any)["status"]; st != "flagged" {
+		e.t.Fatalf("flagged beklenirdi: %s", push.Raw)
+	}
+}
+
+// recallCustomerRows: SUC-2026-045 satırları, müşteri adına göre.
+func (e *env) recallCustomerRows(recallID, lotID string) map[string]map[string]any {
+	e.t.Helper()
+	detail := e.must(e.do("GET", "/api/v1/recalls/"+recallID, nil), 200)
+	out := map[string]map[string]any{}
+	custs, _ := detail.JSON["customers"].([]any)
+	for _, c := range custs {
+		m := c.(map[string]any)
+		if m["lot_id"] == lotID {
+			out[m["customer_name"].(string)] = m
+		}
+	}
+	return out
+}
+
+// Geri çağırmadan sonra düşen offline satış listeyi günceller: mevcut müşterinin riski artar ve
+// onayı düşer, yeni müşteri listeye ve CSV'ye girer, ihlal yalnız satışı yapılan müşteride görünür.
+func TestRecallLateOfflineSaleUpdatesCustomerList(t *testing.T) {
+	e := newEnv(t)
+	sc := e.buildRecallScenario()
+	rc := e.must(e.do("POST", "/api/v1/recalls", map[string]any{"root_lot_id": sc.et1, "reason": "test"}), 201)
+	recallID := rc.str("id")
+
+	before := e.recallCustomerRows(recallID, sc.suc045)
+	e.must(e.do("PATCH", "/api/v1/recalls/"+recallID+"/customers/"+before["Market A"]["id"].(string),
+		map[string]any{"contact_status": "confirmed"}), 200)
+	e.must(e.do("PATCH", "/api/v1/recalls/"+recallID+"/customers/"+before["Market C"]["id"].(string),
+		map[string]any{"contact_status": "confirmed"}), 200)
+
+	mktD := e.customer("MKT-D", "Market D")
+	e.offlineSale(sc, sc.mktA, "1.000")
+	e.offlineSale(sc, mktD, "1.000")
+
+	rows := e.recallCustomerRows(recallID, sc.suc045)
+	for _, want := range []struct {
+		name, shipped, risk, contact string
+		violation                    bool
+	}{
+		{"Market A", "31.000", "31.000", "pending", true},
+		{"Market B", "25.000", "23.000", "pending", false},
+		{"Market C", "30.000", "30.000", "confirmed", false},
+		{"Market D", "1.000", "1.000", "pending", true},
+	} {
+		r, ok := rows[want.name]
+		if !ok {
+			t.Fatalf("%s geri cagirma listesinde yok: %v", want.name, rows)
+		}
+		if r["qty_shipped"] != want.shipped || r["remaining_risk_qty"] != want.risk ||
+			r["contact_status"] != want.contact || r["has_violation"] != want.violation {
+			t.Errorf("%s: beklenen %+v, gelen %v", want.name, want, r)
+		}
+	}
+
+	csvResp := e.do("GET", "/api/v1/recalls/"+recallID+"/contact-list?format=csv", nil)
+	if csvResp.Status != 200 || !strings.Contains(csvResp.Raw, "Market D") {
+		t.Fatalf("Market D iletisim listesinde olmali: %d %s", csvResp.Status, csvResp.Raw)
+	}
+
+	// Liste ile ileri izleme aynı rakamı göstermeli.
+	trace := e.must(e.do("GET", "/api/v1/lots/"+sc.et1+"/trace-forward", nil), 200)
+	shipped := map[string]any{}
+	for _, c := range trace.JSON["summary"].(map[string]any)["customers"].([]any) {
+		m := c.(map[string]any)
+		shipped[m["customer_name"].(string)] = m["qty_shipped"]
+	}
+	for name, r := range rows {
+		if shipped[name] != r["qty_shipped"] {
+			t.Errorf("%s: trace-forward %v, geri cagirma %v", name, shipped[name], r["qty_shipped"])
+		}
+	}
+}
+
+// Kapatılmış geri çağırmaya geç düşen satış onu yeniden açar; yeni müşteri onaylanmadan kapatılamaz.
+func TestRecallLateOfflineSaleReopensClosedRecall(t *testing.T) {
+	e := newEnv(t)
+	sc := e.buildRecallScenario()
+	rc := e.must(e.do("POST", "/api/v1/recalls", map[string]any{"root_lot_id": sc.et1, "reason": "test"}), 201)
+	recallID := rc.str("id")
+	custs, _ := rc.JSON["customers"].([]any)
+	for _, c := range custs {
+		e.must(e.do("PATCH", "/api/v1/recalls/"+recallID+"/customers/"+c.(map[string]any)["id"].(string),
+			map[string]any{"contact_status": "confirmed"}), 200)
+	}
+	e.must(e.do("POST", "/api/v1/recalls/"+recallID+"/close", nil), 200)
+
+	mktD := e.customer("MKT-D", "Market D")
+	e.offlineSale(sc, mktD, "1.000")
+
+	detail := e.must(e.do("GET", "/api/v1/recalls/"+recallID, nil), 200)
+	if detail.str("status") != "open" || detail.JSON["closed_at"] != nil {
+		t.Fatalf("geri cagirma yeniden acilmaliydi: %s", detail.Raw)
+	}
+	if tooEarly := e.do("POST", "/api/v1/recalls/"+recallID+"/close", nil); tooEarly.Status != 422 {
+		t.Fatalf("Market D onaylanmadan kapatma 422 beklenirdi: %d %s", tooEarly.Status, tooEarly.Raw)
+	}
+	row := e.recallCustomerRows(recallID, sc.suc045)["Market D"]
+	e.must(e.do("PATCH", "/api/v1/recalls/"+recallID+"/customers/"+row["id"].(string),
+		map[string]any{"contact_status": "confirmed"}), 200)
+	e.must(e.do("POST", "/api/v1/recalls/"+recallID+"/close", nil), 200)
+}
+
+// Geri çağırma sonrası iade riski düşürür, iletişim durumunu değiştirmez; kapalı geri çağırma açılmaz.
+func TestRecallReturnAfterRecallUpdatesRisk(t *testing.T) {
+	e := newEnv(t)
+	sc := e.buildRecallScenario()
+	rc := e.must(e.do("POST", "/api/v1/recalls", map[string]any{"root_lot_id": sc.et1, "reason": "test"}), 201)
+	recallID := rc.str("id")
+	rowA := e.recallCustomerRows(recallID, sc.suc045)["Market A"]
+	e.must(e.do("PATCH", "/api/v1/recalls/"+recallID+"/customers/"+rowA["id"].(string),
+		map[string]any{"contact_status": "confirmed"}), 200)
+
+	e.must(e.do("POST", "/api/v1/customer-returns", map[string]any{
+		"customer_id": sc.mktA, "lot_id": sc.suc045, "qty": "5", "reason": "geri cagirma iadesi",
+	}), 201)
+
+	rowA = e.recallCustomerRows(recallID, sc.suc045)["Market A"]
+	if rowA["qty_returned"] != "5.000" || rowA["remaining_risk_qty"] != "25.000" || rowA["contact_status"] != "confirmed" {
+		t.Fatalf("iade sonrasi Market A: %v", rowA)
+	}
+
+	custs, _ := rc.JSON["customers"].([]any)
+	for _, c := range custs {
+		e.must(e.do("PATCH", "/api/v1/recalls/"+recallID+"/customers/"+c.(map[string]any)["id"].(string),
+			map[string]any{"contact_status": "confirmed"}), 200)
+	}
+	e.must(e.do("POST", "/api/v1/recalls/"+recallID+"/close", nil), 200)
+	e.must(e.do("POST", "/api/v1/customer-returns", map[string]any{
+		"customer_id": sc.mktC, "lot_id": sc.suc045, "qty": "1", "reason": "kapanistan sonra iade",
+	}), 201)
+	if st := e.must(e.do("GET", "/api/v1/recalls/"+recallID, nil), 200).str("status"); st != "closed" {
+		t.Fatalf("iade kapali geri cagirmayi acmamali, durum: %s", st)
+	}
+}
+
 // Jüri demosu: CSV iletişim listesi doğru satır sayısı ve kolonları döndürür.
 func TestRecallContactListCSV(t *testing.T) {
 	e := newEnv(t)

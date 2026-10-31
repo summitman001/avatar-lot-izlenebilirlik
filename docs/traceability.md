@@ -121,9 +121,16 @@ flowchart TD
   siparişe bağlı olmayan `shipment_line` (`shipment.sales_order_id IS NULL`) ile. Bu kod tabanında her
   satış zaten bir sevkiyat doğurduğu için (bkz. `docs/assumptions.md` Satış/sevkiyat bölümü), pratikte
   kaynak `sales_line`'dır; birleşim yalnızca ileride sipariş dışı sevkiyat eklenirse veri kaybını önler.
-- **Offline ihlal görünürlüğü:** `recall_customer` görünümündeki `has_violation`,
+- **Offline ihlal görünürlüğü:** `recall_customer` görünümündeki `has_violation`, o müşterinin o lottan
   `sales_line.recall_violation=TRUE` olan (yani recall AÇILDIKTAN SONRA `/sync/push` ile gelen bloke lot
-  satışı) satırları işaretler; web'de kırmızı "offline ihlal" rozetiyle ayrı gösterilir.
+  satışı) satırını işaretler; web'de kırmızı "offline ihlal" rozetiyle ayrı gösterilir. İşaret müşteri
+  bazındadır: aynı lotu önceden almış diğer marketlere yansımaz.
+- **Geri çağırma listesi geç satışlarla güncellenir:** `/sync/push` ile geri çağrılan lota düşen satış,
+  satışla aynı transaction'da `syncRecallCustomersForLot` çağırır. Mevcut müşterinin `qty_shipped`'i artar
+  ve `contact_status` tekrar `pending` olur; listede olmayan müşteri için yeni satır açılır (iletişim
+  listesi/CSV'ye de girer). Geri çağırma kapatılmışsa yeniden `open` olur, çünkü haber verilmemiş riskli
+  ürün varken kapalı kalamaz. Geri çağırma sonrası iade yalnız açık geri çağırmada `qty_returned`'ü
+  günceller; iletişim durumunu değiştirmez, kapalı geri çağırmayı açmaz.
 
 ## 5. ET-2026-001 senaryosu — adım adım beklenen çıktı
 
@@ -148,7 +155,8 @@ hammadde lotu birden fazla mamul lotuna dönüşebilir" ilişkisini gösterir: 1
    satırlarını içerir.
 4. `GET /sync/pull?since_seq=0` → `blocked_lot_ids` iki lotu da içerir.
 5. O lottan REST ile satış denemesi `422 LOT_BLOCKED`; `/sync/push` ile (offline) gönderilirse
-   `flagged` + `LOT_BLOCKED_AT_SALE` + `recall_customer`'da `has_violation=true`.
+   `flagged` + `LOT_BLOCKED_AT_SALE`; o müşterinin `recall_customer` satırında `has_violation=true`,
+   `qty_shipped` satışla artar, müşteri listede yoksa eklenir ve `contact_status` `pending` olur.
 6. `PATCH .../customers/{id}` ile her müşteri `confirmed` yapılır; `POST .../close` → `closed`.
 7. `GET /recalls/{id}/contact-list?format=csv` → market/telefon/mail/lot/sevk/iade/durum CSV.
 
