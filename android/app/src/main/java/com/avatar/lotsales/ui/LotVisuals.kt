@@ -11,6 +11,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
@@ -43,7 +44,7 @@ fun expiryOf(expiryDate: String?, today: LocalDate = LocalDate.now()): Expiry {
     return Expiry(level, days, date)
 }
 
-private val dateFormat = DateTimeFormatter.ofPattern("dd.MM.yyyy")
+val expiryDateFormat: DateTimeFormatter = DateTimeFormatter.ofPattern("dd.MM.yyyy")
 
 @Composable
 fun ExpiryBadge(expiryDate: String?) {
@@ -53,7 +54,7 @@ fun ExpiryBadge(expiryDate: String?) {
         ExpiryLevel.CRITICAL ->
             (if (e.days == 0L) stringResource(R.string.expiry_today) else stringResource(R.string.expiry_days, e.days!!)) to StatusColors.danger
         ExpiryLevel.SOON -> stringResource(R.string.expiry_days, e.days!!) to StatusColors.warning
-        ExpiryLevel.OK -> stringResource(R.string.expiry_date, dateFormat.format(e.date)) to StatusColors.success
+        ExpiryLevel.OK -> stringResource(R.string.expiry_date, expiryDateFormat.format(e.date)) to StatusColors.success
         ExpiryLevel.NONE -> stringResource(R.string.expiry_none) to StatusColors.neutral
     }
     Chip(text, color, R.drawable.ic_schedule)
@@ -75,12 +76,12 @@ private val avatarTones = listOf(
     Color(0xFFCDEBEA) to Color(0xFF0B3B39), // camgöbeği
 )
 
-/** Ürün/müşteri adının baş harfleri, isme göre sabit renkte daire. Görsel süs: ekran okuyucudan gizli. */
+/** Ürün/müşteri adının baş harfleri, isme göre sabit renkte daire (veya verilen şekil). Görsel süs: ekran okuyucudan gizli. */
 @Composable
-fun InitialsAvatar(name: String, modifier: Modifier = Modifier) {
+fun InitialsAvatar(name: String, modifier: Modifier = Modifier, shape: Shape = CircleShape) {
     val (bg, fg) = avatarTones[(name.hashCode() and Int.MAX_VALUE) % avatarTones.size]
     Box(
-        modifier.size(44.dp).background(bg, CircleShape).clearAndSetSemantics {},
+        modifier.size(44.dp).background(bg, shape).clearAndSetSemantics {},
         contentAlignment = Alignment.Center,
     ) {
         Text(initials(name), color = fg, style = MaterialTheme.typography.titleSmall)

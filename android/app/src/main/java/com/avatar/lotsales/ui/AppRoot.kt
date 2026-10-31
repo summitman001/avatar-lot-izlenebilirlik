@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -42,6 +43,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -97,6 +99,7 @@ object SyncRoute
 
 private data class Tab(
     @StringRes val label: Int,
+    @StringRes val title: Int,
     @DrawableRes val icon: Int,
     @DrawableRes val selectedIcon: Int,
     val route: Any,
@@ -104,12 +107,14 @@ private data class Tab(
 )
 
 private val tabs = listOf(
-    Tab(R.string.tab_lots, R.drawable.ic_inventory_2, R.drawable.ic_inventory_2_fill, LotsRoute) { it.hasRoute<LotsRoute>() },
-    Tab(R.string.tab_new_sale, R.drawable.ic_shopping_cart, R.drawable.ic_shopping_cart_fill, NewSaleRoute()) { it.hasRoute<NewSaleRoute>() },
-    Tab(R.string.tab_sales, R.drawable.ic_receipt_long, R.drawable.ic_receipt_long_fill, SalesRoute) {
+    Tab(R.string.tab_lots, R.string.title_lots, R.drawable.ic_inventory_2, R.drawable.ic_inventory_2_fill, LotsRoute) { it.hasRoute<LotsRoute>() },
+    Tab(R.string.tab_new_sale, R.string.title_new_sale, R.drawable.ic_shopping_cart, R.drawable.ic_shopping_cart_fill, NewSaleRoute()) {
+        it.hasRoute<NewSaleRoute>()
+    },
+    Tab(R.string.tab_sales, R.string.title_sales, R.drawable.ic_receipt_long, R.drawable.ic_receipt_long_fill, SalesRoute) {
         it.hasRoute<SalesRoute>() || it.hasRoute<SaleDetailRoute>()
     },
-    Tab(R.string.tab_sync, R.drawable.ic_cloud_sync, R.drawable.ic_cloud_sync_fill, SyncRoute) { it.hasRoute<SyncRoute>() },
+    Tab(R.string.tab_sync, R.string.title_sync, R.drawable.ic_cloud_sync, R.drawable.ic_cloud_sync_fill, SyncRoute) { it.hasRoute<SyncRoute>() },
 )
 
 // Fade-through: eski ekran hizla solar, yenisi hafif buyuyerek gelir (~310 ms).
@@ -131,6 +136,8 @@ fun AppRoot() {
     // Geri yalniz ic ekranlarda: satis detayi ve lot kartindan acilan satis (sekme kokleri Material'e gore geri tasimaz)
     val canGoBack = destination?.hasRoute<SaleDetailRoute>() == true ||
         (destination?.hasRoute<NewSaleRoute>() == true && entry.toRoute<NewSaleRoute>().lotId != null)
+    val tab = tabs.firstOrNull { destination?.let(it.isCurrent) == true } ?: tabs.first()
+    val title = if (destination?.hasRoute<SaleDetailRoute>() == true) R.string.title_sale_detail else tab.title
     Scaffold(
         topBar = {
             TopAppBar(
@@ -141,13 +148,13 @@ fun AppRoot() {
                         }
                     }
                 },
-                title = { Text(stringResource(R.string.app_name), fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary) },
+                title = { TopTitle(tab, title, showIcon = !canGoBack, sync) },
                 actions = { SyncIndicator(sync) },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
             )
         },
         bottomBar = {
-            NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+            NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest) {
                 tabs.forEach { tab ->
                     val selected = destination?.let(tab.isCurrent) == true
                     NavigationBarItem(
@@ -160,7 +167,12 @@ fun AppRoot() {
                             }
                         },
                         icon = { TabIcon(tab, selected) },
-                        label = { Text(stringResource(tab.label)) },
+                        label = { Text(stringResource(tab.label), fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                        ),
                     )
                 }
             }
@@ -177,7 +189,9 @@ fun AppRoot() {
                     popEnterTransition = { fadeIn(enterSpec) + scaleIn(enterSpec, initialScale = 0.94f) },
                     popExitTransition = { fadeOut(tween(90)) },
                 ) {
-                    screen<LotsRoute> { LotsScreen(onSell = { lotId -> nav.navigate(NewSaleRoute(lotId)) }) }
+                    screen<LotsRoute> {
+                        LotsScreen(onSell = { lotId -> nav.navigate(NewSaleRoute(lotId)) }, sync = sync, onRefresh = syncVm::syncNow)
+                    }
                     screen<NewSaleRoute> { NewSaleScreen() }
                     screen<SalesRoute> { SalesScreen(onOpen = { id -> nav.navigate(SaleDetailRoute(id)) }) }
                     screen<SaleDetailRoute> { SaleDetailScreen() }
@@ -203,27 +217,56 @@ private fun TabIcon(tab: Tab, selected: Boolean) {
     }
 }
 
-/** Ust bar: cevrimdisi / bekleyen N / guncel; senkron surerken donen ikon; depo secilmediyse veya inceleme bekleyen kayit varsa uyari. */
+/**
+ * Ust bar basligi (Stitch): ikon kutusu + ekran adi, altinda renkli nokta ile senkron durumu ve cihaz deposu
+ * (senkronlaniyor / cevrimdisi / bekleyen N / guncel).
+ */
 @Composable
-fun SyncIndicator(ui: SyncUi) {
+private fun TopTitle(tab: Tab, @StringRes title: Int, showIcon: Boolean, ui: SyncUi) {
     val pending = ui.status.pending
-    val (text, color) = when {
+    val (status, color) = when {
+        ui.syncing -> stringResource(R.string.indicator_syncing) to StatusColors.warning
         !ui.online && pending > 0 -> stringResource(R.string.indicator_offline_pending, pending) to StatusColors.neutral
         !ui.online -> stringResource(R.string.indicator_offline) to StatusColors.neutral
         pending > 0 -> stringResource(R.string.indicator_pending, pending) to StatusColors.warning
         else -> stringResource(R.string.indicator_ok) to StatusColors.success
     }
-    val icon = when {
-        ui.syncing -> R.drawable.ic_sync
-        !ui.online -> R.drawable.ic_cloud_off
-        pending > 0 -> R.drawable.ic_schedule
-        else -> R.drawable.ic_cloud_done
+    val dot by animateColorAsState(color, tween(400), label = "statusDot")
+    val warehouse = ui.warehouses.firstOrNull { it.id == ui.status.warehouseId }?.code
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        AnimatedVisibility(showIcon, enter = fadeIn() + expandHorizontally(), exit = fadeOut() + shrinkHorizontally()) {
+            Box(
+                Modifier.size(40.dp).background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Crossfade(tab.selectedIcon, label = "titleIcon") {
+                    Icon(painterResource(it), null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                }
+            }
+        }
+        Column {
+            AnimatedContent(title, label = "title") {
+                Text(stringResource(it), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(Modifier.size(7.dp).background(dot, CircleShape))
+                Text(
+                    listOfNotNull(status, warehouse).joinToString(" · "),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
+}
+
+/** Ust bar sagi: yalniz dikkat isteyen durumlar (depo secilmedi, inceleme bekleyen kayit). */
+@Composable
+fun SyncIndicator(ui: SyncUi) {
     Row(Modifier.padding(end = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         AnimatedVisibility(ui.status.warehouseId == null, enter = fadeIn() + expandHorizontally(), exit = fadeOut() + shrinkHorizontally()) {
             Chip(stringResource(R.string.indicator_no_warehouse), StatusColors.danger, R.drawable.ic_warning)
         }
-        Chip(text, color, icon, spinning = ui.syncing)
         AnimatedVisibility(ui.status.problems.isNotEmpty(), enter = fadeIn() + expandHorizontally(), exit = fadeOut() + shrinkHorizontally()) {
             Chip(stringResource(R.string.indicator_problems, ui.status.problems.size), StatusColors.danger, R.drawable.ic_warning)
         }
