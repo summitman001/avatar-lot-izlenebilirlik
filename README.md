@@ -216,7 +216,7 @@ cihaz deposu `WH-MAIN`.
    yazılır, üst bar "Bekleyen 1" gösterir.
 3. Uçak modunu kapatıp **Senkron** → "Şimdi senkronla". Sonuç `applied` olur, üst bar "Güncel" olur.
 4. Web panelinde **Satış/Sevkiyat** listesinde satış cihazın ürettiği `S-…` numarasıyla görünür; lotun
-  **Stok Hareketleri**'nde `Satış` hareketi oluşur.
+   **Stok Hareketleri**'nde `Satış` hareketi oluşur.
 5. Geri çağrılan lota çevrimdışı satış (cihaz geri çağırmadan önce senkronlanmışsa mümkündür) sunucuda
    reddedilmez: `flagged` + `LOT_BLOCKED_AT_SALE` döner, Satış/Sevkiyat'ta "İhlal" rozeti, geri çağırma
    detayında ilgili markette "offline ihlal" rozeti çıkar ve marketin sevk miktarı artar.
