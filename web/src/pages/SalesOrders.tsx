@@ -1,9 +1,10 @@
-import { ActionIcon, Alert, Badge, Button, Checkbox, Group, Loader, Modal, NumberInput, Select, Table, Text, Title } from '@mantine/core'
+import { ActionIcon, Alert, Badge, Button, Checkbox, Group, Loader, Modal, NumberInput, Select, Table, Text } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
-import { IconPlus, IconTrash } from '@tabler/icons-react'
+import { IconAlertOctagon, IconCash, IconPlus, IconReceipt, IconTrash, IconUsers } from '@tabler/icons-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { FilterChips, PageHeader, StatCard, StatGrid, SUMMARY_LIMIT, eur } from '../components/Page'
 import { ApiError, apiGet, apiPost, type Customer, type Item, type List, type Lot, type SalesOrder, type Warehouse } from '../lib/api'
 
 function err(e: unknown): string {
@@ -14,16 +15,30 @@ export default function SalesOrders() {
   const navigate = useNavigate()
   const { data, isLoading, error } = useQuery({
     queryKey: ['sales-orders'],
-    queryFn: () => apiGet<List<SalesOrder>>('/sales-orders'),
+    queryFn: () => apiGet<List<SalesOrder>>('/sales-orders', { limit: String(SUMMARY_LIMIT) }),
     refetchInterval: 10_000,
   })
   const [opened, { open, close }] = useDisclosure(false)
+  const [filter, setFilter] = useState<string | null>(null)
+  const orders = data?.items
+  const violations = orders?.filter((o) => o.has_violation).length
+  const rows = orders?.filter((o) => filter !== 'violation' || o.has_violation) ?? []
+  const n = (v?: number) => (isLoading ? '…' : v ?? 0)
 
   return (
     <>
-      <Group justify="space-between" mb="md">
-        <Title order={2}>Satış / Sevkiyat</Title>
-        <Button onClick={open}>Yeni Satış</Button>
+      <PageHeader eyebrow="Kim aldı, ne satıldı, hangi lottan sevk edildi" title="Satış / Sevkiyat"
+        actions={<Button leftSection={<IconPlus size={16} />} onClick={open}>Yeni Satış</Button>} />
+      <StatGrid capped={orders?.length === SUMMARY_LIMIT}>
+        <StatCard label="Sipariş" value={n(orders?.length)} icon={IconReceipt} />
+        <StatCard label="Toplam tutar" icon={IconCash}
+          value={orders ? eur(orders.reduce((sum, o) => sum + Number(o.total_amount), 0)) : '…'} />
+        <StatCard label="Müşteri" value={n(orders && new Set(orders.map((o) => o.customer_id)).size)} icon={IconUsers} color="blue" />
+        <StatCard label="Kural ihlali" value={n(violations)} icon={IconAlertOctagon} color={violations ? 'red' : 'gray'} />
+      </StatGrid>
+      <Group mb="md">
+        <FilterChips value={filter} onChange={setFilter} allCount={orders?.length}
+          options={[{ value: 'violation', label: 'İhlalli', count: violations, color: 'red' }]} />
       </Group>
       {error && <Alert color="red">{error.message}</Alert>}
       {isLoading && <Loader />}
@@ -39,7 +54,7 @@ export default function SalesOrders() {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {data.items.map((o) => (
+            {rows.map((o) => (
               <Table.Tr key={o.id} onClick={() => navigate(`/satis-sevkiyat/${o.id}`)} style={{ cursor: 'pointer' }}>
                 <Table.Td>{o.order_no}</Table.Td>
                 <Table.Td>{o.customer_name}</Table.Td>

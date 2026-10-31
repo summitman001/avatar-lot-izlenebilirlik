@@ -1,8 +1,10 @@
-import { Alert, Badge, Button, Group, Loader, Modal, Stack, Table, Text, TextInput, Textarea, Title } from '@mantine/core'
+import { Alert, Badge, Button, Group, Loader, Modal, Stack, Table, Text, TextInput, Textarea } from '@mantine/core'
 import { useDebouncedValue, useDisclosure } from '@mantine/hooks'
+import { IconAlertOctagon, IconArrowBackUp, IconCircleCheck, IconPhoneCall } from '@tabler/icons-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { FilterChips, PageHeader, StatCard, StatGrid, SUMMARY_LIMIT, countBy } from '../components/Page'
 import { ApiError, apiGet, apiPost, type List, type Lot, type Recall, type TraceForwardResponse } from '../lib/api'
 
 function err(e: unknown): string {
@@ -19,14 +21,27 @@ export default function Recalls() {
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['recalls'],
-    queryFn: () => apiGet<List<Recall>>('/recalls'),
+    queryFn: () => apiGet<List<Recall>>('/recalls', { limit: String(SUMMARY_LIMIT) }),
   })
+  const [status, setStatus] = useState<string | null>(null)
+  const byStatus = countBy(data?.items, (r) => r.status)
+  const rows = data?.items.filter((r) => !status || r.status === status) ?? []
+  const n = (v?: number) => (isLoading ? '…' : v ?? 0)
 
   return (
-    <Stack>
-      <Group justify="space-between">
-        <Title order={2}>Geri Çağırma</Title>
-        <Button color="red" onClick={open}>Yeni Geri Çağırma</Button>
+    <>
+      <PageHeader eyebrow="Bir lottan etkilenen tüm lotlar ve müşteriler, iletişim takibiyle" title="Geri Çağırma"
+        actions={<Button color="red" leftSection={<IconArrowBackUp size={16} />} onClick={open}>Yeni Geri Çağırma</Button>} />
+      <StatGrid capped={data?.items.length === SUMMARY_LIMIT}>
+        <StatCard label="Toplam" value={n(data?.items.length)} icon={IconArrowBackUp} />
+        <StatCard label="Açık" value={n(byStatus.open)} icon={IconAlertOctagon} color={byStatus.open ? 'red' : 'gray'} />
+        <StatCard label="Kapalı" value={n(byStatus.closed)} icon={IconCircleCheck} color="gray" />
+        <StatCard label="Aranacak müşteri" icon={IconPhoneCall} color="orange"
+          value={n(data?.items.filter((r) => r.status === 'open').reduce((sum, r) => sum + r.pending_customer_count, 0))} />
+      </StatGrid>
+      <Group mb="md">
+        <FilterChips value={status} onChange={setStatus} allCount={data?.items.length}
+          options={(['open', 'closed'] as const).map((s) => ({ value: s, label: STATUS_LABEL[s], count: byStatus[s] ?? 0, color: STATUS_COLOR[s] }))} />
       </Group>
       {error && <Alert color="red">{error.message}</Alert>}
       {isLoading && <Loader />}
@@ -39,7 +54,7 @@ export default function Recalls() {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {data.items.map((r) => (
+            {rows.map((r) => (
               <Table.Tr key={r.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/geri-cagirma/${r.id}`)}>
                 <Table.Td>{r.recall_no}</Table.Td>
                 <Table.Td>{r.root_lot_no}</Table.Td>
@@ -49,8 +64,8 @@ export default function Recalls() {
                 <Table.Td ta="right">{r.pending_customer_count}</Table.Td>
               </Table.Tr>
             ))}
-            {data.items.length === 0 && (
-              <Table.Tr><Table.Td colSpan={6}><Text c="dimmed" size="sm">Henüz geri çağırma yok</Text></Table.Td></Table.Tr>
+            {rows.length === 0 && (
+              <Table.Tr><Table.Td colSpan={6}><Text c="dimmed" size="sm">{status ? 'Bu durumda geri çağırma yok' : 'Henüz geri çağırma yok'}</Text></Table.Td></Table.Tr>
             )}
           </Table.Tbody>
         </Table>
@@ -63,7 +78,7 @@ export default function Recalls() {
           navigate(`/geri-cagirma/${id}`)
         }}
       />
-    </Stack>
+    </>
   )
 }
 

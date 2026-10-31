@@ -1,8 +1,10 @@
-import { Alert, Badge, Button, Group, Loader, Modal, NumberInput, Select, Table, TextInput, Title } from '@mantine/core'
+import { Alert, Badge, Button, Group, Loader, Modal, NumberInput, Select, Table, TextInput } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
+import { IconBuildingFactory2, IconCircleCheck, IconPackageImport, IconPlus, IconTruckDelivery } from '@tabler/icons-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { FilterChips, PageHeader, StatCard, StatGrid, SUMMARY_LIMIT, countBy } from '../components/Page'
 import { ApiError, apiGet, apiPost, type Item, type List, type ProductionOrder, type Supplier, type Warehouse } from '../lib/api'
 
 export const STATUS: Record<ProductionOrder['status'], { label: string; color: string }> = {
@@ -16,16 +18,29 @@ export default function ProductionOrders() {
   const navigate = useNavigate()
   const { data, isLoading, error } = useQuery({
     queryKey: ['production-orders'],
-    queryFn: () => apiGet<List<ProductionOrder>>('/production-orders'),
+    queryFn: () => apiGet<List<ProductionOrder>>('/production-orders', { limit: String(SUMMARY_LIMIT) }),
     refetchInterval: 10_000,
   })
   const [opened, { open, close }] = useDisclosure(false)
+  const [status, setStatus] = useState<string | null>(null)
+  const byStatus = countBy(data?.items, (o) => o.status)
+  const rows = data?.items.filter((o) => !status || o.status === status) ?? []
+  const n = (v?: number) => (isLoading ? '…' : v ?? 0)
 
   return (
     <>
-      <Group justify="space-between" mb="md">
-        <Title order={2}>Dış Üretim Siparişleri</Title>
-        <Button onClick={open}>Yeni Sipariş</Button>
+      <PageHeader eyebrow="Hammaddeyi dış üreticiye gönder, mamulü teslim al, maliyeti kapat" title="Dış Üretim"
+        actions={<Button leftSection={<IconPlus size={16} />} onClick={open}>Yeni Sipariş</Button>} />
+      <StatGrid capped={data?.items.length === SUMMARY_LIMIT}>
+        <StatCard label="Toplam sipariş" value={n(data?.items.length)} icon={IconBuildingFactory2} />
+        <StatCard label="Üreticide" value={n(byStatus.materials_sent)} icon={IconTruckDelivery} color="blue" />
+        <StatCard label="Teslim alındı" value={n(byStatus.received)} icon={IconPackageImport} color="teal" />
+        <StatCard label="Kapandı" value={n(byStatus.closed)} icon={IconCircleCheck} color="green" />
+      </StatGrid>
+      <Group mb="md">
+        <FilterChips value={status} onChange={setStatus} allCount={data?.items.length}
+          options={(Object.keys(STATUS) as ProductionOrder['status'][]).map((s) => (
+            { value: s, label: STATUS[s].label, count: byStatus[s] ?? 0, color: STATUS[s].color }))} />
       </Group>
       {error && <Alert color="red">{error.message}</Alert>}
       {isLoading && <Loader />}
@@ -42,7 +57,7 @@ export default function ProductionOrders() {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {data.items.map((o) => (
+            {rows.map((o) => (
               <Table.Tr key={o.id} onClick={() => navigate(`/dis-uretim/${o.id}`)} style={{ cursor: 'pointer' }}>
                 <Table.Td>{o.order_no}</Table.Td>
                 <Table.Td>{o.product_item_name}</Table.Td>

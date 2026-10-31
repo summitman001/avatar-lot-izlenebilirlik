@@ -1,7 +1,9 @@
-import { Alert, Badge, Group, Loader, Select, Table, TextInput, Title } from '@mantine/core'
+import { Alert, Badge, Group, Loader, Table, TextInput } from '@mantine/core'
 import { useDebouncedValue } from '@mantine/hooks'
+import { IconBox, IconCircleOff, IconPackages, IconPlant2, IconSearch } from '@tabler/icons-react'
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
+import { FilterChips, PageHeader, StatCard, StatGrid, SUMMARY_LIMIT, countBy } from '../components/Page'
 import { apiGet, type Item, type List } from '../lib/api'
 
 const TYPE_LABEL: Record<Item['item_type'], string> = {
@@ -10,6 +12,9 @@ const TYPE_LABEL: Record<Item['item_type'], string> = {
   cut_part: 'Parça',
   by_product: 'Yan ürün',
   waste: 'Fire',
+}
+const TYPE_COLOR: Record<Item['item_type'], string> = {
+  raw: 'orange', finished: 'brand', cut_part: 'grape', by_product: 'cyan', waste: 'gray',
 }
 
 export default function Products() {
@@ -21,21 +26,29 @@ export default function Products() {
     queryKey: ['items', debouncedQ, type],
     queryFn: () => apiGet<List<Item>>('/items', { q: debouncedQ, item_type: type ?? undefined }),
   })
+  const all = useQuery({
+    queryKey: ['items', 'summary'],
+    queryFn: () => apiGet<List<Item>>('/items', { limit: String(SUMMARY_LIMIT) }),
+  })
+  const items = all.data?.items
+  const byType = countBy(items, (i) => i.item_type)
+  const n = (v?: number) => (all.isLoading ? '…' : v ?? 0)
 
   return (
     <>
+      <PageHeader eyebrow="Hammadde, mamul ve parçaların ana kaydı" title="Ürünler" />
+      <StatGrid capped={items?.length === SUMMARY_LIMIT}>
+        <StatCard label="Toplam ürün" value={n(items?.length)} icon={IconPackages} />
+        <StatCard label="Hammadde" value={n(byType.raw)} icon={IconPlant2} color="orange" />
+        <StatCard label="Mamul" value={n(byType.finished)} icon={IconBox} />
+        <StatCard label="Pasif" value={n(items?.filter((i) => !i.is_active).length)} icon={IconCircleOff} color="gray" />
+      </StatGrid>
       <Group justify="space-between" mb="md">
-        <Title order={2}>Ürünler</Title>
-        <Group>
-          <TextInput placeholder="Kod veya ad ara" value={q} onChange={(e) => setQ(e.currentTarget.value)} />
-          <Select
-            placeholder="Tür"
-            clearable
-            value={type}
-            onChange={setType}
-            data={Object.entries(TYPE_LABEL).map(([value, label]) => ({ value, label }))}
-          />
-        </Group>
+        <FilterChips value={type} onChange={setType} allCount={items?.length}
+          options={(Object.keys(TYPE_LABEL) as Item['item_type'][]).map((t) => (
+            { value: t, label: TYPE_LABEL[t], count: byType[t] ?? 0, color: TYPE_COLOR[t] }))} />
+        <TextInput radius="xl" w={260} leftSection={<IconSearch size={16} />} placeholder="Kod veya ad ara"
+          value={q} onChange={(e) => setQ(e.currentTarget.value)} />
       </Group>
       {error && <Alert color="red">{error.message}</Alert>}
       {isLoading && <Loader />}

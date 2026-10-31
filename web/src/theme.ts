@@ -25,7 +25,7 @@ export const theme = createTheme({
     Card: Card.extend({ defaultProps: { radius: 'lg', padding: 'lg', shadow: 'xs' } }),
     Badge: Badge.extend({ defaultProps: { tt: 'none', fw: 600 } }),
     Button: Button.extend({ defaultProps: { radius: 'xl' } }),
-    Modal: Modal.extend({ defaultProps: { radius: 'lg' } }),
+    Modal: Modal.extend({ defaultProps: { radius: 'lg', transitionProps: { transition: 'pop', duration: 200 } } }),
     Table: Table.extend({ defaultProps: { verticalSpacing: 'sm' } }),
     Tooltip: Tooltip.extend({ defaultProps: { radius: 'md', openDelay: 150 } }),
   },

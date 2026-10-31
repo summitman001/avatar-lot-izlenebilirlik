@@ -1,8 +1,10 @@
-import { Alert, Badge, Button, Checkbox, Group, Loader, Modal, Select, Table, Text, Textarea, TextInput, Title, Tooltip } from '@mantine/core'
+import { Alert, Badge, Button, Group, Loader, Modal, Table, Text, Textarea, TextInput, Tooltip, UnstyledButton } from '@mantine/core'
 import { useDebouncedValue, useDisclosure } from '@mantine/hooks'
+import { IconAlertTriangle, IconArrowBackUp, IconLock, IconSearch, IconStack2 } from '@tabler/icons-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { FilterChips, PageHeader, StatCard, StatGrid, SUMMARY_LIMIT, countBy } from '../components/Page'
 import { ApiError, apiGet, apiPost, type List, type Lot } from '../lib/api'
 
 function err(e: unknown): string {
@@ -33,7 +35,7 @@ export default function Lots() {
   const [params] = useSearchParams()
   const qc = useQueryClient()
   const [q, setQ] = useState(params.get('q') ?? '')
-  const [status, setStatus] = useState<string | null>(null)
+  const [status, setStatus] = useState<string | null>(params.get('status')) // Dashboard: ?status=blocked
   const [onlyMismatch, setOnlyMismatch] = useState(false)
   const [debouncedQ] = useDebouncedValue(q, 300)
   const [blockTarget, setBlockTarget] = useState<Lot | null>(null)
@@ -51,6 +53,15 @@ export default function Lots() {
       }),
   })
 
+  const all = useQuery({
+    queryKey: ['lots', 'summary'],
+    queryFn: () => apiGet<List<Lot>>('/lots', { limit: String(SUMMARY_LIMIT) }),
+  })
+  const lots = all.data?.items
+  const byStatus = countBy(lots, (l) => l.status)
+  const mismatchCount = lots?.filter((l) => l.purchase?.has_mismatch).length
+  const n = (v?: number) => (all.isLoading ? '…' : v ?? 0)
+
   const invalidate = () => qc.invalidateQueries({ queryKey: ['lots'] })
 
   const block = useMutation({
@@ -66,18 +77,26 @@ export default function Lots() {
 
   return (
     <>
+      <PageHeader eyebrow="Her lotun kaynağı, eldeki miktarı ve durumu" title="Lotlar" />
+      <StatGrid capped={lots?.length === SUMMARY_LIMIT}>
+        <StatCard label="Toplam lot" value={n(lots?.length)} icon={IconStack2} />
+        <StatCard label="Aktif" value={n(byStatus.active)} icon={IconStack2} color="green" />
+        <StatCard label="Bloke" value={n(byStatus.blocked)} icon={IconLock} color="orange" />
+        <StatCard label="Geri çağrılan" value={n(byStatus.recalled)} icon={IconArrowBackUp} color="red" />
+      </StatGrid>
       <Group justify="space-between" mb="md">
-        <Title order={2}>Lotlar</Title>
-        <Group>
-          <Checkbox label="Sadece tutar uyuşmazlığı" checked={onlyMismatch} onChange={(e) => setOnlyMismatch(e.currentTarget.checked)} />
-          <TextInput placeholder="Lot no veya ürün ara" value={q} onChange={(e) => setQ(e.currentTarget.value)} />
-          <Select
-            placeholder="Durum"
-            clearable
-            value={status}
-            onChange={setStatus}
-            data={Object.entries(STATUS).map(([value, s]) => ({ value, label: s.label }))}
-          />
+        <FilterChips value={status} onChange={setStatus} allCount={lots?.length}
+          options={(Object.keys(STATUS) as Lot['status'][]).map((s) => (
+            { value: s, label: STATUS[s].label, count: byStatus[s] ?? 0, color: STATUS[s].color }))} />
+        <Group gap="xs">
+          <UnstyledButton className="filter-chip" data-active={onlyMismatch || undefined} aria-pressed={onlyMismatch}
+            onClick={() => setOnlyMismatch((v) => !v)}>
+            <IconAlertTriangle size={14} color="var(--mantine-color-red-filled)" />
+            Tutar uyuşmazlığı
+            {mismatchCount != null && <span className="chip-count">{mismatchCount}</span>}
+          </UnstyledButton>
+          <TextInput radius="xl" w={240} leftSection={<IconSearch size={16} />} placeholder="Lot no veya ürün ara"
+            value={q} onChange={(e) => setQ(e.currentTarget.value)} />
         </Group>
       </Group>
       {error && <Alert color="red">{error.message}</Alert>}

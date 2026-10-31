@@ -1,10 +1,11 @@
 import {
-  Alert, Badge, Button, Card, Group, Loader, NumberInput, Progress, SimpleGrid,
-  Stack, Table, Text, Title, Tooltip,
+  Alert, Anchor, Badge, Button, Card, Group, Loader, NumberInput, Progress, SimpleGrid, Stack, Table,
+  Text, Tooltip,
 } from '@mantine/core'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { PageHeader } from '../components/Page'
 import { AnomalyAlertsCard } from '../components/AnomalyAlerts'
 import {
   ApiError, apiGet, apiPost, apiSend, type CuttingOrder, type CuttingResult, type List, type StockMovement,
@@ -50,18 +51,14 @@ export default function CuttingOrderDetail() {
 
   return (
     <Stack>
-      <Group justify="space-between">
-        <div>
-          <Title order={2}>{order.order_no}</Title>
-          <Text c="dimmed">{order.recipe_name} — {order.input_lot_no}</Text>
-        </div>
-        <Group>
+      <PageHeader mb="xs" title={order.order_no}
+        eyebrow={<><Anchor component={Link} to="/parcalama" size="sm">Parçalama</Anchor> · {order.recipe_name} — {order.input_lot_no}</>}
+        badges={<>
           <Badge color={order.status === 'closed' ? 'green' : 'gray'} variant="light">
             {order.status === 'closed' ? 'Kapandı' : 'Taslak'}
           </Badge>
-          {order.warnings.map((w) => <Badge key={w} color="orange">{WARNING_LABEL[w] ?? w}</Badge>)}
-        </Group>
-      </Group>
+          {order.warnings.map((w) => <Badge key={w} color="orange" variant="light">{WARNING_LABEL[w] ?? w}</Badge>)}
+        </>} />
 
       <InputCard order={order} />
 
@@ -91,7 +88,7 @@ export default function CuttingOrderDetail() {
 function InputCard({ order }: { order: CuttingOrder }) {
   return (
     <Card withBorder>
-      <Text fw={500} mb="sm">Giriş</Text>
+      <Text fw={600} mb="sm">Giriş</Text>
       <SimpleGrid cols={{ base: 2, md: 4 }}>
         <Stat label="Giriş Lotu" value={<Link to={`/lotlar?q=${order.input_lot_no}`}>{order.input_lot_no}</Link>} />
         <Stat label="Ağırlık" value={`${trNum(order.input_weight_kg)} kg`} />
@@ -159,7 +156,7 @@ function OutputsForm({ order, onSaved }: { order: CuttingOrder; onSaved: () => v
 
   return (
     <Card withBorder>
-      <Text fw={500} mb="sm">Fiili Ağırlıklar</Text>
+      <Text fw={600} mb="sm">Fiili Ağırlıklar</Text>
       {formError && <Alert color="red" mb="sm">{formError}</Alert>}
       <Table>
         <Table.Thead>
@@ -303,7 +300,7 @@ function CloseCard({ order, onDone }: { order: CuttingOrder; onDone: () => void 
   })
   return (
     <Card withBorder>
-      <Text fw={500} mb="sm">Emri Kapat</Text>
+      <Text fw={600} mb="sm">Emri Kapat</Text>
       {formError && <Alert color="red" mb="sm">{formError}</Alert>}
       <Group justify="flex-end">
         <Tooltip label={order.warnings.join(', ') || 'Kapatılabilir'} disabled={order.closable}>
@@ -319,7 +316,7 @@ function CloseCard({ order, onDone }: { order: CuttingOrder; onDone: () => void 
 function OutputLotsCard({ order }: { order: CuttingOrder }) {
   return (
     <Card withBorder>
-      <Text fw={500} mb="sm">Oluşan Lotlar</Text>
+      <Text fw={600} mb="sm">Oluşan Lotlar</Text>
       <Table>
         <Table.Thead>
           <Table.Tr><Table.Th>Parça</Table.Th><Table.Th>Lot</Table.Th><Table.Th ta="right">Ağırlık</Table.Th><Table.Th ta="right">Birim Maliyet</Table.Th></Table.Tr>
@@ -344,7 +341,7 @@ const MOVEMENT_LABEL: Record<string, string> = { cutting_consume: 'Parçalamada 
 function MovementsCard({ movements }: { movements: StockMovement[] }) {
   return (
     <Card withBorder>
-      <Text fw={500} mb="sm">Stok Hareketleri</Text>
+      <Text fw={600} mb="sm">Stok Hareketleri</Text>
       <Table>
         <Table.Thead>
           <Table.Tr><Table.Th>Lot</Table.Th><Table.Th>Tür</Table.Th><Table.Th ta="right">Miktar</Table.Th><Table.Th ta="right">Birim Maliyet</Table.Th></Table.Tr>

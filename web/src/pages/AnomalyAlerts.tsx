@@ -1,11 +1,13 @@
 // "Uyarılar" sayfası: anomaly_alert listesi (bkz. docs/anomaly-integration.md). SADECE
 // BİLGİLENDİRMEDİR: burada hesap yapılmaz, API'den gelen severity/mesaj/kanıt doğrudan gösterilir.
-import { Alert, Badge, Button, Group, Loader, Select, Stack, Table, Text, Textarea, Title } from '@mantine/core'
+import { Alert, Badge, Button, Group, Loader, Select, Stack, Table, Text, Textarea } from '@mantine/core'
+import { IconAlertOctagon, IconAlertTriangle, IconBell, IconInfoCircle } from '@tabler/icons-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { SeverityBadge } from '../components/AnomalyAlerts'
-import { ApiError, apiGet, apiPatch, type AnomalyAlert, type List } from '../lib/api'
+import { SEVERITY_COLOR, SEVERITY_LABEL, SeverityBadge } from '../components/AnomalyAlerts'
+import { FilterChips, PageHeader, StatCard, StatGrid } from '../components/Page'
+import { ApiError, apiGet, apiPatch, type AnomalyAlert, type AnomalyAlertSummary, type AnomalySeverity, type List } from '../lib/api'
 
 function err(e: unknown): string {
   return e instanceof ApiError ? e.message : 'Bilinmeyen hata'
@@ -37,6 +39,14 @@ export default function AnomalyAlerts() {
       }),
   })
 
+  // Kartlar açık uyarıların özetidir (üst bardaki zil ile aynı sorgu), filtreden bağımsız.
+  const summary = useQuery({
+    queryKey: ['anomaly-alert-summary'],
+    queryFn: () => apiGet<AnomalyAlertSummary>('/anomaly-alerts/summary'),
+    refetchInterval: 15_000,
+  })
+  const sum = (k: keyof AnomalyAlertSummary) => (summary.data ? summary.data[k] : '…')
+
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['anomaly-alerts'] })
     qc.invalidateQueries({ queryKey: ['anomaly-alert-summary'] })
@@ -49,36 +59,27 @@ export default function AnomalyAlerts() {
   })
 
   return (
-    <Stack>
-      <Group justify="space-between">
-        <Title order={2}>Uyarılar</Title>
-        <Group>
-          <Select
-            placeholder="Önem"
-            clearable
-            value={severity}
-            onChange={setSeverity}
-            data={[{ value: 'critical', label: 'Kritik' }, { value: 'warning', label: 'Uyarı' }, { value: 'info', label: 'Bilgi' }]}
-          />
-          <Select
-            placeholder="Kaynak"
-            clearable
-            value={refType}
-            onChange={setRefType}
-            data={Object.entries(REF_TYPE_LABEL).map(([value, label]) => ({ value, label }))}
-          />
-          <Select
-            placeholder="Durum"
-            clearable
-            value={acknowledged}
-            onChange={setAcknowledged}
-            data={[{ value: 'false', label: 'Açık' }, { value: 'true', label: 'Okundu' }]}
-          />
+    <>
+      <PageHeader eyebrow="Üretim ve parçalamadaki sapmalar; yalnızca bilgilendirir, işlemi durdurmaz" title="Uyarılar" />
+      <StatGrid>
+        <StatCard label="Açık uyarı" value={sum('total')} icon={IconBell} />
+        <StatCard label="Kritik" value={sum('critical')} icon={IconAlertOctagon} color={SEVERITY_COLOR.critical} />
+        <StatCard label="Uyarı" value={sum('warning')} icon={IconAlertTriangle} color={SEVERITY_COLOR.warning} />
+        <StatCard label="Bilgi" value={sum('info')} icon={IconInfoCircle} color={SEVERITY_COLOR.info} />
+      </StatGrid>
+      <Group justify="space-between" mb="md">
+        <FilterChips value={severity} onChange={setSeverity}
+          options={(['critical', 'warning', 'info'] as AnomalySeverity[]).map((s) => ({ value: s, label: SEVERITY_LABEL[s], color: SEVERITY_COLOR[s] }))} />
+        <Group gap="xs">
+          <Select radius="xl" w={170} placeholder="Kaynak" clearable value={refType} onChange={setRefType}
+            data={Object.entries(REF_TYPE_LABEL).map(([value, label]) => ({ value, label }))} />
+          <Select radius="xl" w={140} placeholder="Durum" clearable value={acknowledged} onChange={setAcknowledged}
+            data={[{ value: 'false', label: 'Açık' }, { value: 'true', label: 'Okundu' }]} />
         </Group>
       </Group>
 
-      {error && <Alert color="red">{err(error)}</Alert>}
-      {actionError && <Alert color="red" withCloseButton onClose={() => setActionError(null)}>{actionError}</Alert>}
+      {error && <Alert color="red" mb="md">{err(error)}</Alert>}
+      {actionError && <Alert color="red" mb="md" withCloseButton onClose={() => setActionError(null)}>{actionError}</Alert>}
       {isLoading && <Loader />}
 
       {data && (
@@ -121,7 +122,7 @@ export default function AnomalyAlerts() {
       )}
 
       {noteTarget && (
-        <Stack gap="xs" p="md" style={{ border: '1px solid var(--mantine-color-gray-4)', borderRadius: 8 }}>
+        <Stack gap="xs" p="md" mt="md" style={{ border: '1px solid var(--app-border)', borderRadius: 'var(--mantine-radius-lg)' }}>
           <Text fw={500}>Okundu işaretle: {noteTarget.alert_type}</Text>
           <Textarea placeholder="Not (opsiyonel)" value={note} onChange={(e) => setNote(e.currentTarget.value)} autosize minRows={1} />
           <Group justify="flex-end" gap="xs">
@@ -132,6 +133,6 @@ export default function AnomalyAlerts() {
           </Group>
         </Stack>
       )}
-    </Stack>
+    </>
   )
 }

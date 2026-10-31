@@ -1,6 +1,7 @@
-import { Alert, Anchor, Badge, Card, Group, Loader, SimpleGrid, Select, Stack, Table, Text, Title } from '@mantine/core'
+import { Alert, Anchor, Badge, Card, Group, Loader, SimpleGrid, Select, Stack, Table, Text } from '@mantine/core'
 import { useQuery } from '@tanstack/react-query'
 import { Fragment, useState } from 'react'
+import { FilterChips, PageHeader } from '../components/Page'
 import { Link } from 'react-router-dom'
 import {
   ApiError, apiGet, type List, type PredictionListItem, type PredictionSummary, type PredictionTargetType,
@@ -22,7 +23,7 @@ const ML_REPORT_URL = 'https://github.com/summitman001/avatar-lot-izlenebilirlik
 function SummaryCard({ title, link, entry }: { title: string; link: string; entry: PredictionSummary['production'] | undefined }) {
   return (
     <Card withBorder component={Link} to={link} style={{ textDecoration: 'none' }}>
-      <Text fw={500} mb="sm">{title}</Text>
+      <Text fw={600} mb="sm">{title}</Text>
       <SimpleGrid cols={4}>
         <div>
           <Text size="xs" c="dimmed">Kayıt</Text>
@@ -107,11 +108,10 @@ export default function Predictions() {
 
   return (
     <Stack>
-      <Title order={2}>Tahminler</Title>
-      <Text size="sm" c="dimmed">
+      <PageHeader mb="xs" title="Tahminler" eyebrow={<>
         Modeller sentetik veri ile eğitilmiştir; ayrıntılı değerlendirme için{' '}
-        <Anchor href={ML_REPORT_URL} target="_blank" rel="noreferrer">docs/ml-report.md</Anchor>.
-      </Text>
+        <Anchor href={ML_REPORT_URL} target="_blank" rel="noreferrer" size="sm">docs/ml-report.md</Anchor>
+      </>} />
 
       {summary.error && <Alert color="red">{err(summary.error)}</Alert>}
       {summary.isLoading && <Loader />}
@@ -122,21 +122,12 @@ export default function Predictions() {
         </SimpleGrid>
       )}
 
-      <Group>
-        <Select
-          placeholder="Tür"
-          clearable
-          data={[{ value: 'production', label: 'Dış Üretim' }, { value: 'cutting', label: 'Parçalama' }]}
-          value={targetType}
-          onChange={setTargetType}
-        />
-        <Select
-          placeholder="Gerçekleşme"
-          clearable
+      <Group justify="space-between">
+        <FilterChips value={targetType} onChange={setTargetType}
+          options={[{ value: 'production', label: 'Dış Üretim', color: 'brand' }, { value: 'cutting', label: 'Parçalama', color: 'orange' }]} />
+        <Select radius="xl" w={230} placeholder="Gerçekleşme" clearable
           data={[{ value: 'true', label: 'Sadece gerçeği girilmiş' }, { value: 'false', label: 'Sadece bekleyen' }]}
-          value={hasActual}
-          onChange={setHasActual}
-        />
+          value={hasActual} onChange={setHasActual} />
       </Group>
 
       {list.error && <Alert color="red">{err(list.error)}</Alert>}
