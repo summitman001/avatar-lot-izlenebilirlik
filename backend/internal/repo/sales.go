@@ -302,6 +302,7 @@ func (s *Store) createSalesOrderInTx(ctx context.Context, tx *sql.Tx, req domain
 
 	totalAmount := domain.NewAmount(decimal.Zero)
 	touchedLots := map[string]bool{}
+	recalledLots := map[string]bool{}
 
 	type preparedLine struct {
 		lineID, lotID string
@@ -333,6 +334,9 @@ func (s *Store) createSalesOrderInTx(ctx context.Context, tx *sql.Tx, req domain
 			}
 			violations = appendUnique(violations, domain.ViolationLotBlocked)
 			recallViolation = true
+			if lot.Status == "recalled" {
+				recalledLots[line.LotID] = true
+			}
 		}
 
 		var onHand domain.Qty
@@ -414,6 +418,13 @@ func (s *Store) createSalesOrderInTx(ctx context.Context, tx *sql.Tx, req domain
 				domain.NewID(), shipmentID, p.lotID, p.qty); err != nil {
 				return nil, nil, mapErr(err)
 			}
+		}
+	}
+
+	// Satış ve sevkiyat satırları yazıldıktan SONRA: toplam bu satışı da içermeli.
+	for lotID := range recalledLots {
+		if err := syncRecallCustomersForLot(ctx, tx, lotID, true); err != nil {
+			return nil, nil, err
 		}
 	}
 
@@ -567,6 +578,10 @@ func (s *Store) createCustomerReturnInTx(ctx context.Context, tx *sql.Tx, req do
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		id, returnNo, req.CustomerID, req.SalesLineID, lotID, req.Qty, req.Reason, returnedAt); err != nil {
 		return nil, mapErr(err)
+	}
+
+	if err := syncRecallCustomersForLot(ctx, tx, lotID, false); err != nil {
+		return nil, err
 	}
 
 	lotView, err := getLot(ctx, tx, lotID, true)

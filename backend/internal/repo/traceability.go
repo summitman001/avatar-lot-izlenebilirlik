@@ -643,6 +643,52 @@ func (s *Store) CreateRecall(ctx context.Context, req domain.CreateRecallRequest
 	return s.GetRecall(ctx, recallID)
 }
 
+// syncRecallCustomersForLot: lotun dahil olduğu EN GÜNCEL geri çağırmanın recall_customer satırlarını
+// güncel satış/iade toplamlarına getirir; yoksa yeni müşteri satırı açar. Satışla aynı transaction'da
+// çağrılır, bu yüzden liste ile trace-forward aynı rakamı gösterir. lateSale=true (geri çağrılan lota
+// geç düşen offline satış): sevk artan müşteri tekrar 'pending' olur ve kapalı geri çağırma yeniden
+// açılır, yeni riskli miktar kimseye haber verilmeden kapalı kalamaz. lateSale=false (iade): kapalı
+// geri çağırmaya dokunulmaz, açıksa yalnız miktarlar güncellenir (iletişim durumu değişmez).
+func syncRecallCustomersForLot(ctx context.Context, tx *sql.Tx, lotID string, lateSale bool) error {
+	var recallID, status string
+	err := tx.QueryRowContext(ctx,
+		`SELECT r.id, r.status FROM recall_lot rl JOIN recall r ON r.id = rl.recall_id
+		 WHERE rl.lot_id = ? ORDER BY r.opened_at DESC, r.id DESC LIMIT 1`, lotID).Scan(&recallID, &status)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	if !lateSale && status != "open" {
+		return nil
+	}
+	aggs, err := aggregateCustomersForLot(ctx, tx, lotID)
+	if err != nil {
+		return err
+	}
+	for _, a := range aggs {
+		// MySQL atamaları soldan sağa işler: contact_status, qty_shipped güncellenmeden ÖNCE karşılaştırılır.
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO recall_customer (id, recall_id, customer_id, lot_id, qty_shipped, qty_returned, contact_status)
+			 VALUES (?, ?, ?, ?, ?, ?, 'pending')
+			 ON DUPLICATE KEY UPDATE
+			   contact_status = IF(VALUES(qty_shipped) > qty_shipped, 'pending', contact_status),
+			   qty_shipped = VALUES(qty_shipped),
+			   qty_returned = VALUES(qty_returned)`,
+			domain.NewID(), recallID, a.customerID, lotID,
+			domain.NewQty(a.qtyShipped), domain.NewQty(a.qtyReturned)); err != nil {
+			return mapErr(err)
+		}
+	}
+	if lateSale && status == "closed" {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE recall SET status = 'open', closed_at = NULL WHERE id = ? AND status = 'closed'`, recallID); err != nil {
+			return mapErr(err)
+		}
+	}
+	return nil
+}
+
 const recallCols = `r.id, r.recall_no, r.root_lot_id, l.lot_no, r.reason, r.status, r.opened_at, r.closed_at, r.created_at,
        (SELECT COUNT(*) FROM recall_lot rl WHERE rl.recall_id = r.id),
        (SELECT COUNT(*) FROM recall_customer rc WHERE rc.recall_id = r.id AND rc.contact_status <> 'confirmed')`
@@ -703,7 +749,8 @@ func loadRecallCustomers(ctx context.Context, q DBTX, recallID string) ([]domain
 	rows, err := q.QueryContext(ctx,
 		`SELECT rc.id, rc.customer_id, c.name, c.phone, c.email, rc.lot_id, l.lot_no,
 		        rc.qty_shipped, rc.qty_returned, rc.contact_status, rc.notes,
-		        EXISTS (SELECT 1 FROM sales_line sl WHERE sl.lot_id = rc.lot_id AND sl.recall_violation = TRUE)
+		        EXISTS (SELECT 1 FROM sales_line sl JOIN sales_order so ON so.id = sl.sales_order_id
+		                WHERE sl.lot_id = rc.lot_id AND so.customer_id = rc.customer_id AND sl.recall_violation = TRUE)
 		 FROM recall_customer rc JOIN customer c ON c.id = rc.customer_id JOIN lot l ON l.id = rc.lot_id
 		 WHERE rc.recall_id = ? ORDER BY c.name, l.lot_no`, recallID)
 	if err != nil {
