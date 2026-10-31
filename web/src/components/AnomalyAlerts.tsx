@@ -5,6 +5,7 @@ import { Badge, Button, Card, Group, Stack, Text, Textarea } from '@mantine/core
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { ApiError, apiPatch, type AnomalyAlert, type AnomalySeverity } from '../lib/api'
+import { alertTypeLabel, humanizeMessage } from '../lib/messages'
 
 export const SEVERITY_COLOR: Record<AnomalySeverity, string> = { critical: 'red', warning: 'orange', info: 'gray' }
 export const SEVERITY_LABEL: Record<AnomalySeverity, string> = { critical: 'Kritik', warning: 'Uyarı', info: 'Bilgi' }
@@ -55,10 +56,10 @@ export function AlertRow({ alert: a, queryKeysToInvalidate }: { alert: AnomalyAl
         <Stack gap={4} style={{ flex: 1 }}>
           <Group gap="xs">
             <SeverityBadge severity={a.severity} />
-            <Badge variant="outline" color="gray">{a.alert_type}</Badge>
+            <Badge variant="outline" color="gray" tt="none">{alertTypeLabel(a.alert_type)}</Badge>
             {a.acknowledged && <Badge variant="outline" color="green">Okundu</Badge>}
           </Group>
-          <Text size="sm">{a.message}</Text>
+          <Text size="sm">{humanizeMessage(a.message)}</Text>
           {a.note && <Text size="xs" c="dimmed">Not: {a.note}</Text>}
           <Text size="xs" c="dimmed">{new Date(a.created_at).toLocaleString('tr-TR')}</Text>
         </Stack>

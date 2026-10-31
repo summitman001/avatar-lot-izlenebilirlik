@@ -182,6 +182,40 @@ func TestInvoiceImportConfirmCreatesReceiptLotAndMovement(t *testing.T) {
 	}
 }
 
+func TestInvoiceImportDeleteUnconfirmedOnly(t *testing.T) {
+	e := newEnvMockOCR(t)
+	f := e.fixture()
+
+	// Oneri bekleyen belge silinir, dosyasi da erisilemez olur.
+	extracted := e.must(e.uploadInvoice("fatura.png", "x"), 201).str("id")
+	e.must(e.do("DELETE", "/api/v1/invoice-imports/"+extracted, nil), 204)
+	e.must(e.do("GET", "/api/v1/invoice-imports/"+extracted, nil), 404)
+	e.must(e.do("GET", "/api/v1/invoice-imports/"+extracted+"/file", nil), 404)
+	e.must(e.do("DELETE", "/api/v1/invoice-imports/"+extracted, nil), 404)
+
+	// Iptal edilmis belge silinir.
+	discarded := e.must(e.uploadInvoice("iptal.png", "x"), 201).str("id")
+	e.must(e.do("POST", "/api/v1/invoice-imports/"+discarded+"/discard", nil), 200)
+	e.must(e.do("DELETE", "/api/v1/invoice-imports/"+discarded, nil), 204)
+
+	// Onaylanmis belge alis fisinin kaynagidir: silinmez, fis ve lot yerinde kalir.
+	confirmed := e.must(e.uploadInvoice("onayli.png", "x"), 201).str("id")
+	e.must(e.do("POST", "/api/v1/invoice-imports/"+confirmed+"/confirm", map[string]any{
+		"supplier_id": f.supplier,
+		"received_at": "2026-03-02",
+		"lines": []map[string]any{
+			{"lot_no": "KZ-2026-901", "item_id": f.item, "warehouse_id": f.warehouse, "qty": "25.000", "unit_price": "11.5000"},
+		},
+	}), 200)
+	e.must(e.do("DELETE", "/api/v1/invoice-imports/"+confirmed, nil), 409)
+	if n := count(t, `SELECT COUNT(*) FROM invoice_import WHERE id = ?`, confirmed); n != 1 {
+		t.Fatalf("onayli kayit silinmemeli")
+	}
+	if n := count(t, `SELECT COUNT(*) FROM lot WHERE lot_no = 'KZ-2026-901'`); n != 1 {
+		t.Fatalf("lot yerinde kalmali")
+	}
+}
+
 func TestInvoiceImportDiscardThenConfirmFails(t *testing.T) {
 	e := newEnvMockOCR(t)
 	f := e.fixture()

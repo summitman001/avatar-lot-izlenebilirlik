@@ -10,6 +10,7 @@ import { AnomalyAlertsCard } from '../components/AnomalyAlerts'
 import {
   ApiError, apiGet, apiPost, apiSend, type CuttingOrder, type CuttingResult, type List, type StockMovement,
 } from '../lib/api'
+import { warningLabel } from '../lib/messages'
 
 function err(e: unknown): string {
   return e instanceof ApiError ? e.message : 'Bilinmeyen hata'
@@ -18,12 +19,6 @@ function err(e: unknown): string {
 function trNum(s: string | null | undefined): string {
   if (s == null) return '—'
   return s.replace('.', ',')
-}
-
-const WARNING_LABEL: Record<string, string> = {
-  PURCHASE_TOTAL_MISMATCH: 'Alış tutarı uyuşmazlığı',
-  MISMATCH_RESOLUTION_MISSING: 'Uyuşmazlık çözümü eksik',
-  WEIGHT_IMBALANCE: 'Ağırlık dengesi tutmuyor',
 }
 
 export default function CuttingOrderDetail() {
@@ -57,7 +52,7 @@ export default function CuttingOrderDetail() {
           <Badge color={order.status === 'closed' ? 'green' : 'gray'} variant="light">
             {order.status === 'closed' ? 'Kapandı' : 'Taslak'}
           </Badge>
-          {order.warnings.map((w) => <Badge key={w} color="orange" variant="light">{WARNING_LABEL[w] ?? w}</Badge>)}
+          {order.warnings.map((w) => <Badge key={w} color="orange" variant="light">{warningLabel(w)}</Badge>)}
         </>} />
 
       <InputCard order={order} />
@@ -303,7 +298,7 @@ function CloseCard({ order, onDone }: { order: CuttingOrder; onDone: () => void 
       <Text fw={600} mb="sm">Emri Kapat</Text>
       {formError && <Alert color="red" mb="sm">{formError}</Alert>}
       <Group justify="flex-end">
-        <Tooltip label={order.warnings.join(', ') || 'Kapatılabilir'} disabled={order.closable}>
+        <Tooltip label={order.warnings.map(warningLabel).join(', ') || 'Kapatılabilir'} disabled={order.closable}>
           <Button loading={close.isPending} disabled={!order.closable} onClick={() => close.mutate()}>
             Kapat
           </Button>

@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom'
 import {
   ApiError, apiGet, type List, type PredictionListItem, type PredictionSummary, type PredictionTargetType,
 } from '../lib/api'
+import { modelLabel } from '../lib/messages'
 
 function err(e: unknown): string {
   return e instanceof ApiError ? e.message : 'Bilinmeyen hata'
@@ -165,8 +166,7 @@ export default function Predictions() {
                       {it.ref_no ? <Link to={`${TARGET_LINK[it.target_type]}/${it.ref_id}`}>{it.ref_no}</Link> : '—'}
                     </Table.Td>
                     <Table.Td>
-                      {it.model_name}
-                      {it.baseline && <Badge ml="xs" size="xs" variant="outline" color="gray">baseline</Badge>}
+                      {modelLabel(it.model_name)}
                     </Table.Td>
                     <Table.Td ta="right">{it.predicted_value ?? '—'} {it.metric_unit}</Table.Td>
                     <Table.Td ta="right">{it.actual_value ?? '—'} {it.has_actual ? it.metric_unit : ''}</Table.Td>

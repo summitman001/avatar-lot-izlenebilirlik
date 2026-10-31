@@ -83,7 +83,7 @@ func mapErr(err error) error {
 	if errors.As(err, &me) {
 		switch me.Number {
 		case errDupEntry:
-			return domain.Conflict("kayit zaten var: %s", dupKey(me.Message))
+			return domain.Conflict("bu numara veya kod zaten kullaniliyor: %s", dupValue(me.Message))
 		case errNoReferencedRow:
 			return domain.Invalid("referans verilen kayit bulunamadi")
 		case errRowIsReferenced:
@@ -97,12 +97,15 @@ func mapErr(err error) error {
 	return err
 }
 
-// dupKey "Duplicate entry 'X' for key 'lot.uq_lot_no'" mesajindan okunur bir ozet cikarir.
-func dupKey(msg string) string {
-	if i := strings.Index(msg, "for key"); i >= 0 {
-		return strings.TrimSpace(msg[:i]) + " " + strings.TrimSpace(msg[i:])
+// dupValue "Duplicate entry 'X' for key 'lot.uq_lot_no'" mesajindan yalnizca X'i cikarir: tablo ve
+// indeks adlari kullaniciya gosterilmez.
+func dupValue(msg string) string {
+	start := strings.Index(msg, "'")
+	end := strings.LastIndex(msg, "' for key")
+	if start < 0 || end <= start {
+		return msg
 	}
-	return msg
+	return msg[start+1 : end]
 }
 
 // resolveID istemci ID'sini dogrular ya da yeni UUIDv7 uretir.

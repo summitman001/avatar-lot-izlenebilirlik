@@ -112,7 +112,7 @@ Enum'lar: `item_type` ∈ `raw|finished|cut_part|by_product|waste`, `base_uom` �
 
 ### `GET /lots`
 
-Filtreler: `item_id`, `status` (`active|blocked|recalled|consumed`), `q` (lot_no / ürün kodu / ürün adı), `has_mismatch=true|false` (alış belgesinde tutar uyuşmazlığı), `limit`, `offset`. Sıralama: giriş tarihi yeniden eskiye, sonra `lot_no`.
+Filtreler: `item_id`, `status` (`active|blocked|recalled|consumed`), `q` (lot_no / ürün kodu / ürün adı), `has_mismatch=true|false` (alış belgesinde tutar uyuşmazlığı), `warehouse_id` (yalnızca o depoda stoğu olan lotlar; yanıtta `balances` da döner), `limit`, `offset`. Sıralama: giriş tarihi yeniden eskiye, sonra `lot_no`.
 
 ```json
 {
@@ -387,6 +387,11 @@ fişi oluşturma yolu yoktur). `200` yanıtı `GET /invoice-imports/{id}` ile ay
 
 Sadece `status=extracted` bir kaydı `discarded` yapar; hiçbir lot/hareket/fiş etkilenmez.
 `status != extracted` ise `409`.
+
+### `DELETE /invoice-imports/{id}` — belgeyi sil
+
+`extracted` veya `discarded` bir kaydı ve yüklenen dosyasını siler (`204`); hiçbir lot/hareket/fiş
+etkilenmez. `confirmed` kayıt alış fişinin kaynak belgesidir, silinemez (`409`).
 
 ---
 

@@ -17,6 +17,7 @@ import {
   ApiError, apiGet, type AnomalyAlert, type AnomalyAlertSummary, type AnomalySeverity, type List,
   type Lot, type ProductionOrder, type Recall, type SalesOrder,
 } from '../lib/api'
+import { alertTypeLabel, humanizeMessage } from '../lib/messages'
 import { STATUS as PRODUCTION_STATUS } from './ProductionOrders'
 
 function err(e: unknown): string {
@@ -385,8 +386,8 @@ export default function Dashboard() {
                 {lastAlerts.data.items.map((a) => (
                   <Table.Tr key={a.id}>
                     <Table.Td><SeverityBadge severity={a.severity} /></Table.Td>
-                    <Table.Td>{a.alert_type}</Table.Td>
-                    <Table.Td><Text size="sm" lineClamp={1}>{a.message}</Text></Table.Td>
+                    <Table.Td style={{ whiteSpace: 'nowrap' }}>{alertTypeLabel(a.alert_type)}</Table.Td>
+                    <Table.Td><Text size="sm" lineClamp={1}>{humanizeMessage(a.message)}</Text></Table.Td>
                   </Table.Tr>
                 ))}
                 {lastAlerts.data.items.length === 0 && (

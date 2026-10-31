@@ -345,6 +345,7 @@ paths:
         - { name: status, in: query, schema: { $ref: "#/components/schemas/LotStatus" } }
         - { name: q, in: query, schema: { type: string }, description: "lot_no, urun kodu veya adinda arar" }
         - { name: has_mismatch, in: query, schema: { type: boolean }, description: "Alis belgesinde tutar uyusmazligi olanlar" }
+        - { name: warehouse_id, in: query, schema: { $ref: "#/components/schemas/Id" }, description: "Yalnizca bu depoda stogu olan lotlar; yanitta balances da doner" }
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Offset"
       responses:
@@ -438,6 +439,14 @@ paths:
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/InvoiceImportDetail" } } } }
         "404": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [invoice-ocr]
+      summary: Onaylanmamis belgeyi (extracted/discarded) ve dosyasini siler
+      description: Onaylanmis belge alis fisinin kaynagidir, silinemez (409). Hicbir lot/hareket/fis etkilenmez.
+      responses:
+        "204": { description: Silindi }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /invoice-imports/{id}/file:
     parameters: [{ $ref: "#/components/parameters/Id" }]
     get:
@@ -1126,7 +1135,7 @@ components:
         created_at: { $ref: "#/components/schemas/DateTime" }
         purchase: { oneOf: [{ $ref: "#/components/schemas/LotPurchase" }, { type: "null" }] }
         qty_on_hand: { $ref: "#/components/schemas/Qty", description: "Tum depolardaki toplam (yalniz GET /lots ve /lots/{id})" }
-        balances: { type: array, items: { $ref: "#/components/schemas/LotBalance" }, description: "Depo kirilimi (yalniz GET /lots/{id})" }
+        balances: { type: array, items: { $ref: "#/components/schemas/LotBalance" }, description: "Depo kirilimi (GET /lots/{id} ve warehouse_id filtreli GET /lots)" }
     LotList: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/Lot" } } } }
     PurchaseLotRequest:
       type: object

@@ -9,6 +9,14 @@ Genel sayısal kurallar:
 - JSON'da tüm decimal değerler string. Golden dosyalarında sayısal JSON değeri yoktur (yalnızca string, bool, null).
 - Golden dosya biçimi: `[{"case_id","description","input":{...},"expected":{...}}]`. Reçete dosyası (`cutting_case.json`) tek nesnedir.
 
+## Belge numaraları ve fatura belgesi silme
+
+- **Otomatik numara, elle verilmiş numarayı atlar.** Numara alanı boş bırakılınca `number_sequence`
+  sayacı kullanılır; sayaç elle verilen numaraları (seed, "Emir No" alanı) bilmediği için üretilen
+  numara doluysa bir sonrakine geçilir. Mevcut veritabanlarında da ek işlem gerekmez.
+- **Yalnızca onaylanmamış fatura belgesi silinir.** Onaylanmış belge alış fişinin kaynağıdır ve
+  izlenebilirlik kaydı sayılır; silme isteği `409` döner.
+
 ## Görev 1 maliyet kuralları
 
 Girdi: ürün adı ve `unit_weight_kg` (ürünün birim ağırlığı), sevk edilen lotlar (ad, kategori `meat|spice|casing|other`, miktar kg, birim maliyet), teslim alınan adet, hizmet birim fiyatı (adet başı), faturalanan adet (opsiyonel), satış fiyatı (opsiyonel, adet başı).

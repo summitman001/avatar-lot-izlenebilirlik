@@ -1,8 +1,9 @@
-import { Alert, Badge, Group, Loader, Table, TextInput } from '@mantine/core'
-import { useDebouncedValue } from '@mantine/hooks'
-import { IconBox, IconCircleOff, IconPackages, IconPlant2, IconSearch } from '@tabler/icons-react'
+import { Alert, Badge, Button, Group, Loader, Table, TextInput } from '@mantine/core'
+import { useDebouncedValue, useDisclosure } from '@mantine/hooks'
+import { IconBox, IconCircleOff, IconPackages, IconPlant2, IconPlus, IconSearch } from '@tabler/icons-react'
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
+import { NewItemModal } from '../components/NewItemModal'
 import { FilterChips, PageHeader, StatCard, StatGrid, SUMMARY_LIMIT, countBy } from '../components/Page'
 import { apiGet, type Item, type List } from '../lib/api'
 
@@ -21,6 +22,7 @@ export default function Products() {
   const [q, setQ] = useState('')
   const [type, setType] = useState<string | null>(null)
   const [debouncedQ] = useDebouncedValue(q, 300)
+  const [opened, { open, close }] = useDisclosure(false)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['items', debouncedQ, type],
@@ -36,7 +38,9 @@ export default function Products() {
 
   return (
     <>
-      <PageHeader eyebrow="Hammadde, mamul ve parçaların ana kaydı" title="Ürünler" />
+      <PageHeader eyebrow="Hammadde, mamul ve parçaların ana kaydı" title="Ürünler"
+        actions={<Button leftSection={<IconPlus size={16} />} onClick={open}>Yeni Ürün</Button>} />
+      <NewItemModal opened={opened} onClose={close} />
       <StatGrid capped={items?.length === SUMMARY_LIMIT}>
         <StatCard label="Toplam ürün" value={n(items?.length)} icon={IconPackages} />
         <StatCard label="Hammadde" value={n(byType.raw)} icon={IconPlant2} color="orange" />

@@ -80,7 +80,11 @@ function NewReprocessModal({ onClose }: { onClose: () => void }) {
 
   const warehouses = useQuery({ queryKey: ['warehouses'], queryFn: () => apiGet<List<Warehouse>>('/warehouses') })
   const items = useQuery({ queryKey: ['items', 'active'], queryFn: () => apiGet<List<Item>>('/items', { is_active: 'true' }) })
-  const lots = useQuery({ queryKey: ['lots', 'active'], queryFn: () => apiGet<List<Lot>>('/lots', { status: 'active' }) })
+  const lots = useQuery({
+    queryKey: ['lots', 'active', warehouseId],
+    queryFn: () => apiGet<List<Lot>>('/lots', { status: 'active', warehouse_id: warehouseId ?? undefined, limit: '500' }),
+    enabled: !!warehouseId,
+  })
 
   const create = useMutation({
     mutationFn: () => apiPost<ReprocessOrder>('/reprocess-orders', {
@@ -91,6 +95,13 @@ function NewReprocessModal({ onClose }: { onClose: () => void }) {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['reprocess-orders'] }); qc.invalidateQueries({ queryKey: ['lots'] }); onClose() },
   })
 
+  // Girdiler seçilen depodan tüketilir: yalnızca o depoda stoğu olan lotlar ve o depodaki miktar gösterilir.
+  const lotOptions = (lots.data?.items ?? []).map((x) => {
+    const qty = x.balances?.find((b) => b.warehouse_id === warehouseId)?.qty_on_hand ?? '0'
+    return { value: x.id, label: `${x.lot_no} · ${x.item_name} (${qty} ${x.uom})` }
+  })
+  const outUom = items.data?.items.find((i) => i.id === itemId)?.base_uom
+
   const update = (key: number, patch: Partial<InputLine>) => setInputs((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)))
   const valid = !!warehouseId && !!itemId && outQty !== '' && outQty > 0 &&
     inputs.length > 0 && inputs.every((i) => i.lotId && i.qty !== '' && i.qty > 0)
@@ -98,15 +109,16 @@ function NewReprocessModal({ onClose }: { onClose: () => void }) {
   return (
     <Modal opened onClose={onClose} title="Yeni yeniden işleme" size="lg">
       {create.error && <Alert color="red" mb="sm">{err(create.error)}</Alert>}
-      <Select label="Depo" required mb="sm" value={warehouseId} onChange={setWarehouseId}
+      <Select label="Depo" required mb="sm" value={warehouseId}
+        onChange={(v) => { setWarehouseId(v); setInputs((ls) => ls.map((l) => ({ ...l, lotId: null }))) }}
         description="Girdiler bu depodan tüketilir, çıktı lotu bu depoya girer"
         data={warehouses.data?.items.filter((w) => w.warehouse_type !== 'external_producer')
           .map((w) => ({ value: w.id, label: `${w.name} (${w.code})` })) ?? []} />
       <Text fw={500} size="sm" mb="xs">Girdi lotları</Text>
       {inputs.map((l) => (
         <Group key={l.key} mb="xs" align="flex-end">
-          <Select flex={1} searchable placeholder="Lot" value={l.lotId} onChange={(v) => update(l.key, { lotId: v })}
-            data={lots.data?.items.map((x) => ({ value: x.id, label: `${x.lot_no} · ${x.item_name} (${x.qty_on_hand ?? '0'} ${x.uom})` })) ?? []} />
+          <Select flex={1} searchable placeholder={warehouseId ? 'Lot' : 'Önce depo seçin'} disabled={!warehouseId} value={l.lotId}
+            onChange={(v) => update(l.key, { lotId: v })} nothingFoundMessage="Bu depoda stoğu olan lot yok" data={lotOptions} />
           <NumberInput w={140} placeholder="Miktar" min={0} decimalScale={3} value={l.qty}
             onChange={(v) => update(l.key, { qty: typeof v === 'number' ? v : '' })} />
           <ActionIcon variant="subtle" color="red" aria-label="Satırı sil" disabled={inputs.length === 1}
@@ -123,7 +135,7 @@ function NewReprocessModal({ onClose }: { onClose: () => void }) {
       <Group grow mb="sm">
         <Select label="Ürün" required searchable value={itemId} onChange={setItemId}
           data={items.data?.items.map((i) => ({ value: i.id, label: `${i.name} (${i.code})` })) ?? []} />
-        <NumberInput label="Miktar" required min={0} decimalScale={3} value={outQty}
+        <NumberInput label={outUom ? `Miktar (${outUom})` : 'Miktar'} required min={0} decimalScale={3} value={outQty}
           onChange={(v) => setOutQty(typeof v === 'number' ? v : '')} />
       </Group>
       <Group grow mb="md">

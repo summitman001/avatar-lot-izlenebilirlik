@@ -1,15 +1,16 @@
-import { Alert, Badge, Button, Card, Group, Loader, Modal, Stack, Table, Tabs, Text, TextInput, Textarea, Title, Tooltip } from '@mantine/core'
-import { useDebouncedValue, useDisclosure } from '@mantine/hooks'
-import { IconSearch } from '@tabler/icons-react'
+import { Alert, Badge, Button, Card, Group, Loader, Modal, Stack, Table, Tabs, Text, Textarea, Title, Tooltip } from '@mantine/core'
+import { useDisclosure } from '@mantine/hooks'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { LotSearch } from '../components/LotSearch'
 import { PageHeader } from '../components/Page'
 import {
   ApiError, apiGet, apiPost,
-  type GenealogyResponse, type List, type Lot,
+  type GenealogyResponse,
   type TraceBackwardResponse, type TraceForwardResponse,
 } from '../lib/api'
+import { processLabel } from '../lib/messages'
 import { DownstreamCell } from '../components/Downstream'
 
 function err(e: unknown): string {
@@ -65,7 +66,7 @@ function GenealogyTree({ data, onSelect, selectedLotId }: { data: GenealogyRespo
                 <Table.Td>{nodeByID.get(e.from_lot_id)?.lot_no ?? e.from_lot_id}</Table.Td>
                 <Table.Td>{nodeByID.get(e.to_lot_id)?.lot_no ?? e.to_lot_id}</Table.Td>
                 <Table.Td ta="right">{e.qty} {e.uom}</Table.Td>
-                <Table.Td>{e.process_type}</Table.Td>
+                <Table.Td>{processLabel(e.process_type)}</Table.Td>
               </Table.Tr>
             ))}
           </Table.Tbody>
@@ -176,7 +177,7 @@ function BackwardPanel({ data }: { data: TraceBackwardResponse }) {
               <Table.Td><Text size="xs">{[n.supplier_phone, n.supplier_email].filter(Boolean).join(' · ') || '—'}</Text></Table.Td>
               <Table.Td ta="right">{n.qty_used ?? '—'} {n.uom}</Table.Td>
               <Table.Td>{n.received_or_produced_at}</Table.Td>
-              <Table.Td>{n.process_type}{n.order_no ? ` (${n.order_no})` : ''}</Table.Td>
+              <Table.Td>{processLabel(n.process_type)}{n.order_no ? ` (${n.order_no})` : ''}</Table.Td>
             </Table.Tr>
           ))}
           {data.nodes.length === 0 && (
@@ -191,19 +192,11 @@ function BackwardPanel({ data }: { data: TraceBackwardResponse }) {
 export default function Traceability() {
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
-  const [q, setQ] = useState(params.get('q') ?? '')
-  const [debouncedQ] = useDebouncedValue(q, 300)
   const selectedLotId = params.get('lot_id') ?? ''
   const [recallOpened, { open: openRecall, close: closeRecall }] = useDisclosure(false)
   const [reason, setReason] = useState('')
   const [recallError, setRecallError] = useState<string | null>(null)
   const qc = useQueryClient()
-
-  const searchQuery = useQuery({
-    queryKey: ['lots-search', debouncedQ],
-    queryFn: () => apiGet<List<Lot>>('/lots', { q: debouncedQ }),
-    enabled: debouncedQ.length > 0,
-  })
 
   const genealogyQuery = useQuery({
     queryKey: ['genealogy', selectedLotId],
@@ -237,33 +230,7 @@ export default function Traceability() {
   return (
     <Stack>
       <PageHeader mb="xs" eyebrow="Bir lotun nereden geldiğini ve nereye gittiğini izle" title="İzlenebilirlik" />
-      <TextInput
-        radius="xl"
-        size="md"
-        leftSection={<IconSearch size={18} />}
-        placeholder="Lot no veya ürün adı ara"
-        value={q}
-        onChange={(e) => setQ(e.currentTarget.value)}
-      />
-      {debouncedQ && !selectedLotId && (
-        <Card withBorder>
-          {searchQuery.isLoading && <Loader size="sm" />}
-          {searchQuery.data && searchQuery.data.items.length === 0 && <Text c="dimmed" size="sm">Sonuç yok</Text>}
-          {searchQuery.data && searchQuery.data.items.length > 0 && (
-            <Table highlightOnHover>
-              <Table.Tbody>
-                {searchQuery.data.items.map((lot) => (
-                  <Table.Tr key={lot.id} style={{ cursor: 'pointer' }} onClick={() => select(lot.id)}>
-                    <Table.Td>{lot.lot_no}</Table.Td>
-                    <Table.Td>{lot.item_name} <Text span size="xs" c="dimmed">({lot.item_code})</Text></Table.Td>
-                    <Table.Td><Badge color={STATUS_COLOR[lot.status]} variant="light">{STATUS_LABEL[lot.status]}</Badge></Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          )}
-        </Card>
-      )}
+      <LotSearch radius="xl" size="md" initialQuery={params.get('q') ?? ''} onSelect={(lot) => select(lot.id)} />
 
       {selectedLotId && (
         <>

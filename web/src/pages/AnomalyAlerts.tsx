@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom'
 import { SEVERITY_COLOR, SEVERITY_LABEL, SeverityBadge } from '../components/AnomalyAlerts'
 import { FilterChips, PageHeader, StatCard, StatGrid } from '../components/Page'
 import { ApiError, apiGet, apiPatch, type AnomalyAlert, type AnomalyAlertSummary, type AnomalySeverity, type List } from '../lib/api'
+import { alertTypeLabel, humanizeMessage } from '../lib/messages'
 
 function err(e: unknown): string {
   return e instanceof ApiError ? e.message : 'Bilinmeyen hata'
@@ -96,12 +97,12 @@ export default function AnomalyAlerts() {
               return (
                 <Table.Tr key={a.id}>
                   <Table.Td style={{ whiteSpace: 'nowrap' }}><SeverityBadge severity={a.severity} /></Table.Td>
-                  <Table.Td style={{ whiteSpace: 'nowrap' }}><Badge variant="outline" color="gray">{a.alert_type}</Badge></Table.Td>
+                  <Table.Td style={{ whiteSpace: 'nowrap' }}><Badge variant="outline" color="gray" tt="none">{alertTypeLabel(a.alert_type)}</Badge></Table.Td>
                   <Table.Td style={{ whiteSpace: 'nowrap' }}>
                     {REF_TYPE_LABEL[a.ref_type] ?? a.ref_type}
                     {link && a.ref_no ? <> — <Link to={link}>{a.ref_no}</Link></> : a.ref_no ? <> — {a.ref_no}</> : null}
                   </Table.Td>
-                  <Table.Td maw={300}><Text size="sm">{a.message}</Text>{a.note && <Text size="xs" c="dimmed">Not: {a.note}</Text>}</Table.Td>
+                  <Table.Td maw={300}><Text size="sm">{humanizeMessage(a.message)}</Text>{a.note && <Text size="xs" c="dimmed">Not: {a.note}</Text>}</Table.Td>
                   <Table.Td style={{ whiteSpace: 'nowrap' }}><Text size="xs">{new Date(a.created_at).toLocaleString('tr-TR')}</Text></Table.Td>
                   <Table.Td style={{ whiteSpace: 'nowrap' }}>
                     {a.acknowledged ? <Badge color="green" variant="light">Okundu</Badge> : <Badge color="red" variant="light">Açık</Badge>}
@@ -123,7 +124,7 @@ export default function AnomalyAlerts() {
 
       {noteTarget && (
         <Stack gap="xs" p="md" mt="md" style={{ border: '1px solid var(--app-border)', borderRadius: 'var(--mantine-radius-lg)' }}>
-          <Text fw={500}>Okundu işaretle: {noteTarget.alert_type}</Text>
+          <Text fw={500}>Okundu işaretle: {alertTypeLabel(noteTarget.alert_type)}</Text>
           <Textarea placeholder="Not (opsiyonel)" value={note} onChange={(e) => setNote(e.currentTarget.value)} autosize minRows={1} />
           <Group justify="flex-end" gap="xs">
             <Button variant="default" size="xs" onClick={() => setNoteTarget(null)}>Vazgeç</Button>

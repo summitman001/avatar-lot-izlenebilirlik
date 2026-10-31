@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FilterChips, PageHeader, StatCard, StatGrid, SUMMARY_LIMIT, countBy } from '../components/Page'
 import { ApiError, apiGet, apiPost, type Item, type List, type ProductionOrder, type Supplier, type Warehouse } from '../lib/api'
+import { warningLabel } from '../lib/messages'
 
 export const STATUS: Record<ProductionOrder['status'], { label: string; color: string }> = {
   draft: { label: 'Taslak', color: 'gray' },
@@ -64,7 +65,7 @@ export default function ProductionOrders() {
                 <Table.Td>
                   <Badge color={STATUS[o.status].color} variant="light">{STATUS[o.status].label}</Badge>
                   {o.warnings.length > 0 && (
-                    <Badge color="orange" variant="light" ml="xs">{o.warnings.join(', ')}</Badge>
+                    <Badge color="orange" variant="light" ml="xs">{o.warnings.map(warningLabel).join(', ')}</Badge>
                   )}
                 </Table.Td>
                 <Table.Td ta="right">{o.planned_qty} adet</Table.Td>

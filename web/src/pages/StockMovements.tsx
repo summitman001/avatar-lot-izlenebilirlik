@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '../components/Page'
 import { apiGet, type List, type StockMovement, type Warehouse } from '../lib/api'
+import { refTypeLabel } from '../lib/messages'
 
 // Lot hareketleri raporu (Bölüm 6: "en azından … lot hareketleri … raporları gösterilmelidir";
 // Görev 1: "tüm maliyet ve stok hareketleri geçmişe dönük incelenebilir olmalıdır").
@@ -86,7 +87,7 @@ export default function StockMovements() {
                 <Table.Td>{MOVEMENT_LABEL[m.movement_type] ?? m.movement_type}</Table.Td>
                 <Table.Td ta="right" c={m.qty.startsWith('-') ? 'red' : 'green'}>{m.qty}</Table.Td>
                 <Table.Td ta="right">{m.unit_cost}</Table.Td>
-                <Table.Td><Text size="xs" c="dimmed">{m.ref_type}</Text></Table.Td>
+                <Table.Td><Text size="xs" c="dimmed">{refTypeLabel(m.ref_type)}</Text></Table.Td>
                 <Table.Td><Text size="xs">{m.note ?? ''}</Text></Table.Td>
               </Table.Tr>
             ))}

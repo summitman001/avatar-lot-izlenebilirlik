@@ -6,9 +6,11 @@ import { useDisclosure } from '@mantine/hooks'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { NewItemModal } from '../components/NewItemModal'
 import { PageHeader } from '../components/Page'
+import { ocrWarning } from '../lib/messages'
 import {
-  ApiError, OCR_CONFIDENCE_HIGH, OCR_CONFIDENCE_MEDIUM, apiFileURL, apiGet, apiPost,
+  ApiError, OCR_CONFIDENCE_HIGH, OCR_CONFIDENCE_MEDIUM, apiDelete, apiFileURL, apiGet, apiPost,
   type CreatePurchaseReceiptRequest, type Item, type InvoiceImportDetail as InvoiceImportDetailT,
   type List, type MatchCandidate, type OcrField, type Supplier, type Warehouse,
 } from '../lib/api'
@@ -150,14 +152,13 @@ export default function InvoiceImportDetailPage() {
     },
   })
 
-  const createItem = useMutation({
-    mutationFn: (body: { code: string; name: string; base_uom: 'kg' | 'adet' }) =>
-      apiPost<Item>('/items', { ...body, item_type: 'raw' }),
-    onSuccess: (it) => {
-      qc.invalidateQueries({ queryKey: ['items', 'active'] })
-      if (newItemForLine !== null) updateLine(newItemForLine, { itemId: it.id })
-      setNewItemForLine(null)
+  const remove = useMutation({
+    mutationFn: () => apiDelete(`/invoice-imports/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['invoice-imports'] })
+      navigate('/fatura-okuma')
     },
+    onError: (e) => setFormError(err(e)),
   })
 
   const updateLine = (key: number, patch: Partial<LineForm>) =>
@@ -170,6 +171,7 @@ export default function InvoiceImportDetailPage() {
   const supplierOptions = suppliers.data?.items.map((s) => ({ value: s.id, label: `${s.name} (${s.code})` })) ?? []
   const itemOptions = items.data?.items.map((i) => ({ value: i.id, label: `${i.name} (${i.code})` })) ?? []
   const warehouseOptions = warehouses.data?.items.map((w) => ({ value: w.id, label: `${w.name} (${w.code})` })) ?? []
+  const uomOf = (itemId: string | null) => items.data?.items.find((i) => i.id === itemId)?.base_uom
 
   const linesValid = lines.length > 0 && lines.every((l) => l.lotNo && l.itemId && l.warehouseId && l.qty && l.unitPrice)
   const canConfirm = r.status === 'extracted' && !!supplierId && !!receivedAt && linesValid
@@ -192,7 +194,7 @@ export default function InvoiceImportDetailPage() {
       {formError && <Alert color="red">{formError}</Alert>}
       {r.ocr.warnings.length > 0 && (
         <Alert color="yellow" title="Belge düzeyinde uyarılar">
-          {r.ocr.warnings.join(' · ')}
+          {r.ocr.warnings.map(ocrWarning).join(' · ')}
         </Alert>
       )}
 
@@ -253,16 +255,19 @@ export default function InvoiceImportDetailPage() {
               {' '}— sistem tüm tutarları € olarak kaydeder.
             </Text>
           </Card>
+        </Grid.Col>
 
+        <Grid.Col span={12}>
           <Card withBorder mb="sm">
             <Text fw={500} mb="xs">Satırlar</Text>
+            <Table.ScrollContainer minWidth={1180} type="native">
             <Table>
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>Lot No</Table.Th>
                   <Table.Th>Ürün</Table.Th>
                   <Table.Th>Depo</Table.Th>
-                  <Table.Th ta="right">Miktar</Table.Th>
+                  <Table.Th ta="right">Miktar (ürünün birimiyle)</Table.Th>
                   <Table.Th ta="right">Birim Fiyat</Table.Th>
                   <Table.Th ta="right">Beyan Edilen Tutar</Table.Th>
                   <Table.Th>SKT</Table.Th>
@@ -287,6 +292,7 @@ export default function InvoiceImportDetailPage() {
                         <Select
                           placeholder={l.ocrName?.value ?? 'Ürün'} searchable disabled={readOnly}
                           data={itemOptions} value={l.itemId} onChange={(v) => updateLine(l.key, { itemId: v })}
+                          nothingFoundMessage="Bu ürün kayıtlı değil, + Yeni ürün ile ekleyin"
                           w={180} styles={{ input: lowConfidenceStyle(l.ocrName) }}
                         />
                         {l.candidates.length > 0 && (
@@ -309,12 +315,14 @@ export default function InvoiceImportDetailPage() {
                       </Table.Td>
                       <Table.Td>
                         <NumberInput disabled={readOnly} min={0} decimalScale={3} value={l.qty}
-                          onChange={(v) => updateLine(l.key, { qty: String(v) })} w={100} ml="auto"
+                          onChange={(v) => updateLine(l.key, { qty: String(v) })} w={130} ml="auto" hideControls
+                          rightSection={<Text size="xs" c="dimmed">{uomOf(l.itemId) ?? ''}</Text>} rightSectionPointerEvents="none"
                           styles={{ input: lowConfidenceStyle(l.ocrQty) }} />
                       </Table.Td>
                       <Table.Td>
                         <NumberInput disabled={readOnly} min={0} decimalScale={4} value={l.unitPrice}
-                          onChange={(v) => updateLine(l.key, { unitPrice: String(v) })} w={110} ml="auto"
+                          onChange={(v) => updateLine(l.key, { unitPrice: String(v) })} w={140} ml="auto" hideControls
+                          rightSection={<Text size="xs" c="dimmed">€/{uomOf(l.itemId) ?? 'birim'}</Text>} rightSectionWidth={56} rightSectionPointerEvents="none"
                           styles={{ input: lowConfidenceStyle(l.ocrPrice) }} />
                       </Table.Td>
                       <Table.Td>
@@ -338,6 +346,7 @@ export default function InvoiceImportDetailPage() {
                 })}
               </Table.Tbody>
             </Table>
+            </Table.ScrollContainer>
             {!readOnly && (
               <Button variant="light" size="xs" mt="sm" onClick={() => setLines((ls) => [...ls, {
                 key: nextKey++, lotNo: '', itemId: null, warehouseId: null, qty: '', unitPrice: '', declaredLineTotal: '',
@@ -359,8 +368,14 @@ export default function InvoiceImportDetailPage() {
             )}
           </Card>
 
+          {r.status === 'discarded' && (
+            <Group justify="flex-end">
+              <Button color="red" variant="light" loading={remove.isPending} onClick={() => remove.mutate()}>Belgeyi sil</Button>
+            </Group>
+          )}
           {!readOnly && (
             <Group justify="flex-end">
+              <Button color="red" variant="light" loading={remove.isPending} onClick={() => remove.mutate()}>Belgeyi sil</Button>
               <Button variant="default" loading={discard.isPending} onClick={() => discard.mutate()}>Vazgeç</Button>
               <Button loading={confirm.isPending} disabled={!canConfirm} onClick={() => confirm.mutate()}>
                 Onayla ve alış fişi oluştur
@@ -378,9 +393,9 @@ export default function InvoiceImportDetailPage() {
       <Modal opened={newSupplierOpened} onClose={closeNewSupplier} title="Yeni Tedarikçi">
         <NewSupplierForm onSubmit={(b) => createSupplier.mutate(b)} loading={createSupplier.isPending} />
       </Modal>
-      <Modal opened={newItemForLine !== null} onClose={() => setNewItemForLine(null)} title="Yeni Ürün">
-        <NewItemForm onSubmit={(b) => createItem.mutate(b)} loading={createItem.isPending} />
-      </Modal>
+      <NewItemModal opened={newItemForLine !== null} onClose={() => setNewItemForLine(null)}
+        initialName={lines.find((l) => l.key === newItemForLine)?.ocrName?.value ?? undefined}
+        onCreated={(it) => { if (newItemForLine !== null) updateLine(newItemForLine, { itemId: it.id }) }} />
     </Stack>
   )
 }
@@ -393,21 +408,6 @@ function NewSupplierForm({ onSubmit, loading }: { onSubmit: (b: { code: string; 
       <TextInput label="Kod" value={code} onChange={(e) => setCode(e.currentTarget.value)} required />
       <TextInput label="Ad" value={name} onChange={(e) => setName(e.currentTarget.value)} required />
       <Button disabled={!code || !name} loading={loading} onClick={() => onSubmit({ code, name })}>Oluştur</Button>
-    </Stack>
-  )
-}
-
-function NewItemForm({ onSubmit, loading }: { onSubmit: (b: { code: string; name: string; base_uom: 'kg' | 'adet' }) => void; loading: boolean }) {
-  const [code, setCode] = useState('')
-  const [name, setName] = useState('')
-  const [baseUom, setBaseUom] = useState<'kg' | 'adet'>('kg')
-  return (
-    <Stack>
-      <TextInput label="Kod" value={code} onChange={(e) => setCode(e.currentTarget.value)} required />
-      <TextInput label="Ad" value={name} onChange={(e) => setName(e.currentTarget.value)} required />
-      <Select label="Birim" data={[{ value: 'kg', label: 'kg' }, { value: 'adet', label: 'adet' }]} value={baseUom}
-        onChange={(v) => setBaseUom((v as 'kg' | 'adet') ?? 'kg')} />
-      <Button disabled={!code || !name} loading={loading} onClick={() => onSubmit({ code, name, base_uom: baseUom })}>Oluştur</Button>
     </Stack>
   )
 }
