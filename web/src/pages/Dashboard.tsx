@@ -203,6 +203,10 @@ export default function Dashboard() {
     queryKey: ['lots', 'dashboard', 'blocked'],
     queryFn: () => apiGet<List<Lot>>('/lots', { status: 'blocked', limit: '1000' }),
   })
+  const recalledLots = useQuery({
+    queryKey: ['lots', 'dashboard', 'recalled'],
+    queryFn: () => apiGet<List<Lot>>('/lots', { status: 'recalled', limit: '1000' }),
+  })
   const lastProduction = useQuery({
     queryKey: ['production-orders', 'dashboard'],
     queryFn: () => apiGet<List<ProductionOrder>>('/production-orders', { limit: '5' }),
@@ -213,7 +217,12 @@ export default function Dashboard() {
   })
 
   const openRecallCount = recalls.data?.items.filter((r) => r.status === 'open').length
-  const blockedCount = blockedLots.data?.items.length
+  // Geri çağrılan lotlar da satışa kapalıdır (Android'in blocked_lot_ids listesiyle aynı kapsam).
+  const recalledCount = recalledLots.data?.items.length
+  const blockedCount = blockedLots.data && recalledLots.data
+    ? blockedLots.data.items.length + recalledLots.data.items.length
+    : undefined
+  const blockedLoading = { isLoading: blockedLots.isLoading || recalledLots.isLoading }
 
   const days = Array.from({ length: SALES_DAYS }, (_, i) => utcDay(i + 1 - SALES_DAYS))
   const byDay = new Map(days.map((d) => [d, 0]))
@@ -248,7 +257,7 @@ export default function Dashboard() {
             </Badge>
             <Title order={1} fz={32} lh={1.15}>Hoş geldiniz!</Title>
             <Text size="sm" c="dimmed">
-              Bugün <b>{dash(sales, todaysOrders)} satış</b> yapıldı; <b>{dash(blockedLots, blockedCount)} bloke lot</b>{' '}
+              Bugün <b>{dash(sales, todaysOrders)} satış</b> yapıldı; <b>{dash(blockedLoading, blockedCount)} bloke lot</b>{' '}
               ve <b>{dash(alertSummary, alertSummary.data?.total)} açık uyarı</b> var.
             </Text>
             <Group gap="xs" mt={4}>
@@ -271,11 +280,11 @@ export default function Dashboard() {
         </Grid.Col>
         <Grid.Col span={{ base: 12, sm: 4, lg: 3 }}>
           <Kpi
-            to="/lotlar?status=blocked"
+            to={recalledCount ? '/lotlar?status=recalled' : '/lotlar?status=blocked'}
             label="Bloke Lot"
-            value={dash(blockedLots, blockedCount)}
+            value={dash(blockedLoading, blockedCount)}
             valueColor={blockedCount ? 'orange' : undefined}
-            sub="Satışa ve sevke kapalı"
+            sub={recalledCount ? `${recalledCount} geri çağrılan · satışa kapalı` : 'Satışa ve sevke kapalı'}
             icon={IconLock}
             color="orange"
           />
@@ -292,8 +301,8 @@ export default function Dashboard() {
           />
         </Grid.Col>
       </Grid>
-      {(sales.error || recalls.error || blockedLots.error) && (
-        <Alert color="red">{err(sales.error ?? recalls.error ?? blockedLots.error)}</Alert>
+      {(sales.error || recalls.error || blockedLots.error || recalledLots.error) && (
+        <Alert color="red">{err(sales.error ?? recalls.error ?? blockedLots.error ?? recalledLots.error)}</Alert>
       )}
 
       <Grid gutter="lg" align="stretch">

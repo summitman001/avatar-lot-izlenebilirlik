@@ -1806,7 +1806,7 @@ components:
         notes: { type: [string, "null"] }
         downstream_known: { type: boolean, description: "HER ZAMAN false, bkz. TraceForwardCustomerSummary" }
         downstream_note: { type: string }
-        has_violation: { type: boolean, description: "Bu lotta en az bir sales_line.recall_violation=true (offline ihlal)" }
+        has_violation: { type: boolean, description: "Bu musterinin bu lottan en az bir sales_line.recall_violation=true satisi var (offline ihlal)" }
     Recall:
       type: object
       properties:
