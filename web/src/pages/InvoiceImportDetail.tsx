@@ -1,11 +1,12 @@
 import {
-  ActionIcon, Alert, Badge, Button, Card, Grid, Group, Image, Loader, Modal, NumberInput,
-  Select, Stack, Table, Text, TextInput, Title, Tooltip,
+  ActionIcon, Alert, Anchor, Badge, Button, Card, Grid, Group, Image, Loader, Modal, NumberInput,
+  Select, Stack, Table, Text, TextInput, Tooltip,
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { PageHeader } from '../components/Page'
 import {
   ApiError, OCR_CONFIDENCE_HIGH, OCR_CONFIDENCE_MEDIUM, apiFileURL, apiGet, apiPost,
   type CreatePurchaseReceiptRequest, type Item, type InvoiceImportDetail as InvoiceImportDetailT,
@@ -179,23 +180,14 @@ export default function InvoiceImportDetailPage() {
       <Alert color="blue" variant="filled">
         Bunlar OCR önerileridir. Onaylamadan hiçbir kayıt oluşturulmaz.
       </Alert>
-      <Group justify="space-between">
-        <div>
-          <Title order={3}>{r.file_name}</Title>
-          <Text component="div" c="dimmed" size="sm">
-            Genel güven:{' '}
-            <Badge color={confidenceColor(r.overall_confidence)} variant="light">%{Math.round(r.overall_confidence * 100)}</Badge>
-            {'  '}
-            <Badge
-              ml="xs"
-              color={r.status === 'confirmed' ? 'green' : r.status === 'discarded' ? 'gray' : 'yellow'}
-              variant="light"
-            >
-              {r.status === 'confirmed' ? 'Onaylandı' : r.status === 'discarded' ? 'İptal edildi' : 'Öneri bekliyor'}
-            </Badge>
-          </Text>
-        </div>
-      </Group>
+      <PageHeader mb="xs" title={r.file_name}
+        eyebrow={<><Anchor component={Link} to="/fatura-okuma" size="sm">Fatura Okuma</Anchor> · OCR önerisi</>}
+        badges={<>
+          <Badge color={confidenceColor(r.overall_confidence)} variant="light">Güven %{Math.round(r.overall_confidence * 100)}</Badge>
+          <Badge color={r.status === 'confirmed' ? 'green' : r.status === 'discarded' ? 'gray' : 'yellow'} variant="light">
+            {r.status === 'confirmed' ? 'Onaylandı' : r.status === 'discarded' ? 'İptal edildi' : 'Öneri bekliyor'}
+          </Badge>
+        </>} />
 
       {formError && <Alert color="red">{formError}</Alert>}
       {r.ocr.warnings.length > 0 && (

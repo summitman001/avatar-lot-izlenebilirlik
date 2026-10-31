@@ -11,7 +11,7 @@ import {
 import { useQuery } from '@tanstack/react-query'
 import { useRef, useState, type MouseEvent } from 'react'
 import { flushSync } from 'react-dom'
-import { NavLink as RouterLink, Route, Routes, useNavigate } from 'react-router-dom'
+import { NavLink as RouterLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { API_URL, apiGet, type AnomalyAlertSummary } from './lib/api'
 import AnomalyAlertsPage from './pages/AnomalyAlerts'
 import ComingSoon from './pages/ComingSoon'
@@ -215,6 +215,7 @@ function Brand() {
 }
 
 export default function App() {
+  const location = useLocation()
   // Menü genişliği tarayıcıda hatırlanır; ilk çizimde okunur ki açılışta daralıp genişleme animasyonu olmasın.
   const [navExpanded, setNavExpanded] = useLocalStorage({
     key: 'lot-nav-expanded', defaultValue: false, getInitialValueInEffect: false,
@@ -252,32 +253,35 @@ export default function App() {
         <NavRail expanded={navExpanded} />
       </AppShell.Navbar>
       <AppShell.Main>
-        <Routes>
-          {MENU.filter((m) => !m.ready).map((m) => (
-            <Route key={m.path} path={m.path} element={<ComingSoon title={m.label} />} />
-          ))}
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/uyarilar" element={<AnomalyAlertsPage />} />
-          <Route path="/urunler" element={<Products />} />
-          <Route path="/lotlar" element={<Lots />} />
-          <Route path="/stok-hareketleri" element={<StockMovements />} />
-          <Route path="/yeniden-isleme" element={<Reprocess />} />
-          <Route path="/alislar" element={<Purchases />} />
-          <Route path="/alislar/:id" element={<PurchaseReceiptDetail />} />
-          <Route path="/fatura-okuma" element={<InvoiceImports />} />
-          <Route path="/fatura-okuma/:id" element={<InvoiceImportDetail />} />
-          <Route path="/tahminler" element={<Predictions />} />
-          <Route path="/dis-uretim" element={<ProductionOrders />} />
-          <Route path="/dis-uretim/:id" element={<ProductionOrderDetail />} />
-          <Route path="/parcalama" element={<CuttingOrders />} />
-          <Route path="/parcalama/:id" element={<CuttingOrderDetail />} />
-          <Route path="/satis-sevkiyat" element={<SalesOrders />} />
-          <Route path="/satis-sevkiyat/:id" element={<SalesOrderDetail />} />
-          <Route path="/izlenebilirlik" element={<Traceability />} />
-          <Route path="/geri-cagirma" element={<Recalls />} />
-          <Route path="/geri-cagirma/:id" element={<RecallDetail />} />
-          <Route path="*" element={<ComingSoon title="Sayfa bulunamadı" />} />
-        </Routes>
+        {/* Yol değişince sarmalayıcı yeniden kurulur, sayfa giriş animasyonu (.page-anim) baştan oynar. */}
+        <div key={location.pathname} className="page-anim">
+          <Routes>
+            {MENU.filter((m) => !m.ready).map((m) => (
+              <Route key={m.path} path={m.path} element={<ComingSoon title={m.label} />} />
+            ))}
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/uyarilar" element={<AnomalyAlertsPage />} />
+            <Route path="/urunler" element={<Products />} />
+            <Route path="/lotlar" element={<Lots />} />
+            <Route path="/stok-hareketleri" element={<StockMovements />} />
+            <Route path="/yeniden-isleme" element={<Reprocess />} />
+            <Route path="/alislar" element={<Purchases />} />
+            <Route path="/alislar/:id" element={<PurchaseReceiptDetail />} />
+            <Route path="/fatura-okuma" element={<InvoiceImports />} />
+            <Route path="/fatura-okuma/:id" element={<InvoiceImportDetail />} />
+            <Route path="/tahminler" element={<Predictions />} />
+            <Route path="/dis-uretim" element={<ProductionOrders />} />
+            <Route path="/dis-uretim/:id" element={<ProductionOrderDetail />} />
+            <Route path="/parcalama" element={<CuttingOrders />} />
+            <Route path="/parcalama/:id" element={<CuttingOrderDetail />} />
+            <Route path="/satis-sevkiyat" element={<SalesOrders />} />
+            <Route path="/satis-sevkiyat/:id" element={<SalesOrderDetail />} />
+            <Route path="/izlenebilirlik" element={<Traceability />} />
+            <Route path="/geri-cagirma" element={<Recalls />} />
+            <Route path="/geri-cagirma/:id" element={<RecallDetail />} />
+            <Route path="*" element={<ComingSoon title="Sayfa bulunamadı" />} />
+          </Routes>
+        </div>
       </AppShell.Main>
     </AppShell>
   )

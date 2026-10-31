@@ -1,8 +1,10 @@
-import { Alert, Badge, Button, Card, Group, Loader, Select, Stack, Table, Text, Title } from '@mantine/core'
+import { Alert, Anchor, Badge, Button, Card, Loader, Select, Stack, Table, Text } from '@mantine/core'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { IconDownload } from '@tabler/icons-react'
 import { Link, useParams } from 'react-router-dom'
 import { DownstreamCell, DownstreamModal, type DownstreamTarget } from '../components/Downstream'
+import { PageHeader } from '../components/Page'
 import { API_URL, ApiError, apiGet, apiPatch, apiPost, type Recall } from '../lib/api'
 
 function err(e: unknown): string {
@@ -44,18 +46,17 @@ export default function RecallDetail() {
 
   return (
     <Stack>
-      <Group justify="space-between">
-        <div>
-          <Title order={2}>{recall.recall_no}</Title>
-          <Text c="dimmed">
-            Kök lot: <Link to={`/izlenebilirlik?lot_id=${recall.root_lot_id}`}>{recall.root_lot_no}</Link> — {recall.reason}
-          </Text>
-        </div>
-        <Group>
-          <Badge color={recall.status === 'open' ? 'red' : 'gray'} variant="filled" size="lg">
-            {recall.status === 'open' ? 'Açık' : 'Kapalı'}
-          </Badge>
-          <Button component="a" href={`${API_URL}/recalls/${id}/contact-list?format=csv`} variant="light">
+      <PageHeader mb="xs" title={recall.recall_no}
+        eyebrow={<>
+          <Anchor component={Link} to="/geri-cagirma" size="sm">Geri Çağırma</Anchor> · Kök lot:{' '}
+          <Link to={`/izlenebilirlik?lot_id=${recall.root_lot_id}`}>{recall.root_lot_no}</Link> — {recall.reason}
+        </>}
+        badges={<Badge color={recall.status === 'open' ? 'red' : 'gray'} variant="filled" size="lg">
+          {recall.status === 'open' ? 'Açık' : 'Kapalı'}
+        </Badge>}
+        actions={<>
+          <Button component="a" href={`${API_URL}/recalls/${id}/contact-list?format=csv`} variant="default"
+            leftSection={<IconDownload size={16} />}>
             İletişim Listesi (CSV)
           </Button>
           {recall.status === 'open' ? (
@@ -63,12 +64,11 @@ export default function RecallDetail() {
           ) : (
             <Button variant="default" loading={reopenRecall.isPending} onClick={() => reopenRecall.mutate()}>Tekrar Aç</Button>
           )}
-        </Group>
-      </Group>
+        </>} />
       {closeError && <Alert color="red" onClose={() => setCloseError(null)} withCloseButton>{closeError}</Alert>}
 
       <Card withBorder>
-        <Text fw={500} mb="sm">Etkilenen Lotlar ({recall.affected_lot_count})</Text>
+        <Text fw={600} mb="sm">Etkilenen Lotlar ({recall.affected_lot_count})</Text>
         <Table striped>
           <Table.Thead>
             <Table.Tr><Table.Th>Lot</Table.Th><Table.Th>Ürün</Table.Th><Table.Th ta="right">Derinlik</Table.Th><Table.Th>Durum</Table.Th></Table.Tr>
@@ -87,7 +87,7 @@ export default function RecallDetail() {
       </Card>
 
       <Card withBorder>
-        <Text fw={500} mb="sm">Müşteri / Market Tablosu ({recall.pending_customer_count} bekliyor)</Text>
+        <Text fw={600} mb="sm">Müşteri / Market Tablosu ({recall.pending_customer_count} bekliyor)</Text>
         <Table>
           <Table.Thead>
             <Table.Tr>

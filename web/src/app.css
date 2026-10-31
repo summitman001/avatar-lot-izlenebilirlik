@@ -145,13 +145,103 @@ a:not([class]):hover {
   mix-blend-mode: normal;
 }
 
-/* --- Dashboard --- */
-.kpi-card {
+/* --- Filtre çipleri (components/Page.tsx) --- */
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--app-border);
+  background: var(--mantine-color-body);
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 500;
+  transition: background-color 150ms, color 150ms, border-color 150ms;
+}
+.filter-chip:hover {
+  border-color: var(--mantine-color-dimmed);
+}
+.filter-chip[data-active] {
+  background: var(--app-ink);
+  border-color: var(--app-ink);
+  color: var(--mantine-color-body);
+}
+.filter-chip:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 2px;
+}
+.chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 99px;
+}
+.chip-count {
+  font-size: var(--mantine-font-size-xs);
+  opacity: 0.6;
+}
+
+/* --- Animasyonlar --- */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+/* Sayfa girişi: içerik blokları sırayla aşağıdan gelir (App.tsx her yolda .page-anim'i yeniden kurar). */
+.page-anim > *,
+.page-anim > .mantine-Stack-root > * {
+  animation: rise 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.page-anim > :nth-child(2), .page-anim > .mantine-Stack-root > :nth-child(2) { animation-delay: 50ms; }
+.page-anim > :nth-child(3), .page-anim > .mantine-Stack-root > :nth-child(3) { animation-delay: 100ms; }
+.page-anim > :nth-child(4), .page-anim > .mantine-Stack-root > :nth-child(4) { animation-delay: 150ms; }
+.page-anim > :nth-child(n + 5), .page-anim > .mantine-Stack-root > :nth-child(n + 5) { animation-delay: 200ms; }
+
+.stagger > * {
+  animation: rise 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.stagger > :nth-child(2) { animation-delay: 60ms; }
+.stagger > :nth-child(3) { animation-delay: 120ms; }
+.stagger > :nth-child(n + 4) { animation-delay: 180ms; }
+
+.mantine-Table-tbody > .mantine-Table-tr {
+  animation: fade-in 320ms ease-out both;
+}
+.mantine-Table-tbody > .mantine-Table-tr:nth-child(2) { animation-delay: 25ms; }
+.mantine-Table-tbody > .mantine-Table-tr:nth-child(3) { animation-delay: 50ms; }
+.mantine-Table-tbody > .mantine-Table-tr:nth-child(4) { animation-delay: 75ms; }
+.mantine-Table-tbody > .mantine-Table-tr:nth-child(5) { animation-delay: 100ms; }
+.mantine-Table-tbody > .mantine-Table-tr:nth-child(n + 6) { animation-delay: 125ms; }
+.mantine-Table-tr {
+  transition: background-color 120ms;
+}
+
+/* Tıklanabilir kartlar üzerine gelince hafifçe yükselir; düğmeler basınca küçülür. */
+a.mantine-Card-root {
   text-decoration: none;
   color: inherit;
   transition: transform 150ms, box-shadow 150ms;
 }
-.kpi-card:hover {
+a.mantine-Card-root:hover {
   transform: translateY(-2px);
   box-shadow: var(--mantine-shadow-md);
+}
+.mantine-Button-root,
+.mantine-ActionIcon-root {
+  transition: transform 120ms, background-color 150ms;
+}
+.mantine-Button-root:active:not(:disabled, [data-disabled], [data-loading]),
+.mantine-ActionIcon-root:active:not(:disabled, [data-disabled], [data-loading]) {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 1ms !important;
+  }
 }

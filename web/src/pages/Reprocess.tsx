@@ -1,4 +1,4 @@
-import { ActionIcon, Alert, Button, Group, Loader, Modal, NumberInput, Select, Table, Text, TextInput, Title } from '@mantine/core'
+import { ActionIcon, Alert, Button, Group, Loader, Modal, NumberInput, Select, Table, Text, TextInput } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import { IconPlus, IconTrash } from '@tabler/icons-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiError, apiGet, apiPost, type Item, type List, type Lot, type ReprocessOrder, type Warehouse } from '../lib/api'
 import { uuidv7 } from '../lib/uuid7'
+import { PageHeader } from '../components/Page'
 
 // Yeniden işleme (Görev 3: "yeniden işleme … hareketleri lot bazında kaydedilir"). Girdi lotları
 // depodan tüketilir, yeni bir lot üretilir; maliyet aktarılır ve izleme bağlantısı kurulur.
@@ -22,10 +23,8 @@ export default function Reprocess() {
   })
   return (
     <>
-      <Group justify="space-between" mb="md">
-        <Title order={2}>Yeniden İşleme</Title>
-        <Button leftSection={<IconPlus size={16} />} onClick={open}>Yeni yeniden işleme</Button>
-      </Group>
+      <PageHeader eyebrow="Lotları tüketip yeni lot üret; maliyet ve izlenebilirlik aktarılır" title="Yeniden İşleme"
+        actions={<Button leftSection={<IconPlus size={16} />} onClick={open}>Yeni yeniden işleme</Button>} />
       {error && <Alert color="red">{error.message}</Alert>}
       {isLoading && <Loader />}
       {data && (

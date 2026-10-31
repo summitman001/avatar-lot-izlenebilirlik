@@ -1,8 +1,9 @@
-import { Alert, Badge, Button, Card, Group, Loader, Modal, NumberInput, Stack, Table, Text, Textarea, Title } from '@mantine/core'
+import { Alert, Anchor, Badge, Button, Card, Group, Loader, Modal, NumberInput, Stack, Table, Text, Textarea } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { PageHeader } from '../components/Page'
 import { ApiError, apiGet, apiPost, type SalesOrder } from '../lib/api'
 
 function err(e: unknown): string {
@@ -25,19 +26,15 @@ export default function SalesOrderDetail() {
 
   return (
     <Stack>
-      <Group justify="space-between">
-        <div>
-          <Title order={2}>{order.order_no}</Title>
-          <Text c="dimmed">{order.customer_name} — {new Date(order.sold_at).toLocaleString('tr-TR')}</Text>
-        </div>
-        <Group>
+      <PageHeader mb="xs" title={order.order_no}
+        eyebrow={<><Anchor component={Link} to="/satis-sevkiyat" size="sm">Satış / Sevkiyat</Anchor> · {order.customer_name} — {new Date(order.sold_at).toLocaleString('tr-TR')}</>}
+        badges={<>
           <Badge color="teal" variant="light">Onaylandı</Badge>
           {order.has_violation && <Badge color="red" variant="filled">Geri çağırma ihlali</Badge>}
-        </Group>
-      </Group>
+        </>} />
 
       <Card withBorder>
-        <Text fw={500} mb="sm">Satış Satırları</Text>
+        <Text fw={600} mb="sm">Satış Satırları</Text>
         <Table>
           <Table.Thead>
             <Table.Tr>
@@ -76,7 +73,7 @@ export default function SalesOrderDetail() {
 
       {order.shipments && order.shipments.length > 0 && (
         <Card withBorder>
-          <Text fw={500} mb="sm">Sevkiyatlar</Text>
+          <Text fw={600} mb="sm">Sevkiyatlar</Text>
           <Table>
             <Table.Thead>
               <Table.Tr><Table.Th>Sevkiyat No</Table.Th><Table.Th>Tarih</Table.Th><Table.Th>Lot / Miktar</Table.Th></Table.Tr>

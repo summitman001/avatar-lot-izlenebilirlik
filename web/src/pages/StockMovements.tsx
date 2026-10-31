@@ -1,6 +1,7 @@
-import { Alert, Badge, Group, Loader, Select, Table, Text, Title } from '@mantine/core'
+import { Alert, Badge, Group, Loader, Select, Table, Text } from '@mantine/core'
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
+import { PageHeader } from '../components/Page'
 import { apiGet, type List, type StockMovement, type Warehouse } from '../lib/api'
 
 // Lot hareketleri raporu (Bölüm 6: "en azından … lot hareketleri … raporları gösterilmelidir";
@@ -48,23 +49,21 @@ export default function StockMovements() {
 
   return (
     <>
-      <Group justify="space-between" mb="md">
-        <Title order={2}>Stok Hareketleri</Title>
-        <Group>
-          {lotId && (
-            <Badge size="lg" variant="light" rightSection={
-              <Text span size="xs" style={{ cursor: 'pointer' }} onClick={() => setParam('lot_id', null)}>✕</Text>
-            }>
-              Lot: {data?.items[0]?.lot_no ?? lotId.slice(0, 8)}
-            </Badge>
-          )}
-          <Select placeholder="Hareket tipi" clearable w={220} value={movementType}
-            onChange={(v) => setParam('movement_type', v)}
-            data={Object.entries(MOVEMENT_LABEL).map(([value, label]) => ({ value, label }))} />
-          <Select placeholder="Depo" clearable w={200} value={warehouseId}
-            onChange={(v) => setParam('warehouse_id', v)}
-            data={warehouses.data?.items.map((w) => ({ value: w.id, label: `${w.name} (${w.code})` })) ?? []} />
-        </Group>
+      <PageHeader eyebrow="Değiştirilemez stok defteri: her giriş, çıkış ve transfer lot bazında" title="Stok Hareketleri"
+        badges={lotId && (
+          <Badge size="lg" variant="light" rightSection={
+            <Text span size="xs" style={{ cursor: 'pointer' }} onClick={() => setParam('lot_id', null)}>✕</Text>
+          }>
+            Lot: {data?.items[0]?.lot_no ?? lotId.slice(0, 8)}
+          </Badge>
+        )} />
+      <Group justify="flex-end" mb="md" gap="xs">
+        <Select radius="xl" placeholder="Hareket tipi" clearable w={220} value={movementType}
+          onChange={(v) => setParam('movement_type', v)}
+          data={Object.entries(MOVEMENT_LABEL).map(([value, label]) => ({ value, label }))} />
+        <Select radius="xl" placeholder="Depo" clearable w={200} value={warehouseId}
+          onChange={(v) => setParam('warehouse_id', v)}
+          data={warehouses.data?.items.map((w) => ({ value: w.id, label: `${w.name} (${w.code})` })) ?? []} />
       </Group>
       {error && <Alert color="red">{error.message}</Alert>}
       {isLoading && <Loader />}
