@@ -43,20 +43,52 @@ func ptrStr(s string) *string { return &s }
 // SERILESTIRILIR (ikincisi ilki commit/rollback olana kadar bu INSERT satirinda bekler), bu yuzden
 // hic kimse ayni numarayi alamaz. `tx` disinda cagrilmaz: kilit, cagiran transaction commit olana
 // kadar tutulur.
+//
+// Numara elle de verilebildigi icin (seed, "Emir No" alani) sayac bu numaralari bilmez: uretilen
+// numara kullanilmissa bir sonrakine gecilir, boylece bos birakilan alan hic cakisma vermez.
 func nextSequenceNo(ctx context.Context, tx *sql.Tx, prefix string) (string, error) {
 	year := time.Now().UTC().Year()
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO number_sequence (prefix, year, seq_value) VALUES (?, ?, 1)
-		 ON DUPLICATE KEY UPDATE seq_value = seq_value + 1`,
-		prefix, year); err != nil {
-		return "", err
+	owner, ok := sequenceOwners[prefix]
+	if !ok {
+		owner = "lot.lot_no"
 	}
-	var val int
-	if err := tx.QueryRowContext(ctx,
-		`SELECT seq_value FROM number_sequence WHERE prefix = ? AND year = ?`, prefix, year).Scan(&val); err != nil {
-		return "", err
+	table, column, _ := strings.Cut(owner, ".")
+	for {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO number_sequence (prefix, year, seq_value) VALUES (?, ?, 1)
+			 ON DUPLICATE KEY UPDATE seq_value = seq_value + 1`,
+			prefix, year); err != nil {
+			return "", err
+		}
+		var val int
+		if err := tx.QueryRowContext(ctx,
+			`SELECT seq_value FROM number_sequence WHERE prefix = ? AND year = ?`, prefix, year).Scan(&val); err != nil {
+			return "", err
+		}
+		no := fmt.Sprintf("%s-%d-%03d", prefix, year, val)
+		var used int
+		if err := tx.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM `+table+` WHERE `+column+` = ?`, no).Scan(&used); err != nil {
+			return "", err
+		}
+		if used == 0 {
+			return no, nil
+		}
 	}
-	return fmt.Sprintf("%s-%d-%03d", prefix, year, val), nil
+}
+
+// sequenceOwners her onekin numarasinin yazildigi kolon. Listede olmayan onekler lot numarasidir
+// (SUC, YIL, KUZ-BUT gibi parca lotlari).
+var sequenceOwners = map[string]string{
+	"AF":  "purchase_receipt.doc_no",
+	"CUT": "cutting_order.order_no",
+	"IAD": "customer_return.return_no",
+	"RCL": "recall.recall_no",
+	"SAT": "sales_order.order_no",
+	"SHP": "shipment.shipment_no",
+	"TRF": "stock_transfer.transfer_no",
+	"URT": "production_order.order_no",
+	"YIS": "reprocess_order.order_no",
 }
 
 // ---------------------------------------------------------------------------
