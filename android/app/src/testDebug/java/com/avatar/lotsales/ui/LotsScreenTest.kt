@@ -2,10 +2,13 @@ package com.avatar.lotsales.ui
 
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertHasNoClickAction
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.avatar.lotsales.data.LotRepository
 import com.avatar.lotsales.data.column
@@ -23,7 +26,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.math.BigDecimal
 
-/** Lot listesi: bloke lot kirmizi rozetli ve tiklanamaz; aktif lot tiklaninca o lotla satis acilir. */
+/** Lot listesi: bloke lot kirmizi rozetli, gerekcesi gorunur ve tiklanamaz; aktif lot tiklaninca o lotla satis acilir. */
 @RunWith(AndroidJUnit4::class)
 class LotsScreenTest {
     @get:Rule
@@ -47,13 +50,20 @@ class LotsScreenTest {
     @Test
     fun blockedLotIsNotClickableAndActiveLotOpensSale() {
         val opened = mutableListOf<String>()
-        compose.setContent { LotsScreen(onSell = { opened += it }, vm = LotsViewModel(LotRepository(db))) }
+        val vm = LotsViewModel(LotRepository(db))
+        compose.setContent { LotsScreen(onSell = { opened += it }, vm = vm) }
 
         // Room Flow'u kendi executor'unda calisir; compose kurali onu beklemez.
-        // (Ozet basligi veri gelmeden de "Bloke" etiketi tasir; bu yuzden lot no beklenir.)
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("SUC-2026-099", substring = true).fetchSemanticsNodes().isNotEmpty() }
-        compose.onAllNodesWithText("Bloke").fetchSemanticsNodes().let { check(it.size >= 2) { "rozet + ozet etiketi bekleniyor" } }
+        compose.waitUntil(5_000) { vm.lots.value.size == 2 }
+        // Lot kartlari ozet kartlarinin altinda: kucuk test ekraninda gorunmek icin kaydirilir.
+        val list = compose.onNode(hasScrollAction())
+
+        list.performScrollToNode(hasText("SUC-2026-099", substring = true))
         compose.onNodeWithText("SUC-2026-099", substring = true).assertHasNoClickAction()
+        compose.onNodeWithText("geri cagirma").assertExists() // bloke gerekcesi kartta
+        compose.onAllNodesWithText("Bloke").fetchSemanticsNodes().let { check(it.isNotEmpty()) { "bloke rozeti bekleniyor" } }
+
+        list.performScrollToNode(hasText("SUC-2026-045", substring = true))
         compose.onNodeWithText("SUC-2026-045", substring = true).assertHasClickAction().performClick()
 
         assertEquals(listOf("a"), opened)

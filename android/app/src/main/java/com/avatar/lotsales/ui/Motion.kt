@@ -46,6 +46,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
@@ -185,6 +186,7 @@ fun BouncyButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     tonal: Boolean = false,
+    colors: ButtonColors? = null,
     content: @Composable RowScope.() -> Unit,
 ) {
     val source = remember { MutableInteractionSource() }
@@ -196,7 +198,7 @@ fun BouncyButton(
         modifier = modifier.heightIn(min = 52.dp).graphicsLayer { scaleX = scale; scaleY = scale },
         enabled = enabled,
         shape = RoundedCornerShape(corner),
-        colors = if (tonal) ButtonDefaults.filledTonalButtonColors() else ButtonDefaults.buttonColors(),
+        colors = colors ?: if (tonal) ButtonDefaults.filledTonalButtonColors() else ButtonDefaults.buttonColors(),
         interactionSource = source,
         content = content,
     )

@@ -24,6 +24,8 @@ data class LotView(
     val available: BigDecimal,
     val blocked: Boolean,
     val blockedReason: String?,
+    /** urunun varsayilan satis fiyati (yoksa veya urun senkronlanmadiysa null) */
+    val salePrice: BigDecimal? = null,
 ) {
     val sellable: Boolean get() = !blocked && lot.status == "active"
 
@@ -53,6 +55,7 @@ fun buildLotViews(
             available = lot.qtyOnHandServer + (localDelta[lot.id] ?: BigDecimal.ZERO),
             blocked = lot.id in blockedById || lot.status in setOf("blocked", "recalled"),
             blockedReason = blockedById[lot.id]?.reason,
+            salePrice = item?.defaultSalePrice,
         )
     }
 }

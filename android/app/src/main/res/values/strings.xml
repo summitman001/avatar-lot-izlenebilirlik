@@ -14,14 +14,20 @@
     <string name="indicator_ok">Güncel</string>
     <string name="indicator_problems">İnceleme %1$d</string>
     <string name="indicator_no_warehouse">Depo seçilmedi</string>
+    <string name="indicator_syncing">Senkronlanıyor…</string>
+
+    <string name="title_lots">Stok ve Lotlar</string>
+    <string name="title_new_sale">Yeni Satış</string>
+    <string name="title_sales">Satışlar</string>
+    <string name="title_sale_detail">Satış Detayı</string>
+    <string name="title_sync">Senkron</string>
 
     <string name="picker_choose">%1$s seçin</string>
     <string name="picker_empty">Kayıt yok (senkron bekleniyor)</string>
 
-    <string name="lots_search">Ara (lot no / ürün)</string>
+    <string name="lots_search">Lot no veya ürün adı ara…</string>
     <string name="lots_empty">Lot yok. Senkron sekmesinden senkronlayın.</string>
-    <string name="lot_row">%1$s · %2$s %3$s</string>
-    <string name="summary_expiring">SKT yakın</string>
+    <string name="lots_no_match">Aramaya uyan lot yok.</string>
     <string name="expiry_none">SKT yok</string>
     <string name="expiry_expired">SKT geçti</string>
     <string name="expiry_today">SKT bugün</string>
@@ -31,6 +37,32 @@
     <string name="status_blocked">Bloke</string>
     <string name="status_recalled">Geri çağrıldı</string>
     <string name="status_consumed">Tükendi</string>
+
+    <string name="kpi_active">Aktif Lotlar</string>
+    <string name="kpi_active_sub">%1$d ürün</string>
+    <string name="kpi_stock">Toplam Stok</string>
+    <string name="kpi_stock_sub">Satılabilir stok</string>
+    <string name="kpi_critical">Kritik SKT</string>
+    <string name="kpi_critical_sub">≤ %1$d gün · önce bunlar</string>
+    <string name="kpi_blocked_sub">Satış kilitli</string>
+    <string name="kpi_unit_lots">lot</string>
+    <string name="sync_card_pending">%1$d kayıt gönderilmeyi bekliyor</string>
+    <string name="sync_card_ok">Tüm kayıtlar senkron</string>
+    <string name="sync_card_last">Son senkron: %1$s</string>
+    <string name="sync_card_never">Henüz senkronlanmadı</string>
+    <string name="sync_card_offline">Çevrimdışı · satışlar cihazda saklanır</string>
+    <string name="refresh">Yenile</string>
+    <string name="chip_all">Tümü</string>
+    <string name="lot_remaining">Kalan stok</string>
+    <string name="lot_price">Satış fiyatı</string>
+    <string name="lot_expiry">SKT</string>
+    <string name="lot_sell">Satışa ver</string>
+    <string name="lot_sell_priority">Öncelikli sat</string>
+    <string name="lot_fefo_note">SKT yaklaşıyor: önce bu lot satılmalı (FEFO)</string>
+    <string name="lot_blocked_title">Bloke gerekçesi</string>
+    <string name="lot_recalled_title">Geri çağırma</string>
+    <string name="lot_blocked_default">Satış ve sevk yazılımsal olarak kilitli.</string>
+    <string name="badge_critical">Kritik (%1$d gün)</string>
 
     <string name="customer">Müşteri</string>
     <string name="product">Ürün</string>
