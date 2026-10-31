@@ -7,6 +7,7 @@ import { IconAlertTriangle, IconCash, IconFileInvoice, IconPlus, IconTruckDelive
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { NewItemModal } from '../components/NewItemModal'
 import { FilterChips, PageHeader, StatCard, StatGrid, SUMMARY_LIMIT, eur } from '../components/Page'
 import {
   ApiError, apiGet, apiPost, type CreatePurchaseReceiptRequest, type Item, type List,
@@ -128,6 +129,7 @@ function NewReceiptModal({ opened, onClose }: { opened: boolean; onClose: () => 
   const [receivedAt, setReceivedAt] = useState(() => new Date().toISOString().slice(0, 10))
   const [lines, setLines] = useState<LineForm[]>([emptyLine()])
   const [formError, setFormError] = useState<string | null>(null)
+  const [newItemForLine, setNewItemForLine] = useState<number | null>(null)
 
   const suppliers = useQuery({ queryKey: ['suppliers'], queryFn: () => apiGet<List<Supplier>>('/suppliers') })
   const items = useQuery({ queryKey: ['items', 'active'], queryFn: () => apiGet<List<Item>>('/items', { is_active: 'true' }) })
@@ -166,6 +168,7 @@ function NewReceiptModal({ opened, onClose }: { opened: boolean; onClose: () => 
 
   const itemOptions = items.data?.items.map((i) => ({ value: i.id, label: `${i.name} (${i.code})` })) ?? []
   const warehouseOptions = warehouses.data?.items.map((w) => ({ value: w.id, label: `${w.name} (${w.code})` })) ?? []
+  const uomOf = (itemId: string | null) => items.data?.items.find((i) => i.id === itemId)?.base_uom
 
   const linesValid = lines.length > 0 && lines.every((l) => l.lotNo && l.itemId && l.warehouseId && l.qty !== '' && l.unitPrice !== '')
   const canSubmit = !!supplierId && !!receivedAt && linesValid
@@ -174,7 +177,7 @@ function NewReceiptModal({ opened, onClose }: { opened: boolean; onClose: () => 
     setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)))
 
   return (
-    <Modal opened={opened} onClose={() => { reset(); onClose() }} title="Yeni Alış" size="xl">
+    <Modal opened={opened} onClose={() => { reset(); onClose() }} title="Yeni Alış" size={1120}>
       {formError && <Alert color="red" mb="sm">{formError}</Alert>}
       <Group grow mb="sm">
         <Select
@@ -194,13 +197,15 @@ function NewReceiptModal({ opened, onClose }: { opened: boolean; onClose: () => 
       </Group>
 
       <Text fw={500} mb="xs">Satırlar</Text>
+      <Text size="xs" c="dimmed" mb="xs">Miktar, seçilen ürünün biriminde girilir (ürün kaydındaki kg veya adet).</Text>
+      <Table.ScrollContainer minWidth={980} type="native">
       <Table mb="sm">
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Lot No</Table.Th>
             <Table.Th>Ürün</Table.Th>
             <Table.Th>Depo</Table.Th>
-            <Table.Th ta="right">Miktar</Table.Th>
+            <Table.Th ta="right">Miktar (ürünün birimiyle)</Table.Th>
             <Table.Th ta="right">Birim Fiyat</Table.Th>
             <Table.Th ta="right">Beyan Edilen Tutar</Table.Th>
             <Table.Th></Table.Th>
@@ -213,16 +218,20 @@ function NewReceiptModal({ opened, onClose }: { opened: boolean; onClose: () => 
                 <TextInput placeholder="KZ-2026-NNN" value={l.lotNo} onChange={(e) => updateLine(l.key, { lotNo: e.currentTarget.value })} w={130} />
               </Table.Td>
               <Table.Td>
-                <Select placeholder="Ürün" searchable data={itemOptions} value={l.itemId} onChange={(v) => updateLine(l.key, { itemId: v })} w={190} />
+                <Select placeholder="Ürün" searchable data={itemOptions} value={l.itemId} onChange={(v) => updateLine(l.key, { itemId: v })} w={190}
+                  nothingFoundMessage="Bu ürün kayıtlı değil, + Yeni ürün ile ekleyin" />
+                <Button variant="subtle" size="compact-xs" onClick={() => setNewItemForLine(l.key)}>+ Yeni ürün</Button>
               </Table.Td>
               <Table.Td>
                 <Select placeholder="Depo" data={warehouseOptions} value={l.warehouseId} onChange={(v) => updateLine(l.key, { warehouseId: v })} w={150} />
               </Table.Td>
               <Table.Td>
-                <NumberInput min={0} decimalScale={3} value={l.qty} onChange={(v) => updateLine(l.key, { qty: v as number })} w={100} ml="auto" />
+                <NumberInput min={0} decimalScale={3} value={l.qty} onChange={(v) => updateLine(l.key, { qty: v as number })} w={130} ml="auto" hideControls
+                  rightSection={<Text size="xs" c="dimmed">{uomOf(l.itemId) ?? ''}</Text>} rightSectionPointerEvents="none" />
               </Table.Td>
               <Table.Td>
-                <NumberInput min={0} decimalScale={4} value={l.unitPrice} onChange={(v) => updateLine(l.key, { unitPrice: v as number })} w={110} ml="auto" />
+                <NumberInput min={0} decimalScale={4} value={l.unitPrice} onChange={(v) => updateLine(l.key, { unitPrice: v as number })} w={140} ml="auto" hideControls
+                  rightSection={<Text size="xs" c="dimmed">€/{uomOf(l.itemId) ?? 'birim'}</Text>} rightSectionWidth={56} rightSectionPointerEvents="none" />
               </Table.Td>
               <Table.Td>
                 <NumberInput min={0} decimalScale={4} placeholder="—" value={l.declaredLineTotal} onChange={(v) => updateLine(l.key, { declaredLineTotal: v as number })} w={120} ml="auto" />
@@ -236,6 +245,9 @@ function NewReceiptModal({ opened, onClose }: { opened: boolean; onClose: () => 
           ))}
         </Table.Tbody>
       </Table>
+      </Table.ScrollContainer>
+      <NewItemModal opened={newItemForLine !== null} onClose={() => setNewItemForLine(null)}
+        onCreated={(it) => { if (newItemForLine !== null) updateLine(newItemForLine, { itemId: it.id }) }} />
       <Button variant="light" size="xs" mb="md" onClick={() => setLines((ls) => [...ls, emptyLine()])}>
         + Satır Ekle
       </Button>

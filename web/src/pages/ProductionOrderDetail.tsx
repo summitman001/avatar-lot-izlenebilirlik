@@ -12,6 +12,7 @@ import {
   ApiError, apiGet, apiPost, type List, type Lot, type ProductionCostReport,
   type ProductionOrder, type StockMovement,
 } from '../lib/api'
+import { modelLabel, warningLabel } from '../lib/messages'
 
 const STEPS: ProductionOrder['status'][] = ['draft', 'materials_sent', 'received', 'closed']
 const STEP_LABEL: Record<ProductionOrder['status'], string> = {
@@ -58,7 +59,7 @@ export default function ProductionOrderDetail() {
     <Stack>
       <PageHeader mb="xs" title={order.order_no}
         eyebrow={<><Anchor component={Link} to="/dis-uretim" size="sm">Dış Üretim</Anchor> · {order.product_item_name}</>}
-        badges={order.warnings.map((w) => <Badge key={w} color="orange" variant="light">{w}</Badge>)} />
+        badges={order.warnings.map((w) => <Badge key={w} color="orange" variant="light">{warningLabel(w)}</Badge>)} />
 
       <Stepper active={STEPS.indexOf(order.status)} size="sm">
         {STEPS.map((s) => <Stepper.Step key={s} label={STEP_LABEL[s]} />)}
@@ -128,7 +129,7 @@ function PredictionCard({ prediction: p }: { prediction: NonNullable<ProductionO
           <Text fw={500}>Tahmin vs Gerçek</Text>
           <Group gap="xs">
             <Badge variant="light" color="gray">{STAGE_LABEL[p.stage]}</Badge>
-            <Badge variant="light">{p.model_name} {p.baseline && '(baseline)'}</Badge>
+            <Badge variant="light" tt="none">{modelLabel(p.model_name)}</Badge>
           </Group>
         </Group>
         <Group justify="space-between"><Text size="sm" c="dimmed">Beklenen Adet</Text><Text size="sm">{p.predicted_delivered_qty}</Text></Group>

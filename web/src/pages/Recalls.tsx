@@ -1,9 +1,10 @@
-import { Alert, Badge, Button, Group, Loader, Modal, Stack, Table, Text, TextInput, Textarea } from '@mantine/core'
-import { useDebouncedValue, useDisclosure } from '@mantine/hooks'
+import { Alert, Badge, Button, Group, Loader, Modal, Stack, Table, Text, Textarea } from '@mantine/core'
+import { useDisclosure } from '@mantine/hooks'
 import { IconAlertOctagon, IconArrowBackUp, IconCircleCheck, IconPhoneCall } from '@tabler/icons-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { LotSearch } from '../components/LotSearch'
 import { FilterChips, PageHeader, StatCard, StatGrid, SUMMARY_LIMIT, countBy } from '../components/Page'
 import { ApiError, apiGet, apiPost, type List, type Lot, type Recall, type TraceForwardResponse } from '../lib/api'
 
@@ -83,24 +84,16 @@ export default function Recalls() {
 }
 
 function NewRecallModal({ opened, onClose, onDone }: { opened: boolean; onClose: () => void; onDone: (id: string) => void }) {
-  const [q, setQ] = useState('')
-  const [debouncedQ] = useDebouncedValue(q, 300)
   const [selected, setSelected] = useState<Lot | null>(null)
   const [reason, setReason] = useState('')
   const [formError, setFormError] = useState<string | null>(null)
 
   const reset = () => {
-    setQ('')
     setSelected(null)
     setReason('')
     setFormError(null)
   }
 
-  const searchQuery = useQuery({
-    queryKey: ['recall-lot-search', debouncedQ],
-    queryFn: () => apiGet<List<Lot>>('/lots', { q: debouncedQ, status: 'active' }),
-    enabled: debouncedQ.length > 0 && !selected,
-  })
   const previewQuery = useQuery({
     queryKey: ['recall-preview', selected?.id],
     queryFn: () => apiGet<TraceForwardResponse>(`/lots/${selected?.id}/trace-forward`),
@@ -119,26 +112,7 @@ function NewRecallModal({ opened, onClose, onDone }: { opened: boolean; onClose:
   return (
     <Modal opened={opened} onClose={() => { reset(); onClose() }} title="Yeni Geri Çağırma" size="lg">
       {formError && <Alert color="red" mb="sm">{formError}</Alert>}
-      {!selected && (
-        <>
-          <TextInput placeholder="Lot no veya ürün adı ara" value={q} onChange={(e) => setQ(e.currentTarget.value)} mb="sm" />
-          {searchQuery.data && (
-            <Table highlightOnHover>
-              <Table.Tbody>
-                {searchQuery.data.items.map((lot) => (
-                  <Table.Tr key={lot.id} style={{ cursor: 'pointer' }} onClick={() => setSelected(lot)}>
-                    <Table.Td>{lot.lot_no}</Table.Td>
-                    <Table.Td>{lot.item_name}</Table.Td>
-                  </Table.Tr>
-                ))}
-                {searchQuery.data.items.length === 0 && (
-                  <Table.Tr><Table.Td colSpan={2}><Text c="dimmed" size="sm">Sonuç yok</Text></Table.Td></Table.Tr>
-                )}
-              </Table.Tbody>
-            </Table>
-          )}
-        </>
-      )}
+      {!selected && <LotSearch status="active" onSelect={setSelected} mb="sm" />}
       {selected && (
         <Stack>
           <Group justify="space-between">

@@ -1,11 +1,11 @@
-import { Alert, Badge, Button, FileButton, Group, Loader, Table, Text } from '@mantine/core'
-import { IconCircleCheck, IconClock, IconFileInvoice, IconUpload, IconX } from '@tabler/icons-react'
+import { ActionIcon, Alert, Badge, Button, FileButton, Group, Loader, Modal, Table, Text, Tooltip } from '@mantine/core'
+import { IconCircleCheck, IconClock, IconFileInvoice, IconTrash, IconUpload, IconX } from '@tabler/icons-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FilterChips, PageHeader, StatCard, StatGrid, SUMMARY_LIMIT, countBy } from '../components/Page'
 import {
-  ApiError, apiGet, apiUpload, type InvoiceImportDetail, type InvoiceImportListItem, type List,
+  ApiError, apiDelete, apiGet, apiUpload, type InvoiceImportDetail, type InvoiceImportListItem, type List,
 } from '../lib/api'
 
 function err(e: unknown): string {
@@ -37,6 +37,15 @@ export default function InvoiceImports() {
     onSuccess: (created) => {
       qc.invalidateQueries({ queryKey: ['invoice-imports'] })
       navigate(`/fatura-okuma/${created.id}`)
+    },
+  })
+
+  const [toDelete, setToDelete] = useState<InvoiceImportListItem | null>(null)
+  const remove = useMutation({
+    mutationFn: (id: string) => apiDelete(`/invoice-imports/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['invoice-imports'] })
+      setToDelete(null)
     },
   })
 
@@ -79,6 +88,7 @@ export default function InvoiceImports() {
               <Table.Th ta="right">Genel Güven</Table.Th>
               <Table.Th>Durum</Table.Th>
               <Table.Th>Oluşan Fiş</Table.Th>
+              <Table.Th></Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -100,15 +110,33 @@ export default function InvoiceImports() {
                       </Text>
                     ) : '—'}
                   </Table.Td>
+                  <Table.Td ta="right" w={48} onClick={(e) => e.stopPropagation()}>
+                    <Tooltip label={it.status === 'confirmed' ? 'Onaylanan belge alış fişinin kaynağıdır, silinemez' : 'Belgeyi sil'}>
+                      <ActionIcon variant="subtle" color="red" aria-label="Belgeyi sil" data-disabled={it.status === 'confirmed' || undefined}
+                        onClick={() => { if (it.status !== 'confirmed') { remove.reset(); setToDelete(it) } }}>
+                        <IconTrash size={16} />
+                      </ActionIcon>
+                    </Tooltip>
+                  </Table.Td>
                 </Table.Tr>
               )
             })}
             {rows.length === 0 && (
-              <Table.Tr><Table.Td colSpan={5}><Text c="dimmed" ta="center">{status ? 'Bu durumda belge yok' : 'Henüz yüklenen fatura yok'}</Text></Table.Td></Table.Tr>
+              <Table.Tr><Table.Td colSpan={6}><Text c="dimmed" ta="center">{status ? 'Bu durumda belge yok' : 'Henüz yüklenen fatura yok'}</Text></Table.Td></Table.Tr>
             )}
           </Table.Tbody>
         </Table>
       )}
+      <Modal opened={!!toDelete} onClose={() => setToDelete(null)} title="Belgeyi sil">
+        {remove.isError && <Alert color="red" mb="sm">{err(remove.error)}</Alert>}
+        <Text size="sm" mb="md">
+          <b>{toDelete?.file_name}</b> ve okunan öneriler silinecek. Bu işlem geri alınamaz; stok ve alış kayıtları etkilenmez.
+        </Text>
+        <Group justify="flex-end">
+          <Button variant="default" onClick={() => setToDelete(null)}>Vazgeç</Button>
+          <Button color="red" loading={remove.isPending} onClick={() => toDelete && remove.mutate(toDelete.id)}>Sil</Button>
+        </Group>
+      </Modal>
     </>
   )
 }

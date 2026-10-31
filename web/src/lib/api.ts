@@ -3,6 +3,8 @@
 // KURAL: tutar ve miktarlar JSON'da STRING gelir ("18.1588"). Bunlari Number/parseFloat ile
 // HESAPLAMAYIN; yalnizca gosterin. Hesap sunucuda (Go, shopspring/decimal) yapilir.
 
+import { humanizeMessage } from './messages'
+
 export const API_URL: string = import.meta.env.VITE_API_URL ?? 'http://localhost:8080/api/v1'
 
 export type Decimal = string
@@ -13,7 +15,7 @@ export class ApiError extends Error {
     public code: string,
     message: string,
   ) {
-    super(message)
+    super(humanizeMessage(message))
   }
 }
 
@@ -35,8 +37,8 @@ export async function apiGet<T>(path: string, params?: Record<string, string | u
   return body as T
 }
 
-// apiSend POST/PUT/PATCH istekleri icin (govde opsiyonel). Status, body yoksa (reverse/close gibi) atlanir.
-export async function apiSend<T>(method: 'POST' | 'PUT' | 'PATCH', path: string, body?: unknown): Promise<T> {
+// apiSend POST/PUT/PATCH/DELETE istekleri icin (govde opsiyonel). Status, body yoksa (reverse/close gibi) atlanir.
+export async function apiSend<T>(method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body?: unknown): Promise<T> {
   let res: Response
   try {
     res = await fetch(API_URL + path, {
@@ -57,6 +59,7 @@ export async function apiSend<T>(method: 'POST' | 'PUT' | 'PATCH', path: string,
 
 export const apiPost = <T>(path: string, body?: unknown) => apiSend<T>('POST', path, body)
 export const apiPatch = <T>(path: string, body?: unknown) => apiSend<T>('PATCH', path, body)
+export const apiDelete = (path: string) => apiSend<void>('DELETE', path)
 
 // apiUpload: multipart/form-data dosya yuklemesi (fatura/irsaliye OCR, bkz. docs/invoice-ocr.md).
 // Content-Type HEADER'I ELLE AYARLANMAZ: tarayici boundary'yi kendisi ekler.
