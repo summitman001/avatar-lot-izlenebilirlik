@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom'
 import {
   ApiError, apiGet, type List, type PredictionListItem, type PredictionSummary, type PredictionTargetType,
 } from '../lib/api'
+import { num, pct } from '../lib/format'
 import { modelLabel } from '../lib/messages'
 
 function err(e: unknown): string {
@@ -36,11 +37,11 @@ function SummaryCard({ title, link, entry }: { title: string; link: string; entr
         </div>
         <div>
           <Text size="xs" c="dimmed">MAE</Text>
-          <Text fw={700} size="xl">{entry?.mae ?? '—'}</Text>
+          <Text fw={700} size="xl">{num(entry?.mae)}</Text>
         </div>
         <div>
           <Text size="xs" c="dimmed">MAPE</Text>
-          <Text fw={700} size="xl">{entry?.mape != null ? `${entry.mape}%` : '—'}</Text>
+          <Text fw={700} size="xl">{pct(entry?.mape)}</Text>
         </div>
       </SimpleGrid>
     </Card>
@@ -72,12 +73,12 @@ function PartsBreakdown({ parts }: { parts: PredictionListItem['parts'] }) {
         {parts.map((p) => (
           <Table.Tr key={p.part_key}>
             <Table.Td>{PART_LABEL[p.part_key] ?? p.part_key}</Table.Td>
-            <Table.Td ta="right">{p.predicted_kg ?? '—'}</Table.Td>
-            <Table.Td ta="right">{p.actual_kg ?? '—'}</Table.Td>
-            <Table.Td ta="right">{p.diff_kg ?? '—'}</Table.Td>
+            <Table.Td ta="right">{num(p.predicted_kg)}</Table.Td>
+            <Table.Td ta="right">{num(p.actual_kg)}</Table.Td>
+            <Table.Td ta="right">{num(p.diff_kg)}</Table.Td>
             <Table.Td ta="right">
               {p.diff_pct != null ? (
-                <Badge color={errorBadgeColor(p.diff_pct)} variant="light">{p.diff_pct}%</Badge>
+                <Badge color={errorBadgeColor(p.diff_pct)} variant="light">{pct(p.diff_pct)}</Badge>
               ) : '—'}
             </Table.Td>
           </Table.Tr>
@@ -168,12 +169,12 @@ export default function Predictions() {
                     <Table.Td>
                       {modelLabel(it.model_name)}
                     </Table.Td>
-                    <Table.Td ta="right">{it.predicted_value ?? '—'} {it.metric_unit}</Table.Td>
-                    <Table.Td ta="right">{it.actual_value ?? '—'} {it.has_actual ? it.metric_unit : ''}</Table.Td>
+                    <Table.Td ta="right">{num(it.predicted_value)} {it.metric_unit}</Table.Td>
+                    <Table.Td ta="right">{num(it.actual_value)} {it.has_actual ? it.metric_unit : ''}</Table.Td>
                     <Table.Td ta="right">
                       {it.error_pct != null ? (
                         <Badge color={errorBadgeColor(it.error_pct)} variant="light">
-                          {it.error_abs} {it.metric_unit} ({it.error_pct}%)
+                          {num(it.error_abs)} {it.metric_unit} ({pct(it.error_pct)})
                         </Badge>
                       ) : (
                         <Text size="xs" c="dimmed">bekliyor</Text>

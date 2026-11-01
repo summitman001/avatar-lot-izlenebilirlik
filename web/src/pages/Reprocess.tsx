@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiError, apiGet, apiPost, type Item, type List, type Lot, type ReprocessOrder, type Warehouse } from '../lib/api'
+import { qty as fmtQty, money, unitCost } from '../lib/format'
 import { uuidv7 } from '../lib/uuid7'
 import { PageHeader } from '../components/Page'
 
@@ -43,15 +44,15 @@ export default function Reprocess() {
                 <Table.Td>{new Date(o.created_at).toLocaleDateString('tr-TR')}</Table.Td>
                 <Table.Td>{o.warehouse_code}</Table.Td>
                 <Table.Td>
-                  {o.inputs.map((i) => <Text key={i.lot_id} size="xs">{i.lot_no}: {i.qty} {i.uom}</Text>)}
+                  {o.inputs.map((i) => <Text key={i.lot_id} size="xs">{i.lot_no}: {fmtQty(i.qty, i.uom)}</Text>)}
                 </Table.Td>
                 <Table.Td>
                   {o.output_lot_id && <Link to={`/izlenebilirlik?lot_id=${o.output_lot_id}`}>{o.output_lot_no}</Link>}
                   <Text size="xs" c="dimmed">{o.output_item_name}</Text>
                 </Table.Td>
-                <Table.Td ta="right">{o.output_qty} {o.output_uom}</Table.Td>
-                <Table.Td ta="right">{o.total_cost}</Table.Td>
-                <Table.Td ta="right">{o.output_unit_cost}</Table.Td>
+                <Table.Td ta="right">{fmtQty(o.output_qty, o.output_uom)}</Table.Td>
+                <Table.Td ta="right">{money(o.total_cost)}</Table.Td>
+                <Table.Td ta="right">{unitCost(o.output_unit_cost)}</Table.Td>
               </Table.Tr>
             ))}
             {data.items.length === 0 && (
@@ -98,7 +99,7 @@ function NewReprocessModal({ onClose }: { onClose: () => void }) {
   // Girdiler seçilen depodan tüketilir: yalnızca o depoda stoğu olan lotlar ve o depodaki miktar gösterilir.
   const lotOptions = (lots.data?.items ?? []).map((x) => {
     const qty = x.balances?.find((b) => b.warehouse_id === warehouseId)?.qty_on_hand ?? '0'
-    return { value: x.id, label: `${x.lot_no} · ${x.item_name} (${qty} ${x.uom})` }
+    return { value: x.id, label: `${x.lot_no} · ${x.item_name} (${fmtQty(qty, x.uom)})` }
   })
   const outUom = items.data?.items.find((i) => i.id === itemId)?.base_uom
 

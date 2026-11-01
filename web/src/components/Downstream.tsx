@@ -3,6 +3,7 @@ import { IconPlus } from '@tabler/icons-react'
 import { useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
 import { ApiError, apiPost, type DownstreamDistribution } from '../lib/api'
+import { qty } from '../lib/format'
 import { uuidv7 } from '../lib/uuid7'
 
 // İkinci kademe dağıtım (Görev 3): YALNIZCA kaydedilmişse kesin olarak gösterilir. Kayıt yoksa
@@ -19,7 +20,7 @@ export function DownstreamCell({ known, note, entries, onAdd }: {
         <Stack gap={2}>
           {entries.map((d) => (
             <Text key={d.id} size="xs">
-              {d.recipient_name}: {d.qty} <Text span c="dimmed" size="xs">({d.distributed_at})</Text>
+              {d.recipient_name}: {qty(d.qty)} <Text span c="dimmed" size="xs">({d.distributed_at})</Text>
             </Text>
           ))}
           {note && <Text size="xs" c="orange">{note}</Text>}

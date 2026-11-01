@@ -6,6 +6,7 @@ import { Link, useParams } from 'react-router-dom'
 import { DownstreamCell, DownstreamModal, type DownstreamTarget } from '../components/Downstream'
 import { PageHeader } from '../components/Page'
 import { API_URL, ApiError, apiGet, apiPatch, apiPost, type Recall } from '../lib/api'
+import { qty } from '../lib/format'
 
 function err(e: unknown): string {
   return e instanceof ApiError ? e.message : 'Bilinmeyen hata'
@@ -105,9 +106,9 @@ export default function RecallDetail() {
                 </Table.Td>
                 <Table.Td><Text size="xs">{[c.customer_phone, c.customer_email].filter(Boolean).join(' · ') || '—'}</Text></Table.Td>
                 <Table.Td>{c.lot_no}</Table.Td>
-                <Table.Td ta="right">{c.qty_shipped}</Table.Td>
-                <Table.Td ta="right">{c.qty_returned}</Table.Td>
-                <Table.Td ta="right">{c.remaining_risk_qty}</Table.Td>
+                <Table.Td ta="right">{qty(c.qty_shipped)}</Table.Td>
+                <Table.Td ta="right">{qty(c.qty_returned)}</Table.Td>
+                <Table.Td ta="right">{qty(c.remaining_risk_qty)}</Table.Td>
                 <Table.Td>
                   <DownstreamCell known={c.downstream_known} note={c.downstream_note} entries={c.downstream ?? []}
                     onAdd={() => setDownstreamTarget({ customerId: c.customer_id, customerName: c.customer_name, lotId: c.lot_id, lotNo: c.lot_no })} />

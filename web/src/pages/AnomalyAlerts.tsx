@@ -7,7 +7,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { SEVERITY_COLOR, SEVERITY_LABEL, SeverityBadge } from '../components/AnomalyAlerts'
 import { FilterChips, PageHeader, StatCard, StatGrid } from '../components/Page'
-import { ApiError, apiGet, apiPatch, type AnomalyAlert, type AnomalyAlertSummary, type AnomalySeverity, type List } from '../lib/api'
+import { ApiError, apiGet, apiPatch, type AnomalyAlert, type AnomalyAlertSummary, type AnomalySeverity, type List, type SalesOrder } from '../lib/api'
 import { alertTypeLabel, humanizeMessage } from '../lib/messages'
 
 function err(e: unknown): string {
@@ -18,9 +18,15 @@ const REF_TYPE_LABEL: Record<string, string> = {
   production_order: 'Dış Üretim', cutting_order: 'Parçalama', purchase_receipt: 'Alış', sales_line: 'Satış',
 }
 
+// Uyarının kaynak kaydına giden yol. sales_line uyarısında ref_id satış SATIRI id'sidir (sipariş sayfası
+// yok); sipariş, ref_no'daki sipariş numarasıyla satış listesinden bulunur. Yol çözülemezse link yerine
+// referans düz metin gösterilir.
 const REF_LINK: Record<string, (refID: string) => string> = {
   production_order: (id) => `/dis-uretim/${id}`,
   cutting_order: (id) => `/parcalama/${id}`,
+  purchase_receipt: (id) => `/alislar/${id}`,
+  lot: (id) => `/izlenebilirlik?lot_id=${id}`,
+  sales_order: (id) => `/satis-sevkiyat/${id}`,
 }
 
 export default function AnomalyAlerts() {
@@ -39,6 +45,20 @@ export default function AnomalyAlerts() {
         severity: severity ?? undefined, ref_type: refType ?? undefined, acknowledged: acknowledged ?? undefined,
       }),
   })
+
+  const hasSalesLine = !!data?.items.some((a) => a.ref_type === 'sales_line')
+  const salesOrders = useQuery({
+    queryKey: ['sales-orders', 'index'],
+    queryFn: () => apiGet<List<SalesOrder>>('/sales-orders', { limit: '1000' }),
+    enabled: hasSalesLine,
+  })
+  const refLink = (a: AnomalyAlert): string | undefined => {
+    if (a.ref_type === 'sales_line') {
+      const order = salesOrders.data?.items.find((o) => o.order_no === a.ref_no)
+      return order && `/satis-sevkiyat/${order.id}`
+    }
+    return a.ref_id ? REF_LINK[a.ref_type]?.(a.ref_id) : undefined
+  }
 
   // Kartlar açık uyarıların özetidir (üst bardaki zil ile aynı sorgu), filtreden bağımsız.
   const summary = useQuery({
@@ -93,7 +113,7 @@ export default function AnomalyAlerts() {
           </Table.Thead>
           <Table.Tbody>
             {data.items.map((a) => {
-              const link = REF_LINK[a.ref_type]?.(a.ref_id)
+              const link = refLink(a)
               return (
                 <Table.Tr key={a.id}>
                   <Table.Td style={{ whiteSpace: 'nowrap' }}><SeverityBadge severity={a.severity} /></Table.Td>

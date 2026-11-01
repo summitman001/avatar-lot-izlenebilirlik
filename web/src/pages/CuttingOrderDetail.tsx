@@ -10,15 +10,11 @@ import { AnomalyAlertsCard } from '../components/AnomalyAlerts'
 import {
   ApiError, apiGet, apiPost, apiSend, type CuttingOrder, type CuttingResult, type List, type StockMovement,
 } from '../lib/api'
+import { money, pct, qty, unitCost } from '../lib/format'
 import { warningLabel } from '../lib/messages'
 
 function err(e: unknown): string {
   return e instanceof ApiError ? e.message : 'Bilinmeyen hata'
-}
-
-function trNum(s: string | null | undefined): string {
-  if (s == null) return '—'
-  return s.replace('.', ',')
 }
 
 export default function CuttingOrderDetail() {
@@ -86,13 +82,13 @@ function InputCard({ order }: { order: CuttingOrder }) {
       <Text fw={600} mb="sm">Giriş</Text>
       <SimpleGrid cols={{ base: 2, md: 4 }}>
         <Stat label="Giriş Lotu" value={<Link to={`/lotlar?q=${order.input_lot_no}`}>{order.input_lot_no}</Link>} />
-        <Stat label="Ağırlık" value={`${trNum(order.input_weight_kg)} kg`} />
-        <Stat label="Birim Maliyet" value={`${trNum(order.unit_cost_per_kg)} €/kg`} />
+        <Stat label="Ağırlık" value={qty(order.input_weight_kg, 'kg')} />
+        <Stat label="Birim Maliyet" value={`${unitCost(order.unit_cost_per_kg)}/kg`} />
         <Stat label="Dağıtım Yöntemi" value={order.allocation_method === 'value' ? 'Değer (€)' : 'Miktar (kg)'} />
-        <Stat label="Hesaplanan Toplam" value={`${trNum(order.computed_total_cost)} €`} />
-        <Stat label="Beyan Edilen Toplam" value={order.declared_total_cost ? `${trNum(order.declared_total_cost)} €` : '—'} />
+        <Stat label="Hesaplanan Toplam" value={money(order.computed_total_cost)} />
+        <Stat label="Beyan Edilen Toplam" value={money(order.declared_total_cost)} />
         <Stat label="Kullanılan Esas" value={order.cost_basis_used === 'declared' ? 'Beyan edilen' : 'Hesaplanan'} />
-        <Stat label="Toplam Maliyet (sabit)" value={`${trNum(order.total_input_cost)} €`} />
+        <Stat label="Toplam Maliyet (sabit)" value={money(order.total_input_cost)} />
       </SimpleGrid>
       {order.resolution_note && (
         <Text size="sm" c="dimmed" mt="sm">Çözüm notu: {order.resolution_note}</Text>
@@ -176,8 +172,8 @@ function OutputsForm({ order, onSaved }: { order: CuttingOrder; onSaved: () => v
                   {o.is_waste && <Badge ml="xs" size="xs" color="gray" variant="outline">fire</Badge>}
                   {o.is_by_product && <Badge ml="xs" size="xs" color="blue" variant="outline">yan ürün</Badge>}
                 </Table.Td>
-                <Table.Td ta="right">{trNum(o.expected_weight_kg)} kg</Table.Td>
-                <Table.Td ta="right">{o.predicted_weight_kg ? `${trNum(o.predicted_weight_kg)} kg` : '—'}</Table.Td>
+                <Table.Td ta="right">{qty(o.expected_weight_kg, 'kg')}</Table.Td>
+                <Table.Td ta="right">{qty(o.predicted_weight_kg, 'kg')}</Table.Td>
                 <Table.Td ta="right">
                   <NumberInput
                     disabled={readOnly}
@@ -190,7 +186,7 @@ function OutputsForm({ order, onSaved }: { order: CuttingOrder; onSaved: () => v
                   />
                 </Table.Td>
                 <Table.Td ta="right">
-                  {diff != null ? `${diff >= 0 ? '+' : ''}${trNum(diff.toFixed(3))} kg (${diffPct?.toFixed(1)}%)` : '—'}
+                  {diff != null ? `${diff >= 0 ? '+' : ''}${qty(diff.toFixed(3), 'kg')}${diffPct != null ? ` (${pct(diffPct.toFixed(2))})` : ''}` : '—'}
                 </Table.Td>
               </Table.Tr>
             )
@@ -217,7 +213,7 @@ function BalanceBar({ order }: { order: CuttingOrder }) {
       <Group justify="space-between" mb="xs">
         <Text fw={500}>Ağırlık Dengesi</Text>
         <Text size="sm" c={ok ? 'green' : 'red'} fw={600}>
-          {trNum(outputSum.toFixed(3))} / {trNum(order.input_weight_kg)} kg (fark {trNum(diff.toFixed(3))} kg)
+          {qty(outputSum.toFixed(3))} / {qty(order.input_weight_kg, 'kg')} (fark {qty(diff.toFixed(3), 'kg')})
         </Text>
       </Group>
       <Progress value={pct} color={ok ? 'green' : 'red'} size="lg" />
@@ -242,14 +238,14 @@ function AllocationTable({ title, result }: { title: string; result: CuttingResu
           {result.parts.map((p) => (
             <Table.Tr key={p.name}>
               <Table.Td>{p.name}</Table.Td>
-              <Table.Td ta="right">{trNum(p.kg)}</Table.Td>
-              <Table.Td ta="right">{trNum(p.allocated_cost)} €</Table.Td>
-              <Table.Td ta="right">{trNum(p.unit_cost)} €/kg</Table.Td>
+              <Table.Td ta="right">{qty(p.kg)}</Table.Td>
+              <Table.Td ta="right">{money(p.allocated_cost)}</Table.Td>
+              <Table.Td ta="right">{unitCost(p.unit_cost)}/kg</Table.Td>
             </Table.Tr>
           ))}
           <Table.Tr>
             <Table.Td fw={700} colSpan={2}>Toplam</Table.Td>
-            <Table.Td ta="right" fw={700}>{trNum(result.total_allocated)} €</Table.Td>
+            <Table.Td ta="right" fw={700}>{money(result.total_allocated)}</Table.Td>
             <Table.Td />
           </Table.Tr>
         </Table.Tbody>
@@ -265,7 +261,7 @@ function AllocationComparison({ order }: { order: CuttingOrder }) {
       <Group justify="space-between" mb="sm">
         <Text fw={500}>Dağıtım Önizlemesi — Miktar vs Değer</Text>
         <Text size="sm" c="dimmed">
-          Her iki yöntemin toplamı giriş maliyetine ({trNum(order.total_input_cost)} €) birebir eşittir
+          Her iki yöntemin toplamı giriş maliyetine ({money(order.total_input_cost)}) birebir eşittir
         </Text>
       </Group>
       <SimpleGrid cols={{ base: 1, md: 2 }}>
@@ -321,8 +317,8 @@ function OutputLotsCard({ order }: { order: CuttingOrder }) {
             <Table.Tr key={o.part_item_id}>
               <Table.Td>{o.part_item_name}</Table.Td>
               <Table.Td><Link to={`/lotlar?q=${o.output_lot_no}`}>{o.output_lot_no}</Link></Table.Td>
-              <Table.Td ta="right">{trNum(o.actual_weight_kg)} kg</Table.Td>
-              <Table.Td ta="right">{trNum(o.unit_cost)} €/kg</Table.Td>
+              <Table.Td ta="right">{qty(o.actual_weight_kg, 'kg')}</Table.Td>
+              <Table.Td ta="right">{unitCost(o.unit_cost)}/kg</Table.Td>
             </Table.Tr>
           ))}
         </Table.Tbody>
@@ -346,8 +342,8 @@ function MovementsCard({ movements }: { movements: StockMovement[] }) {
             <Table.Tr key={m.id}>
               <Table.Td>{m.lot_no}</Table.Td>
               <Table.Td>{MOVEMENT_LABEL[m.movement_type] ?? m.movement_type}</Table.Td>
-              <Table.Td ta="right">{trNum(m.qty)}</Table.Td>
-              <Table.Td ta="right">{trNum(m.unit_cost)} €</Table.Td>
+              <Table.Td ta="right">{qty(m.qty)}</Table.Td>
+              <Table.Td ta="right">{unitCost(m.unit_cost)}</Table.Td>
             </Table.Tr>
           ))}
         </Table.Tbody>

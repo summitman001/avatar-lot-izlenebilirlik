@@ -1,4 +1,5 @@
-import { Badge, Button, Card, createTheme, Modal, Table, Tooltip, type MantineColorsTuple } from '@mantine/core'
+import { Badge, Button, Card, createTheme, Modal, NumberInput, Table, Tooltip, type MantineColorsTuple } from '@mantine/core'
+import type { ClipboardEvent } from 'react'
 
 // Orman yeşili marka rengi; 7. ton açık temada ana renk.
 const brand: MantineColorsTuple = [
@@ -25,6 +26,25 @@ export const theme = createTheme({
     Card: Card.extend({ defaultProps: { radius: 'lg', padding: 'lg', shadow: 'xs' } }),
     Badge: Badge.extend({ defaultProps: { tt: 'none', fw: 600 } }),
     Button: Button.extend({ defaultProps: { radius: 'xl' } }),
+    // Sayı girişi Türkçe: "11,5" de "11.5" de yazılabilir, ekranda virgül görünür. Bileşenin verdiği değer
+    // (number veya "11." gibi ara metin) nokta ondalıklıdır; API'ye giden format değişmez. valueIsNumericString:
+    // metin değerler (ör. OCR'dan gelen "11.5") virgüllü değil nokta ondalıklı sayı olarak okunur.
+    // Tek tek yazılan "." kütüphanece virgüle çevrilir; yapıştırılan "2.25" ise toplu eklendiği için nokta
+    // atılırdı (225), bu yüzden onPaste'te virgüllü haline çevrilip eklenir.
+    NumberInput: NumberInput.extend({
+      defaultProps: {
+        decimalSeparator: ',',
+        allowedDecimalSeparators: ['.', ','],
+        onPaste: (e: ClipboardEvent<HTMLInputElement>) => {
+          const text = e.clipboardData.getData('text').trim()
+          if (/^-?\d+\.\d+$/.test(text)) {
+            e.preventDefault()
+            document.execCommand('insertText', false, text.replace('.', ','))
+          }
+        },
+        ...{ valueIsNumericString: true },
+      },
+    }),
     Modal: Modal.extend({ defaultProps: { radius: 'lg', transitionProps: { transition: 'pop', duration: 200 } } }),
     Table: Table.extend({ defaultProps: { verticalSpacing: 'sm' } }),
     Tooltip: Tooltip.extend({ defaultProps: { radius: 'md', openDelay: 150 } }),

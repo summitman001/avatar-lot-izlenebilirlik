@@ -12,6 +12,7 @@ import {
   ApiError, apiGet, apiPost, type List, type Lot, type ProductionCostReport,
   type ProductionOrder, type StockMovement,
 } from '../lib/api'
+import { money, num, pct, qty, unitCost } from '../lib/format'
 import { modelLabel, warningLabel } from '../lib/messages'
 
 const STEPS: ProductionOrder['status'][] = ['draft', 'materials_sent', 'received', 'closed']
@@ -98,8 +99,8 @@ function SummaryCard({ order }: { order: ProductionOrder }) {
         <Group justify="space-between"><Text fw={500}>Özet</Text></Group>
         <Group justify="space-between"><Text size="sm" c="dimmed">Dış Üretici</Text><Text size="sm">{order.producer_supplier_name}</Text></Group>
         <Group justify="space-between"><Text size="sm" c="dimmed">Dış Üretici Deposu</Text><Text size="sm">{order.external_warehouse_code}</Text></Group>
-        <Group justify="space-between"><Text size="sm" c="dimmed">Planlanan / Teslim Alınan</Text><Text size="sm">{order.planned_qty} / {order.received_qty ?? '—'} adet</Text></Group>
-        <Group justify="space-between"><Text size="sm" c="dimmed">Hizmet Birim Fiyatı</Text><Text size="sm">{order.service_unit_price} €</Text></Group>
+        <Group justify="space-between"><Text size="sm" c="dimmed">Planlanan / Teslim Alınan</Text><Text size="sm">{qty(order.planned_qty)} / {qty(order.received_qty)} adet</Text></Group>
+        <Group justify="space-between"><Text size="sm" c="dimmed">Hizmet Birim Fiyatı</Text><Text size="sm">{unitCost(order.service_unit_price)}</Text></Group>
         <Group justify="space-between"><Text size="sm" c="dimmed">Hizmet Faturası</Text><Text size="sm">{order.service_invoice_no ?? '—'}</Text></Group>
         <Group justify="space-between"><Text size="sm" c="dimmed">Çıktı Lotu</Text>
           <Text size="sm">{order.output_lot_id
@@ -108,8 +109,8 @@ function SummaryCard({ order }: { order: ProductionOrder }) {
         </Group>
         {order.ekp_unit && (
           <>
-            <Text ta="center" fw={700} size="xl" mt="xs">EKP {order.ekp_unit.replace('.', ',')} €</Text>
-            {order.sale_price && <Text ta="center" c="dimmed" size="sm">VKP {order.sale_price.replace('.', ',')} €</Text>}
+            <Text ta="center" fw={700} size="xl" mt="xs">EKP {unitCost(order.ekp_unit)}</Text>
+            {order.sale_price && <Text ta="center" c="dimmed" size="sm">VKP {unitCost(order.sale_price)}</Text>}
           </>
         )}
       </Stack>
@@ -132,19 +133,19 @@ function PredictionCard({ prediction: p }: { prediction: NonNullable<ProductionO
             <Badge variant="light" tt="none">{modelLabel(p.model_name)}</Badge>
           </Group>
         </Group>
-        <Group justify="space-between"><Text size="sm" c="dimmed">Beklenen Adet</Text><Text size="sm">{p.predicted_delivered_qty}</Text></Group>
-        <Group justify="space-between"><Text size="sm" c="dimmed">Gerçek Adet</Text><Text size="sm">{p.actual_delivered_qty ?? '—'}</Text></Group>
+        <Group justify="space-between"><Text size="sm" c="dimmed">Beklenen Adet</Text><Text size="sm">{qty(p.predicted_delivered_qty)}</Text></Group>
+        <Group justify="space-between"><Text size="sm" c="dimmed">Gerçek Adet</Text><Text size="sm">{qty(p.actual_delivered_qty)}</Text></Group>
         <Group justify="space-between"><Text size="sm" c="dimmed">Adet Sapması</Text>
-          <Text size="sm">{p.delivered_qty_error_abs ? `${p.delivered_qty_error_abs} (%${p.delivered_qty_error_pct})` : '—'}</Text>
+          <Text size="sm">{p.delivered_qty_error_abs ? `${qty(p.delivered_qty_error_abs)} (${pct(p.delivered_qty_error_pct)})` : '—'}</Text>
         </Group>
         <Group justify="space-between"><Text size="sm" c="dimmed">Beklenen EKP</Text>
-          <Text size="sm">{p.predicted_ekp_unit ? `${p.predicted_ekp_unit} €` : '—'}</Text>
+          <Text size="sm">{unitCost(p.predicted_ekp_unit)}</Text>
         </Group>
         <Group justify="space-between"><Text size="sm" c="dimmed">Gerçek EKP</Text>
-          <Text size="sm">{p.actual_ekp_unit ? `${p.actual_ekp_unit} €` : '—'}</Text>
+          <Text size="sm">{unitCost(p.actual_ekp_unit)}</Text>
         </Group>
         <Group justify="space-between"><Text size="sm" c="dimmed">EKP Sapması</Text>
-          <Text size="sm">{p.ekp_error_abs ? `${p.ekp_error_abs} € (%${p.ekp_error_pct})` : '—'}</Text>
+          <Text size="sm">{p.ekp_error_abs ? `${unitCost(p.ekp_error_abs)} (${pct(p.ekp_error_pct)})` : '—'}</Text>
         </Group>
         <Text size="xs" c="dimmed">
           Beklenen EKP hibrit bir tahmindir: ML&apos;in fiziksel verim tahmini + kesin malzeme maliyeti
@@ -172,10 +173,10 @@ function InputsTable({ order }: { order: ProductionOrder }) {
             <Table.Tr key={i.id}>
               <Table.Td><Link to={`/lotlar?q=${i.lot_no}`}>{i.lot_no}</Link></Table.Td>
               <Table.Td>{i.item_name}</Table.Td>
-              <Table.Td ta="right">{i.qty_sent}</Table.Td>
-              <Table.Td ta="right">{i.qty_consumed ?? '—'}</Table.Td>
-              <Table.Td ta="right">{i.qty_returned ?? '—'}</Table.Td>
-              <Table.Td ta="right">{i.unit_cost_at_send}</Table.Td>
+              <Table.Td ta="right">{qty(i.qty_sent)}</Table.Td>
+              <Table.Td ta="right">{qty(i.qty_consumed)}</Table.Td>
+              <Table.Td ta="right">{qty(i.qty_returned)}</Table.Td>
+              <Table.Td ta="right">{unitCost(i.unit_cost_at_send)}</Table.Td>
             </Table.Tr>
           ))}
         </Table.Tbody>
@@ -196,23 +197,23 @@ function CostReportCard({ report: r }: { report: ProductionCostReport }) {
           {r.lines.map((l, i) => (
             <Table.Tr key={i}>
               <Table.Td>{l.label}</Table.Td>
-              <Table.Td ta="right">{l.qty ?? '—'}</Table.Td>
-              <Table.Td ta="right">{l.unit_price ?? '—'}</Table.Td>
-              <Table.Td ta="right">{l.amount} €</Table.Td>
+              <Table.Td ta="right">{qty(l.qty)}</Table.Td>
+              <Table.Td ta="right">{unitCost(l.unit_price)}</Table.Td>
+              <Table.Td ta="right">{money(l.amount)}</Table.Td>
             </Table.Tr>
           ))}
-          <Table.Tr><Table.Td colSpan={3} fw={700}>Toplam Maliyet</Table.Td><Table.Td ta="right" fw={700}>{r.total_cost} €</Table.Td></Table.Tr>
+          <Table.Tr><Table.Td colSpan={3} fw={700}>Toplam Maliyet</Table.Td><Table.Td ta="right" fw={700}>{money(r.total_cost)}</Table.Td></Table.Tr>
         </Table.Tbody>
       </Table>
       <SimpleGrid cols={{ base: 2, md: 4 }}>
-        <Stat label="EKP (birim)" value={`${r.ekp_display} €`} />
-        <Stat label="EKP (kg başına)" value={r.ekp_per_kg ? `${r.ekp_per_kg} €` : '—'} />
-        <Stat label="Verim (girdi kg)" value={r.yield_input_pct ? `%${r.yield_input_pct}` : '—'} />
-        <Stat label="Verim (et oranı)" value={r.yield_meat_ratio ?? '—'} />
-        <Stat label="Ciro" value={r.revenue ? `${r.revenue} €` : '—'} />
-        <Stat label="Brüt Kâr (toplam)" value={r.gross_profit_total ? `${r.gross_profit_total} €` : '—'} />
-        <Stat label="Marj" value={r.margin_pct ? `%${r.margin_pct}` : '—'} />
-        <Stat label="Planlanan/Teslim Farkı" value={`%${r.qty_variance_pct}`} />
+        <Stat label="EKP (birim)" value={money(r.ekp_display)} />
+        <Stat label="EKP (kg başına)" value={unitCost(r.ekp_per_kg)} />
+        <Stat label="Verim (girdi kg)" value={pct(r.yield_input_pct)} />
+        <Stat label="Verim (et oranı)" value={num(r.yield_meat_ratio)} />
+        <Stat label="Ciro" value={money(r.revenue)} />
+        <Stat label="Brüt Kâr (toplam)" value={money(r.gross_profit_total)} />
+        <Stat label="Marj" value={pct(r.margin_pct)} />
+        <Stat label="Planlanan/Teslim Farkı" value={pct(r.qty_variance_pct)} />
       </SimpleGrid>
     </Card>
   )
@@ -234,7 +235,7 @@ function MovementsTimeline({ movements }: { movements: StockMovement[] }) {
       <Timeline bulletSize={14} lineWidth={2}>
         {movements.slice().reverse().map((m) => (
           <Timeline.Item key={m.id} title={`${MOVEMENT_LABEL[m.movement_type] ?? m.movement_type} — ${m.lot_no}`}>
-            <Text c="dimmed" size="sm">{m.qty} kg/adet, birim maliyet {m.unit_cost} €</Text>
+            <Text c="dimmed" size="sm">{qty(m.qty)} kg/adet, birim maliyet {unitCost(m.unit_cost)}</Text>
             <Text size="xs" c="dimmed">{new Date(m.created_at).toLocaleString('tr-TR')}</Text>
           </Timeline.Item>
         ))}
@@ -269,7 +270,7 @@ function SendMaterialsForm({ orderId, externalWarehouseId, onDone }: { orderId: 
   })
 
   const lotOptions = (lots.data?.items ?? []).map((l) => ({
-    value: l.id, label: `${l.lot_no} — ${l.item_name} (${l.qty_on_hand ?? '0'} ${l.uom} mevcut)`,
+    value: l.id, label: `${l.lot_no} — ${l.item_name} (${qty(l.qty_on_hand ?? '0', l.uom)} mevcut)`,
   }))
 
   return (

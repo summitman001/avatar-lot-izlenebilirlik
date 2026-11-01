@@ -1,8 +1,10 @@
-import { Alert, Anchor, Badge, Card, Loader, SimpleGrid, Stack, Table, Text, Tooltip } from '@mantine/core'
+import { Alert, Anchor, Badge, Card, Loader, SimpleGrid, Stack, Table, Text } from '@mantine/core'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
 import { PageHeader } from '../components/Page'
+import { LotReason, LotStatusBadge } from '../components/LotStatus'
 import { ApiError, apiGet, type PurchaseReceiptDetail } from '../lib/api'
+import { money, qty, unitCost } from '../lib/format'
 
 function err(e: unknown): string {
   return e instanceof ApiError ? e.message : 'Bilinmeyen hata'
@@ -39,7 +41,7 @@ export default function PurchaseReceiptDetailPage() {
           <Stat label="Tedarikçi" value={r.supplier_name} />
           <Stat label="Fatura No" value={r.invoice_no ?? '—'} />
           <Stat label="Tarih" value={r.received_at} />
-          <Stat label="Toplam Tutar" value={`${r.total_amount} €`} />
+          <Stat label="Toplam Tutar" value={money(r.total_amount)} />
         </SimpleGrid>
       </Card>
 
@@ -61,11 +63,11 @@ export default function PurchaseReceiptDetailPage() {
               <Table.Tr key={l.id} bg={l.has_mismatch ? 'red.0' : undefined}>
                 <Table.Td>{l.item_name} <Text span size="xs" c="dimmed">({l.item_code})</Text></Table.Td>
                 <Table.Td><Link to={`/lotlar?q=${l.lot_no}`}>{l.lot_no}</Link></Table.Td>
-                <Table.Td ta="right">{l.qty}</Table.Td>
-                <Table.Td ta="right">{l.unit_price} €</Table.Td>
-                <Table.Td ta="right" fw={l.has_mismatch ? 700 : undefined}>{l.line_total} €</Table.Td>
+                <Table.Td ta="right">{qty(l.qty, r.lots.find((x) => x.id === l.lot_id)?.uom)}</Table.Td>
+                <Table.Td ta="right">{unitCost(l.unit_price)}</Table.Td>
+                <Table.Td ta="right" fw={l.has_mismatch ? 700 : undefined}>{money(l.line_total)}</Table.Td>
                 <Table.Td ta="right" c={l.has_mismatch ? 'red' : undefined} fw={l.has_mismatch ? 700 : undefined}>
-                  {l.declared_line_total ?? '—'} {l.declared_line_total && '€'}
+                  {money(l.declared_line_total)}
                 </Table.Td>
               </Table.Tr>
             ))}
@@ -96,14 +98,11 @@ export default function PurchaseReceiptDetailPage() {
               <Table.Tr key={lot.id}>
                 <Table.Td><Link to={`/lotlar?q=${lot.lot_no}`}>{lot.lot_no}</Link></Table.Td>
                 <Table.Td>{lot.item_name}</Table.Td>
-                <Table.Td ta="right">{lot.initial_qty} {lot.uom}</Table.Td>
-                <Table.Td ta="right">{lot.qty_on_hand ?? '—'} {lot.uom}</Table.Td>
+                <Table.Td ta="right">{qty(lot.initial_qty, lot.uom)}</Table.Td>
+                <Table.Td ta="right">{qty(lot.qty_on_hand, lot.uom)}</Table.Td>
                 <Table.Td>
-                  <Tooltip label={lot.blocked_reason ?? ''} disabled={!lot.blocked_reason}>
-                    <Badge color={lot.status === 'active' ? 'green' : lot.status === 'blocked' ? 'orange' : 'gray'} variant="light">
-                      {lot.status}
-                    </Badge>
-                  </Tooltip>
+                  <LotStatusBadge status={lot.status} />
+                  {lot.blocked_reason && <LotReason reason={lot.blocked_reason} />}
                 </Table.Td>
               </Table.Tr>
             ))}
@@ -126,8 +125,8 @@ export default function PurchaseReceiptDetailPage() {
             {r.movements.map((m) => (
               <Table.Tr key={m.id}>
                 <Table.Td>{m.lot_no}</Table.Td>
-                <Table.Td ta="right">{m.qty}</Table.Td>
-                <Table.Td ta="right">{m.unit_cost} €</Table.Td>
+                <Table.Td ta="right">{qty(m.qty)}</Table.Td>
+                <Table.Td ta="right">{unitCost(m.unit_cost)}</Table.Td>
                 <Table.Td>{new Date(m.created_at).toLocaleString('tr-TR')}</Table.Td>
               </Table.Tr>
             ))}

@@ -8,6 +8,7 @@ import { FilterChips, PageHeader, StatCard, StatGrid, SUMMARY_LIMIT, countBy } f
 import {
   ApiError, apiGet, apiPost, type CuttingOrder, type CuttingRecipe, type List, type Lot,
 } from '../lib/api'
+import { qty } from '../lib/format'
 
 const STATUS: Record<CuttingOrder['status'], { label: string; color: string }> = {
   draft: { label: 'Taslak', color: 'gray' },
@@ -44,7 +45,7 @@ export default function CuttingOrders() {
           hint={unbalanced ? `${unbalanced} dengesiz` : undefined} hintColor="orange" />
         <StatCard label="Kapandı" value={n(byStatus.closed)} icon={IconCircleCheck} color="green" />
         <StatCard label="Toplam giriş" icon={IconScale} color="orange"
-          value={totalKg == null ? '…' : `${totalKg.toLocaleString('tr-TR', { maximumFractionDigits: 3 })} kg`} />
+          value={totalKg == null ? '…' : qty(totalKg.toFixed(3), 'kg')} />
       </StatGrid>
       <Group mb="md">
         <FilterChips value={status} onChange={setStatus} allCount={data?.items.length}
@@ -71,7 +72,7 @@ export default function CuttingOrders() {
                 <Table.Td>{o.order_no}</Table.Td>
                 <Table.Td>{o.input_lot_no}</Table.Td>
                 <Table.Td>{o.input_item_name}</Table.Td>
-                <Table.Td ta="right">{o.input_weight_kg}</Table.Td>
+                <Table.Td ta="right">{qty(o.input_weight_kg)}</Table.Td>
                 <Table.Td>
                   <Badge color={STATUS[o.status].color} variant="light">{STATUS[o.status].label}</Badge>
                   {o.status === 'draft' && !o.closable && (
@@ -125,7 +126,7 @@ function NewOrderModal({ opened, onClose }: { opened: boolean; onClose: () => vo
   })
 
   const lotOptions = (lots.data?.items ?? []).map((l) => ({
-    value: l.id, label: `${l.lot_no} — ${l.item_name} (${l.qty_on_hand ?? '0'} kg mevcut)`,
+    value: l.id, label: `${l.lot_no} — ${l.item_name} (${qty(l.qty_on_hand ?? '0', 'kg')} mevcut)`,
   }))
 
   return (

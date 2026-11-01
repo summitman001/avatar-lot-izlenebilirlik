@@ -3,6 +3,7 @@
 import { Badge, Card, Group, SimpleGrid, Text, ThemeIcon, Title, UnstyledButton, type MantineSpacing } from '@mantine/core'
 import type { Icon as TablerIcon } from '@tabler/icons-react'
 import type { ReactNode } from 'react'
+import { money } from '../lib/format'
 
 // Özet kartları filtreden bağımsız, bu limitle çekilen listeden hesaplanır (backend MaxLimit).
 export const SUMMARY_LIMIT = 1000
@@ -74,7 +75,7 @@ export function FilterChips({ value, onChange, options, allCount }: {
   )
 }
 
-export const eur = (n: number) => n.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €'
+export const eur = (n: number) => money(n)
 
 export function countBy<T>(items: T[] | undefined, key: (t: T) => string): Record<string, number> {
   const out: Record<string, number> = {}
