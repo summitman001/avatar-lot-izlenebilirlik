@@ -124,6 +124,8 @@ yoksa sol da güçlü adaydır: `ABC2026000000145   Fatura No` düzeni).
   `KDV Matrahı` ile ya da `Ödenecek Tutar`/`Genel Toplam`/`Vergiler Dahil Toplam` **eksi KDV** (birden
   fazla KDV oranı toplanır) ile karşılaştırılır, iskonto da hesaba katılır. Hiçbiri tutmuyorsa
   `TOPLAM_UYUSMAZLIGI` belge uyarısı eklenir (KDV'li toplam yüzünden yanlış alarm verilmez).
+  KDV öncesi toplam okunamamışsa ve belgede KDV varsa (bir KDV satırı OCR'da kaybolmuş olabilir),
+  yalnızca satır toplamı ödenecek tutarı aşıyorsa ya da fark %20'yi (en yüksek KDV oranı) geçiyorsa uyarılır.
 - Hiçbir satır okunamazsa `SATIR_BULUNAMADI`, genel güven eşiğin (`OCR_CONFIDENCE_MEDIUM`, varsayılan
   0.5) altındaysa `DUSUK_GUVEN` belge uyarısı eklenir.
 

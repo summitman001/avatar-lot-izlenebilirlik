@@ -339,6 +339,20 @@ def test_belge_toplami_tutmazsa_uyarilir():
     assert any(w.startswith("TOPLAM_UYUSMAZLIGI") for w in r.warnings)
 
 
+def test_kdv_satiri_okunamazsa_yanlis_toplam_alarmi_verilmez():
+    # Mal Hizmet Toplami ve KDV satiri OCR'da kayip, yalniz KDV dahil odenecek tutar okunmus
+    r = _layout([row for row in _TABLE if row[0] not in (520, 550)])
+    assert len(r.lines) == 3
+    assert not any(w.startswith("TOPLAM_UYUSMAZLIGI") for w in r.warnings)
+
+
+def test_kdv_ile_aciklanamayacak_fark_uyarilir():
+    # odenecek tutar satir toplamini %20'den fazla asiyor: KDV degil, eksik satir isareti
+    rows = [row for row in _TABLE if row[0] not in (520, 550)]
+    rows = [row if row[0] != 580 else (580, [(900, "Odenecek Tutar"), (1230, "800,00")]) for row in rows]
+    assert any(w.startswith("TOPLAM_UYUSMAZLIGI") for w in _layout(rows).warnings)
+
+
 def test_ad_sayilarin_ustundeki_satirda():
     r = _layout([
         (20, [(40, "Yayla Et Ltd. Sti.")]),

@@ -1618,7 +1618,14 @@ def _extract_from_words(words: list[_Word]) -> InvoiceResult:
             if key in totals:
                 g = totals[key]
                 candidates += [g] + ([g - vat] if vat else []) + ([g - vat + disc] if vat and disc else [])
-        if candidates and not any(abs(line_sum - c) <= Decimal("0.02") for c in candidates):
+        gross = totals.get("payable", totals.get("total"))
+        # KDV oncesi toplam okunamadi ve belgede KDV var: KDV satirlarindan biri okunamamis olabilir
+        # (OCR "Hesaplanan KDV(%1)" satirini kacirabiliyor). Fark en yuksek KDV oranini (%20) asmiyorsa
+        # yanlis alarm verilmez; satir toplami odenecek tutari asiyorsa ya da fark buyukse uyarilir.
+        vat_unsure = ("subtotal" not in totals and gross is not None and re.search(r"(?<![A-Z])(?:KDV|VAT)(?![A-Z])",
+                                                                                  _key(raw_text))
+                      and Decimal(0) <= gross - line_sum <= line_sum * Decimal("0.20") + Decimal("0.02"))
+        if candidates and not vat_unsure and not any(abs(line_sum - c) <= Decimal("0.02") for c in candidates):
             declared = totals.get("subtotal")
             if declared is None:
                 g = totals.get("payable", totals.get("total"))
