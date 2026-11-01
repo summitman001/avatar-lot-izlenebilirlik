@@ -35,9 +35,10 @@ class SyncWorker @AssistedInject constructor(
     @Assisted context: Context,
     @Assisted params: WorkerParameters,
     private val sync: SyncRepository,
+    private val notifier: SaleReviewNotifier,
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result = try {
-        sync.sync()
+        notifier.notify(sync.sync())
         Result.success()
     } catch (e: CancellationException) {
         throw e

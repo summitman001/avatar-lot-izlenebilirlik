@@ -499,6 +499,7 @@ export interface SalesLine {
   stock_movement_id: string | null
   recall_violation: boolean
   negative_stock_violation: boolean
+  returned_qty: Decimal
   created_at: string
 }
 
@@ -535,6 +536,7 @@ export interface SalesOrder {
   status: 'confirmed'
   total_amount: Decimal
   has_violation: boolean
+  review_status?: 'open' | 'reviewed' | 'returned' // yalnız detayda, ihlalli satışta
   created_at: string
   lines?: SalesLine[]
   shipments?: Shipment[]

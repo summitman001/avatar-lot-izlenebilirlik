@@ -151,6 +151,10 @@ interface SalesDao {
     @Insert
     suspend fun insertReturn(row: CustomerReturnEntity)
 
+    /** Pull'dan gelen iade: cihazin kendi iadesi zaten kayitli (ayni id) ise dokunulmaz. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertReturnIfAbsent(row: CustomerReturnEntity)
+
     @Query("SELECT * FROM local_stock_movements WHERE synced = 0")
     fun observeUnsyncedMovements(): Flow<List<StockMovementEntity>>
 

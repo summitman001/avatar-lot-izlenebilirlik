@@ -820,7 +820,7 @@ paths:
   /sync/pull:
     get:
       tags: [sync]
-      summary: since_seq sonrasi degisiklikleri cek (item, customer, warehouse, lot)
+      summary: since_seq sonrasi degisiklikleri cek (item, customer, warehouse, lot, customer_return, sales_order)
       parameters:
         - { name: since_seq, in: query, schema: { type: integer, minimum: 0, default: 0 } }
         - { name: device_id, in: query, schema: { $ref: "#/components/schemas/Id" } }
@@ -1207,10 +1207,10 @@ components:
       type: object
       properties:
         seq: { type: integer, format: int64 }
-        entity: { enum: [item, customer, warehouse, lot] }
+        entity: { enum: [item, customer, warehouse, lot, customer_return, sales_order] }
         entity_id: { $ref: "#/components/schemas/Id" }
         action: { enum: [upsert, delete] }
-        payload: { type: object, description: "Ilgili varligin API JSON'u (item/customer/warehouse/lot). Lot payload'inda qty_on_hand/balances DOLUDUR: satis/iade sonrasi guncel bakiyeyi tasimasi icin lota yazan her islem (satis, iade, bloke/ac) change_log'a bu DETAYLI goruntuyle yazar." }
+        payload: { type: object, description: "Ilgili varligin API JSON'u (item/customer/warehouse/lot/customer_return). sales_order yalniz ihlalli satisin inceleme durumudur: {id, order_no, review_status}. Lot payload'inda qty_on_hand/balances DOLUDUR: satis/iade sonrasi guncel bakiyeyi tasimasi icin lota yazan her islem (satis, iade, bloke/ac) change_log'a bu DETAYLI goruntuyle yazar." }
     SyncPullResponse:
       type: object
       properties:
@@ -1541,6 +1541,7 @@ components:
         stock_movement_id: { oneOf: [{ $ref: "#/components/schemas/Id" }, { type: "null" }] }
         recall_violation: { type: boolean, description: "true: offline satis aninda lot sunucuda blocked/recalled idi" }
         negative_stock_violation: { type: boolean, description: "true: offline satista bakiye yetersizdi (NEGATIVE_STOCK_OFFLINE uyarisi), stok negatife dustu" }
+        returned_qty: { $ref: "#/components/schemas/Qty", description: "Bu satira bagli musteri iadelerinin toplami" }
         created_at: { $ref: "#/components/schemas/DateTime" }
     ShipmentLine:
       type: object
@@ -1598,6 +1599,7 @@ components:
         status: { const: confirmed }
         total_amount: { $ref: "#/components/schemas/Amount" }
         has_violation: { type: boolean, description: "en az bir satirda recall_violation=true veya negative_stock_violation=true" }
+        review_status: { enum: [open, reviewed, returned], description: "Yalniz detayda ve ihlalli satista. returned: tum ihlalli satirlar tamamen iade edildi; reviewed: her ihlalli satir iade edildi ya da (geri cagirma ihlali yoksa) eksi stok uyarisi okundu; aksi halde open" }
         created_at: { $ref: "#/components/schemas/DateTime" }
         lines: { type: array, items: { $ref: "#/components/schemas/SalesLine" } }
         shipments: { type: array, items: { $ref: "#/components/schemas/Shipment" } }

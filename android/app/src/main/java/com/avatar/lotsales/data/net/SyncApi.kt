@@ -120,6 +120,26 @@ data class LotBalanceDto(
     @SerialName("qty_on_hand") val qtyOnHand: String,
 )
 
+/** Ihlalli satisin inceleme durumu (open|reviewed|returned); iade alininca/uyari okununca gelir. */
+@Serializable
+data class SalesOrderReviewDto(
+    val id: String,
+    @SerialName("order_no") val orderNo: String,
+    @SerialName("review_status") val reviewStatus: String,
+)
+
+/** Sunucuya yazilan her musteri iadesi (web'den alinanlar dahil); sales_line_id yalniz lot iadesinde null. */
+@Serializable
+data class CustomerReturnDto(
+    val id: String,
+    @SerialName("customer_id") val customerId: String,
+    @SerialName("sales_line_id") val salesLineId: String? = null,
+    @SerialName("lot_id") val lotId: String,
+    val qty: String,
+    val reason: String,
+    @SerialName("returned_at") val returnedAt: String,
+)
+
 /**
  * push sales_order/create govdesi = sunucunun CreateSalesOrderRequest'i (backend/internal/domain/sales.go).
  * Sunucu bilinmeyen alani REDDEDER: buraya sozlesme disi alan eklemeyin. device_id gonderilmez (cihaz

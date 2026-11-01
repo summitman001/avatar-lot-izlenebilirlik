@@ -225,7 +225,8 @@ func strictUnmarshal(raw json.RawMessage, v any) error {
 	return dec.Decode(v)
 }
 
-// Pull since_seq'ten sonraki degisiklikleri (item, customer, warehouse, lot) seq sirasiyla doner.
+// Pull since_seq'ten sonraki degisiklikleri (item, customer, warehouse, lot, customer_return,
+// sales_order inceleme durumu) seq sirasiyla doner.
 // limit varsayilan 500, en fazla 1000. Kalan degisiklik varsa has_more=true.
 func (s *Store) Pull(ctx context.Context, sinceSeq int64, limit int, deviceID string) (*domain.SyncPullResponse, error) {
 	if limit <= 0 {

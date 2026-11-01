@@ -20,6 +20,11 @@ const (
 	// ViolationNegativeStock: offline satışta bakiye yetersizdi; satış yine kaydedildi, stok negatife
 	// düştü, anomaly_alert (critical) açıldı.
 	ViolationNegativeStock = "NEGATIVE_STOCK_OFFLINE"
+
+	// İhlalli satışın inceleme durumu (SalesOrder.ReviewStatus, bkz. ReviewStatus).
+	ReviewOpen     = "open"
+	ReviewReviewed = "reviewed"
+	ReviewReturned = "returned"
 )
 
 // ---------------------------------------------------------------------------
@@ -41,8 +46,11 @@ type SalesLine struct {
 	RecallViolation bool    `json:"recall_violation"`
 	// NegativeStockViolation: offline satışta bakiye yetersizdi (bu satıra bağlı NEGATIVE_STOCK_OFFLINE
 	// uyarısı var); satış kaydedildi, stok negatife düştü.
-	NegativeStockViolation bool      `json:"negative_stock_violation"`
-	CreatedAt              time.Time `json:"created_at"`
+	NegativeStockViolation bool `json:"negative_stock_violation"`
+	// NegativeStockOpen: eksi stok uyarısı henüz okunmadı (acknowledged=false); ReviewStatus için.
+	NegativeStockOpen bool      `json:"-"`
+	ReturnedQty       Qty       `json:"returned_qty"` // bu satıra bağlı müşteri iadelerinin toplamı
+	CreatedAt         time.Time `json:"created_at"`
 }
 
 type ShipmentLine struct {
@@ -83,10 +91,50 @@ type SalesOrder struct {
 	TotalAmount   Amount    `json:"total_amount"`
 	// HasViolation: en az bir satırda recall_violation veya negative_stock_violation (liste görünümünde
 	// rozet için; detayda hangi satırın neyi ihlal ettiği Lines[i]'den okunur).
-	HasViolation bool        `json:"has_violation"`
+	HasViolation bool `json:"has_violation"`
+	// ReviewStatus: yalnız detayda ve ihlalli satışta dolu (open|reviewed|returned), bkz. ReviewStatus.
+	ReviewStatus string      `json:"review_status,omitempty"`
 	CreatedAt    time.Time   `json:"created_at"`
 	Lines        []SalesLine `json:"lines,omitempty"`
 	Shipments    []Shipment  `json:"shipments,omitempty"`
+}
+
+// SalesOrderReview sync pull'daki sales_order değişikliğinin payload'ıdır: cihaz "İncelemede" satışını
+// günceller (iade alındığında veya eksi stok uyarısı okunduğunda yazılır).
+type SalesOrderReview struct {
+	ID           string `json:"id"`
+	OrderNo      string `json:"order_no"`
+	ReviewStatus string `json:"review_status"`
+}
+
+// ReviewStatus ihlalli satışın inceleme durumunu satırlardan türetir; ihlal yoksa "". Bir ihlalli satır
+// tamamı iade edilince ya da (geri çağırma ihlali yoksa) eksi stok uyarısı okununca kapanır. Tüm ihlalli
+// satırlar tamamen iade edildiyse returned, hepsi kapandıysa reviewed, aksi halde open.
+func ReviewStatus(lines []SalesLine) string {
+	violating, returned, closed := 0, 0, 0
+	for _, l := range lines {
+		if !l.RecallViolation && !l.NegativeStockViolation {
+			continue
+		}
+		violating++
+		switch {
+		case l.ReturnedQty.GreaterThanOrEqual(l.Qty.Decimal):
+			returned++
+			closed++
+		case !l.RecallViolation && !l.NegativeStockOpen:
+			closed++
+		}
+	}
+	switch {
+	case violating == 0:
+		return ""
+	case returned == violating:
+		return ReviewReturned
+	case closed == violating:
+		return ReviewReviewed
+	default:
+		return ReviewOpen
+	}
 }
 
 type CustomerReturn struct {

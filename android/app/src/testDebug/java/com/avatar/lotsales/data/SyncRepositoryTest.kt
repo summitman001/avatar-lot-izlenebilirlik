@@ -5,7 +5,11 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.avatar.lotsales.data.db.AppDatabase
 import com.avatar.lotsales.data.net.AppJson
+import com.avatar.lotsales.data.net.Change
 import com.avatar.lotsales.data.net.FakeApiInterceptor
+import com.avatar.lotsales.data.net.PullResponse
+import com.avatar.lotsales.data.net.PushRequest
+import com.avatar.lotsales.data.net.PushResponse
 import com.avatar.lotsales.data.net.SyncApi
 import com.avatar.lotsales.domain.SaleError
 import com.avatar.lotsales.domain.SaleException
@@ -133,6 +137,54 @@ class SyncRepositoryTest {
         assertEquals("NEGATIVE_STOCK_OFFLINE", sync.observeStatus().first().problems.single().lastError)
         assertEquals(BigDecimal("-5.000"), lot(LOT).available) // sunucu otoriter: 85 - 90
     }
+
+    @Test
+    fun serverReviewAndWebReturnUpdateFlaggedSaleOnce() = runBlocking {
+        readyWithVan()
+        db.master().updateLotQty(LOT, BigDecimal("100.000"))
+        sales.createSale(MARKET_A, listOf(sale(LOT, "90")))
+        sync.sync() // flagged NEGATIVE_STOCK_OFFLINE
+        val orderId = db.column("SELECT id FROM sales_orders").single()!!
+        val orderNo = db.column("SELECT order_no FROM sales_orders").single()!!
+        val lineId = db.column("SELECT id FROM sales_lines").single()!!
+        val stock = lot(LOT).available
+
+        fun review(status: String) = change("sales_order", orderId, """{"id":"$orderId","order_no":"$orderNo","review_status":"$status"}""")
+        val webReturn = change(
+            "customer_return", "01a17000-0000-7000-8000-000000000901",
+            """{"id":"01a17000-0000-7000-8000-000000000901","customer_id":"$MARKET_A","sales_line_id":"$lineId","lot_id":"$LOT","qty":"90.000","reason":"web iadesi","returned_at":"2026-11-01T14:00:00Z"}""",
+        )
+        val otherDevice = change(
+            "customer_return", "01a17000-0000-7000-8000-000000000902",
+            """{"id":"01a17000-0000-7000-8000-000000000902","customer_id":"$MARKET_A","sales_line_id":"01a17000-0000-7000-8000-000000000999","lot_id":"$LOT","qty":"1.000","reason":"x","returned_at":"2026-11-01T14:00:00Z"}""",
+        )
+
+        assertEquals(listOf(SaleReviewUpdate(orderId, orderNo, "reviewed")), serverSends(review("reviewed")))
+        assertEquals(listOf("reviewed"), db.column("SELECT status FROM sales_orders"))
+        assertTrue("ayni durum tekrar bildirilmez", serverSends(review("reviewed")).isEmpty())
+
+        assertEquals(listOf(SaleReviewUpdate(orderId, orderNo, "returned")), serverSends(webReturn, otherDevice, review("returned")))
+        assertEquals(listOf("90.000"), db.column("SELECT qty FROM customer_returns WHERE sales_line_id = '$lineId'"))
+        assertEquals(1, db.count("customer_returns")) // baska cihazin satirina ait iade alinmaz
+        assertEquals(stock, lot(LOT).available) // iade yerel hareket yazmaz: bakiye sunucunun lot kaydindan gelir
+
+        // imlec sifirlanmis gibi eski degisiklikler tekrar gelir: son durum ayni, bildirim yok, iade cift yazilmaz
+        assertTrue(serverSends(review("open"), webReturn, review("returned")).isEmpty())
+        assertEquals(listOf("returned"), db.column("SELECT status FROM sales_orders"))
+        assertEquals(1, db.count("customer_returns"))
+    }
+
+    private fun change(entity: String, id: String, payload: String) = Change(0, entity, id, "upsert", AppJson.parseToJsonElement(payload))
+
+    /** Sunucu yalniz verilen degisiklikleri dondurur (push bos); bloke listesi FakeApi ile ayni kalir. */
+    private suspend fun serverSends(vararg changes: Change): List<SaleReviewUpdate> = SyncRepository(
+        db,
+        object : SyncApi {
+            override suspend fun push(body: PushRequest) = PushResponse(emptyList(), 0)
+            override suspend fun pull(sinceSeq: Long, deviceId: String, limit: Int) =
+                PullResponse(changes.toList(), sinceSeq + changes.size, blockedLotIds = listOf(BLOCKED_LOT))
+        },
+    ).sync()
 
     @Test
     fun returnIsPushedAndRestoresStock() = runBlocking {
