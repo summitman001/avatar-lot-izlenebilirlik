@@ -38,6 +38,19 @@ bir model yok — fatura düzeni belge belge çok farklı olduğundan, bu ölçe
 genel geçer bir model kurmak gerçekçi değil; kural tabanlı yaklaşım hem şeffaf (her alanın neden o
 değeri aldığı `source_text`'ten görülür) hem de jüri/kullanıcı için öngörülebilir.
 
+### PDF (`_load_document`)
+
+PDF'ler **pypdfium2** ile okunur (pdfium pip paketinin içinde gelir; poppler gibi harici bir program
+**gerekmez** — eskiden poppler'ı olmayan Windows kurulumunda her PDF boş dönüyordu).
+
+- **Dijital PDF** (portaldan/ERP'den indirilen e-Fatura): yazı belgede metin olarak durur. Harf kutuları
+  konumlarıyla okunup kelimelere çevrilir ve OCR çıktısıyla **aynı kurallardan** geçer — OCR hatası yoktur,
+  süre milisaniyelerdir, Tesseract hiç çalışmaz. İlk 10 sayfa okunur; sayfalar alt alta birleştirilir,
+  kalem tablosu sonraki sayfada devam edebilir (`Sayfa 1/2` altbilgisi tabloyu bitirir, ikinci sayfada
+  tekrarlanan başlık yeniden başlatır).
+- **Taranmış PDF** (metin katmanı yok ya da kodlaması bozuk — anlamsız karakterler veya fatura kelimesi
+  içermeyen metin): ilk 3 sayfa 300 DPI görüntüye çevrilip OCR'lanır.
+
 ### Ön işleme (`preprocess_image`)
 
 Deterministik, her adım en iyi gayret (başarısız olursa atlanır):
@@ -245,8 +258,8 @@ uyuşmazlığı, mevcut "Tutar uyuşmazlığı" rozetiyle aynen görünüyor).
   bağlanır; yanlış okunan sayı `TUTAR_UYUSMAZLIGI` ile işaretlenir; kullanıcı düzeltir.
 - **Alışılmadık (sütunsuz, serbest metin) düzenler başarısız olabilir.** Bu durumda sistem boş öneri
   döner (hata vermez), kullanıcı manuel giriş yapar.
-- **Çok sayfalı PDF'in yalnızca ilk sayfası işlenir.** PDF'in metin katmanı (dijital e-Fatura PDF'leri)
-  kullanılmaz, sayfa 300 DPI görüntüye çevrilip OCR'lanır.
+- **Sayfa sınırı:** dijital PDF'in ilk 10 sayfası, taranmış PDF'in ilk 3 sayfası okunur (OCR sayfa başına
+  birkaç saniye sürer, backend 30 sn bekler).
 - **Tek bir global ondalık ayıracı sezilir** (belge genelinden); aynı belgede hem `1.234,56` hem
   `1,234.56` karışık kullanılırsa (gerçek hayatta neredeyse hiç olmaz) yanlış sezilebilir.
 - **Para birimi bilgisi yalnızca gösterim amaçlıdır**: sistem tüm tutarları € olarak tutar, çoklu

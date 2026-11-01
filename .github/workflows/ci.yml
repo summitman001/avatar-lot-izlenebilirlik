@@ -20,7 +20,7 @@ jobs:
             ml/requirements.txt
             ml/requirements-dev.txt
       - name: Install Tesseract (fatura/irsaliye OCR, bkz. docs/invoice-ocr.md)
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-tur poppler-utils fonts-dejavu-core
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-tur fonts-dejavu-core
       - name: Install dependencies
         run: pip install -r requirements.txt -r requirements-dev.txt
       - name: Golden files are up to date

@@ -6,10 +6,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # Fatura/irsaliye OCR (bkz. docs/invoice-ocr.md): Tesseract imaj icinde kurulu, harici API/internet
-# GEREKMEZ. poppler-utils: PDF'in ilk sayfasini goruntuye cevirmek icin (pdf2image).
+# GEREKMEZ. PDF okuma pypdfium2 pip paketiyle (pdfium icinde gelir, poppler gerekmez).
 # fonts-dejavu-core: demo ornek faturalarini uretmek icin (ml/invoicegen).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      tesseract-ocr tesseract-ocr-tur poppler-utils fonts-dejavu-core \
+      tesseract-ocr tesseract-ocr-tur fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

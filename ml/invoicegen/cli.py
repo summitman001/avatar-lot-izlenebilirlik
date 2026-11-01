@@ -15,7 +15,7 @@ import argparse
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .render import EfInvoice, EfLine, Line, photo_degrade, render_efatura, render_invoice
+from .render import EfInvoice, EfLine, Line, efatura_pdf, photo_degrade, render_efatura, render_invoice
 
 if TYPE_CHECKING:
     from PIL import Image
@@ -99,6 +99,11 @@ def build_efatura(**overrides) -> "Image.Image":
 
 def build_efatura_photo() -> "Image.Image":
     return photo_degrade(build_efatura())
+
+
+def build_efatura_pdf(**overrides) -> bytes:
+    """Ayni faturanin metin katmanli (dijital) PDF'i: portaldan indirilen e-Fatura gibi."""
+    return efatura_pdf(efatura_invoice(**overrides))
 
 
 BUILDERS = {

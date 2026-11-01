@@ -238,23 +238,105 @@ def _is_date_token(s: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _load_image(content: bytes, content_type: str, filename: str) -> Image.Image:
-    name = (filename or "").lower()
-    if (content_type or "") == "application/pdf" or name.endswith(".pdf"):
+_PDF_DPI = 300  # OCR'lanacak sayfa goruntusu; metin katmani da bu piksel olcegine cevrilir
+_PDF_MAX_TEXT_PAGES = 10  # metin katmani milisaniyeler surer: cok sayfali faturanin tum kalemleri
+_PDF_MAX_OCR_PAGES = 3  # OCR sayfa basina birkac saniye; backend 30 sn bekliyor
+
+
+def _is_pdf(content: bytes, content_type: str, filename: str) -> bool:
+    return content[:5] == b"%PDF-" or (content_type or "") == "application/pdf" or \
+        (filename or "").lower().endswith(".pdf")
+
+
+def _load_document(content: bytes, content_type: str, filename: str) -> tuple[list[Image.Image], list | None]:
+    """(OCR'lanacak sayfa goruntuleri, PDF metin katmani kelimeleri).
+
+    Dijital PDF'te (portaldan indirilen e-Fatura) yazi belgede metin olarak durur: konumlariyla
+    dogrudan okunur, OCR hatasi olmaz ve goruntu uretilmez. Metin katmani yoksa (taranmis PDF) ya da
+    kodlamasi bozuksa sayfalar goruntuye cevrilip OCR'lanir. PDF icin harici program (poppler)
+    GEREKMEZ: pdfium, pypdfium2 pip paketinin icinde gelir (Windows'ta da calisir)."""
+    if not _is_pdf(content, content_type, filename):
         try:
-            from pdf2image import convert_from_bytes
-        except ImportError as e:  # pragma: no cover - poppler/pdf2image her zaman imajda kurulu
-            raise UnsupportedFileError(f"PDF destegi yuklenemedi: {e}") from e
-        pages = convert_from_bytes(content, first_page=1, last_page=1, dpi=300)
-        if not pages:
-            raise UnsupportedFileError("PDF'den sayfa okunamadi")
-        return pages[0]
+            img = Image.open(io.BytesIO(content))
+            img.load()
+            return [img], None
+        except Exception as e:
+            raise UnsupportedFileError(f"dosya goruntu olarak acilamadi: {e}") from e
+    import pypdfium2 as pdfium
+
     try:
-        img = Image.open(io.BytesIO(content))
-        img.load()
-        return img
+        pdf = pdfium.PdfDocument(content)
     except Exception as e:
-        raise UnsupportedFileError(f"dosya goruntu olarak acilamadi: {e}") from e
+        raise UnsupportedFileError(f"PDF acilamadi: {e}") from e
+    try:
+        if len(pdf) == 0:
+            raise UnsupportedFileError("PDF'te sayfa yok")
+        words = _pdf_text_words(pdf)
+        if _text_layer_ok(words):
+            return [], words
+        # .convert: goruntu pdfium bitmap belleginden kopyalanir (belge kapaninca da gecerli kalir)
+        return [pdf[i].render(scale=_PDF_DPI / 72).to_pil().convert("RGB")
+                for i in range(min(len(pdf), _PDF_MAX_OCR_PAGES))], None
+    finally:
+        pdf.close()
+
+
+def _pdf_text_words(pdf) -> list:
+    """PDF metin katmanindan kelime kutucuklari: 300 DPI piksel olcegi, sayfalar alt alta (cok sayfali
+    faturada kalem tablosu sonraki sayfada devam eder)."""
+    scale = _PDF_DPI / 72
+    words: list[_Word] = []
+    y_off = 0.0
+    for pi in range(min(len(pdf), _PDF_MAX_TEXT_PAGES)):
+        page = pdf[pi]
+        page_h = page.get_size()[1]
+        tp = page.get_textpage()
+        line = 0
+        chars: list[tuple[str, float, float, float, float]] = []  # (harf, sol, ust, sag, alt)
+
+        def flush() -> None:
+            if chars:
+                left, top = min(c[1] for c in chars), min(c[2] for c in chars)
+                right, bottom = max(c[3] for c in chars), max(c[4] for c in chars)
+                words.append(_Word("".join(c[0] for c in chars), 1.0, round(left), round(top),
+                                   max(1, round(right - left)), max(1, round(bottom - top)), (pi, line)))
+                chars.clear()
+
+        for i in range(tp.count_chars()):
+            ch = tp.get_text_range(i, 1)
+            if not ch or ch.isspace():
+                flush()
+                if ch == "\n":
+                    line += 1
+                continue
+            # pdfium kutusu (sol, alt, sag, ust), sol alt kose baslangicli; "gevsek" kutu yaziya gore
+            # degil font yuksekligine gore oldugundan bir satirdaki harflerin yuksekligi tutarli
+            left, bottom, right, top = tp.get_charbox(i, loose=True)
+            box = (ch, left * scale, y_off + (page_h - top) * scale, right * scale, y_off + (page_h - bottom) * scale)
+            if chars:
+                prev, h = chars[-1], box[4] - box[2]
+                # bosluk karakteri olmadan araliklandirilmis yazi ya da baska satira gecis: yeni kelime
+                if box[1] - prev[3] > 0.25 * h or abs((box[2] + box[4]) - (prev[2] + prev[4])) / 2 > 0.5 * h:
+                    flush()
+            chars.append(box)
+        flush()
+        tp.close()
+        page.close()
+        y_off += page_h * scale + 100
+    return words
+
+
+_TEXT_LAYER_HINT_RE = re.compile(r"FATURA|IRSALIYE|TOPLAM|TUTAR|MIKTAR|KDV|FIYAT|INVOICE|TOTAL")
+
+
+def _text_layer_ok(words: list) -> bool:
+    """Metin katmani kullanilabilir mi? Taranmis PDF'te yoktur ya da birkac kelimedir; ToUnicode'u
+    eksik PDF'te anlamsiz karakterler gelir. Ikisinde de sayfa OCR'lanir."""
+    text = "".join(w.text for w in words)
+    if len(words) < 10 or sum(c.isalpha() for c in text) < 30:
+        return False
+    readable = sum(1 for c in text if c.isalnum() or c in ".,:;/-%()€₺$'\"&+*#")
+    return readable / len(text) >= 0.9 and bool(_TEXT_LAYER_HINT_RE.search(_key(text)))
 
 
 # Tesseract ~300 DPI'da en iyi okur: A4 icin uzun kenar ~3300 px. Kucuk goruntuler buyutulur, cok
@@ -977,8 +1059,9 @@ _COLUMN_RE = re.compile("|".join(f"(?<![A-Z])(?P<c{i}>{pat})(?![A-Z])" for i, (_
 _HEADER_FRAGMENTS = {"ORANI", "ORAN", "ORAM", "TUTARI", "TUTAR", "TUTAN", "FIYATI", "FIYAT", "NO", "ADI", "KODU",
                      "BIRIMI", "TARIHI", "TAR.", "(EUR)", "(TL)", "(€)", "%", "MIKTARI", "ACIKLAMASI", "CINSI", "(KG)"}
 _NUMERIC_COLS = {"qty", "price", "total", "vat_rate", "vat_amount", "disc_rate", "disc_amount", "line_no"}
+# "Sayfa 1/2": cok sayfali belgede tablo sayfa sonunda biter, sonraki sayfada baslik tekrarlanir
 _TABLE_END_RE = re.compile(r"(?<![A-Z])(?:TOP[L1I|]AM|YALNIZ|IBAN|BANKA|NOT\s*:|ACIKLAMA\s*:|TESLIM\s*EDEN|IMZA"
-                           r"|KASE|MATRAH|HESAPLANAN|ODENECEK|SUBTOTAL|TOTAL)(?![A-Z])")
+                           r"|KASE|MATRAH|HESAPLANAN|ODENECEK|SUBTOTAL|TOTAL|SAYFA\s*:?\s*\d|PAGE\s*\d)(?![A-Z])")
 # Tek sayili, miktarsiz satirda bu kelimelerin bozuk hali bile tablonun bittigini gosterir
 _TOTALS_HINT_RE = re.compile(r"TOP|TUTA|KDV|MATRAH|ISKONTO|ODENECEK|GENEL|YEKUN|VERGI")
 
@@ -1458,7 +1541,10 @@ def _extract_items(rows: list[_Row], number_format: str) -> tuple[list[_Item], s
             ri += 1
             continue
         if _TABLE_END_RE.search(row.key) or row.top - last_bottom > 10 * row.height:
-            _flush_pending(items, pending)
+            if _TABLE_END_RE.search(row.key):
+                _flush_pending(items, pending)
+            else:
+                pending = []  # buyuk bosluktan (sayfa sonu) onceki yazi satiri altbilgidir, urun adi degil
             cols = None
             ri += 1
             continue
@@ -1695,21 +1781,41 @@ _PSM_SEQUENCE = (6, 4, 3)
 _PSM_MIN_RUNS = 2
 
 
-def extract_invoice(content: bytes, content_type: str, filename: str) -> InvoiceResult:
-    """Fatura/irsaliye goruntusunden (veya PDF'in ilk sayfasindan) alan onerileri cikarir.
+def _ocr_pages(images: list[Image.Image], psm: int) -> list[_Word]:
+    """Sayfalari alt alta tek kelime listesinde birlestirir (kalem tablosu sonraki sayfada devam eder)."""
+    words: list[_Word] = []
+    y_off = 0
+    for pi, img in enumerate(images):
+        for w in run_tesseract(img, psm):
+            w.top += y_off
+            w.line = (pi, *w.line)
+            words.append(w)
+        y_off += img.height + 100
+    return words
 
-    HATA FIRLATMAZ: goruntu acilamazsa / OCR basarisiz olursa / hicbir alan okunamazsa bos
+
+def extract_invoice(content: bytes, content_type: str, filename: str) -> InvoiceResult:
+    """Fatura/irsaliye goruntusunden ya da PDF'ten alan onerileri cikarir. Dijital PDF'in metin
+    katmani OCR'siz okunur; goruntu ve taranmis PDF Tesseract'la okunur.
+
+    HATA FIRLATMAZ: dosya acilamazsa / OCR basarisiz olursa / hicbir alan okunamazsa bos
     oneri + dusuk (0.0) guven doner (bkz. docs/invoice-ocr.md, "Sinirliliklar").
     """
     try:
-        img = preprocess_image(_load_image(content, content_type, filename))
+        pages, text_words = _load_document(content, content_type, filename)
+        if text_words:
+            return _extract_from_words(text_words)
+        images = [preprocess_image(p) for p in pages]
+    except UnsupportedFileError as e:  # bozuk/desteklenmeyen dosya: beklenen kullanici hatasi
+        return _empty_result(f"OCR_BASARISIZ: dosya islenemedi ({e})")
     except Exception as e:
+        log.exception("fatura dosyasi islenemedi")
         return _empty_result(f"OCR_BASARISIZ: dosya islenemedi ({e})")
     results: list[InvoiceResult] = []
     error: Exception | None = None
     for i, psm in enumerate(_PSM_SEQUENCE):
         try:
-            results.append(_extract_from_words(run_tesseract(img, psm)))
+            results.append(_extract_from_words(_ocr_pages(images, psm)))
         except Exception as e:  # kullaniciya bos oneri doner, hata loglanir (sessizce yutulmaz)
             log.exception("fatura OCR cikarimi basarisiz (psm=%s)", psm)
             error = error or e
