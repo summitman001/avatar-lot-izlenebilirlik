@@ -15,7 +15,7 @@ import argparse
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .render import Line, render_invoice
+from .render import EfInvoice, EfLine, Line, photo_degrade, render_efatura, render_invoice
 
 if TYPE_CHECKING:
     from PIL import Image
@@ -60,6 +60,45 @@ def build_low_quality() -> "Image.Image":
         grand_total="712,00",
         degraded=True,
     )
+
+
+def efatura_invoice(**overrides) -> EfInvoice:
+    """GIB e-Fatura benzeri ornek: iki satirlik unvan, alt satira tasan urun adi (adinda "1 kg"
+    gecer), %10 iskontolu satir, ad icinde LOT/SKT, iki farkli KDV orani ve KDV'li toplam kutusu.
+
+    Beklenen: Mal Hizmet Toplam = 174,00 + 202,50 + 96,00 = 472,50; KDV %1 = 3,77, %10 = 9,60;
+    Odenecek = 485,87. Iskontolu satirin net birim fiyati 202,50 / 20 = 10,125.
+    """
+    spec = dict(
+        seller=["AKYAZI ET VE ET ÜRÜNLERİ GIDA", "SANAYİ VE TİCARET LİMİTED ŞİRKETİ",
+                "Organize Sanayi Bölgesi 3. Cad. No:14", "Kemalpaşa / İZMİR",
+                "Tel: 0232 555 12 34  Fax: 0232 555 12 35", "Vergi Dairesi: KEMALPAŞA  VKN: 0123456789",
+                "Mersis No: 0012345678900015"],
+        seller_name_lines=2,
+        doc_no="AKY2026000000145",
+        doc_date="01-11-2026",
+        lines=[
+            EfLine("Kuzu But Kemikli Vakumlu Paket Özel Kesim 1 kg'lık", "12", "KG", "14,50", "174,00",
+                   vat_amount="1,74"),
+            EfLine("Dana Kıyma (LOT: DK-2026-118)", "20", "KG", "11,25", "202,50", disc_pct="%10",
+                   disc_amount="22,50", vat_amount="2,03"),
+            EfLine("Sucuk Baharatı SKT: 10.05.2027", "4", "ADET", "24,00", "96,00", vat_pct="%10",
+                   vat_amount="9,60"),
+        ],
+        totals=[("Mal Hizmet Toplam Tutarı", "472,50"), ("Toplam İskonto", "22,50"),
+                ("Hesaplanan KDV(%1)", "3,77"), ("Hesaplanan KDV(%10)", "9,60"),
+                ("Vergiler Dahil Toplam Tutar", "485,87"), ("Ödenecek Tutar", "485,87")],
+    )
+    spec.update(overrides)
+    return EfInvoice(**spec)
+
+
+def build_efatura(**overrides) -> "Image.Image":
+    return render_efatura(efatura_invoice(**overrides))
+
+
+def build_efatura_photo() -> "Image.Image":
+    return photo_degrade(build_efatura())
 
 
 BUILDERS = {
