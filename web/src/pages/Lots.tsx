@@ -5,18 +5,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { FilterChips, PageHeader, StatCard, StatGrid, SUMMARY_LIMIT, countBy } from '../components/Page'
+import { LOT_STATUS as STATUS, LotReason, LotStatusBadge } from '../components/LotStatus'
 import { ApiError, apiGet, apiPost, type List, type Lot, type StockMovement, type StockTransfer, type Warehouse } from '../lib/api'
+import { money, qty as fmtQty, unitCost } from '../lib/format'
 import { uuidv7 } from '../lib/uuid7'
 
 function err(e: unknown): string {
   return e instanceof ApiError ? e.message : 'Bilinmeyen hata'
-}
-
-const STATUS: Record<Lot['status'], { label: string; color: string }> = {
-  active: { label: 'Aktif', color: 'green' },
-  blocked: { label: 'Bloke', color: 'orange' },
-  recalled: { label: 'Geri çağrıldı', color: 'red' },
-  consumed: { label: 'Tükendi', color: 'gray' },
 }
 
 // Alış belgesinde hesaplanan tutar ile beyan edilen tutar farklıysa (has_mismatch) uyarı rozeti.
@@ -24,7 +19,7 @@ function MismatchBadge({ lot }: { lot: Lot }) {
   const p = lot.purchase
   if (!p?.has_mismatch) return null
   return (
-    <Tooltip label={`Belge ${p.doc_no}: hesaplanan ${p.line_total} ≠ beyan edilen ${p.declared_line_total}`}>
+    <Tooltip label={`Belge ${p.doc_no}: hesaplanan ${money(p.line_total)} ≠ beyan edilen ${money(p.declared_line_total)}`}>
       <Badge color="red" variant="filled" ml="xs">
         Tutar uyuşmazlığı
       </Badge>
@@ -123,8 +118,8 @@ export default function Lots() {
           <Table.Tbody>
             {data.items.map((lot) => (
               <Table.Tr key={lot.id}>
-                <Table.Td>
-                  {lot.lot_no}
+                <Table.Td style={{ whiteSpace: 'nowrap' }}>
+                  <Link to={`/izlenebilirlik?lot_id=${lot.id}`}>{lot.lot_no}</Link>
                   <MismatchBadge lot={lot} />
                 </Table.Td>
                 <Table.Td>
@@ -132,15 +127,13 @@ export default function Lots() {
                 </Table.Td>
                 <Table.Td>{lot.supplier_name ?? '—'}</Table.Td>
                 <Table.Td>{lot.received_or_produced_at}</Table.Td>
-                {/* Miktar ve maliyet string olarak gösterilir; Number'a çevrilmez. */}
-                <Table.Td ta="right">{lot.initial_qty} {lot.uom}</Table.Td>
-                <Table.Td ta="right">{lot.qty_on_hand ?? '—'} {lot.uom}</Table.Td>
-                <Table.Td ta="right">{lot.unit_cost}</Table.Td>
-                <Table.Td>
-                  <Badge color={STATUS[lot.status].color} variant="light">{STATUS[lot.status].label}</Badge>
-                  {lot.blocked_reason && (
-                    <Tooltip label={lot.blocked_reason}><Text span size="xs" c="dimmed" ml="xs">(sebep)</Text></Tooltip>
-                  )}
+                {/* Miktar ve maliyet string olarak biçimlenir; Number'a çevrilmez (lib/format). */}
+                <Table.Td ta="right" style={{ whiteSpace: 'nowrap' }}>{fmtQty(lot.initial_qty, lot.uom)}</Table.Td>
+                <Table.Td ta="right" style={{ whiteSpace: 'nowrap' }}>{fmtQty(lot.qty_on_hand, lot.uom)}</Table.Td>
+                <Table.Td ta="right" style={{ whiteSpace: 'nowrap' }}>{unitCost(lot.unit_cost)}</Table.Td>
+                <Table.Td miw={lot.blocked_reason ? 240 : 110}>
+                  <LotStatusBadge status={lot.status} />
+                  {lot.blocked_reason && <LotReason reason={lot.blocked_reason} />}
                 </Table.Td>
                 <Table.Td>
                   {lot.status === 'blocked' ? (
@@ -230,12 +223,12 @@ function TransferModal({ lot, onClose }: { lot: Lot; onClose: () => void }) {
         <Alert color="orange" mb="sm">Lot {STATUS[lot.status].label.toLowerCase()}: yalnızca karantina deposuna taşınabilir.</Alert>
       )}
       <Select label="Kaynak depo" required mb="sm" value={fromId} onChange={setFromId}
-        data={sources.map((b) => ({ value: b.warehouse_id, label: `${b.warehouse_code} (${b.qty_on_hand} ${lot.uom})` }))} />
+        data={sources.map((b) => ({ value: b.warehouse_id, label: `${b.warehouse_code} (${fmtQty(b.qty_on_hand, lot.uom)})` }))} />
       <Select label="Hedef depo" required mb="sm" value={toId} onChange={setToId}
         data={targets.map((w) => ({ value: w.id, label: `${w.name} (${w.code})` }))} />
       <NumberInput label={`Miktar (${lot.uom})`} required mb="sm" min={0} decimalScale={3} value={qty}
         onChange={(v) => setQty(typeof v === 'number' ? v : '')}
-        description={source ? `En fazla ${source.qty_on_hand}` : undefined} />
+        description={source ? `En fazla ${fmtQty(source.qty_on_hand, lot.uom)}` : undefined} />
       <TextInput label="Not" mb="md" maxLength={400} value={note} onChange={(e) => setNote(e.currentTarget.value)} />
       <Group justify="flex-end">
         <Button variant="default" onClick={onClose}>Vazgeç</Button>
@@ -274,10 +267,10 @@ function WasteModal({ lot, onClose }: { lot: Lot; onClose: () => void }) {
     <Modal opened onClose={onClose} title={`Fire Kaydı: ${lot.lot_no}`}>
       {formError && <Alert color="red" mb="sm">{formError}</Alert>}
       <Select label="Depo" required mb="sm" value={warehouseId} onChange={setWarehouseId}
-        data={sources.map((b) => ({ value: b.warehouse_id, label: `${b.warehouse_code} (${b.qty_on_hand} ${lot.uom})` }))} />
+        data={sources.map((b) => ({ value: b.warehouse_id, label: `${b.warehouse_code} (${fmtQty(b.qty_on_hand, lot.uom)})` }))} />
       <NumberInput label={`Fire miktarı (${lot.uom})`} required mb="sm" min={0} decimalScale={3} value={qty}
         onChange={(v) => setQty(typeof v === 'number' ? v : '')}
-        description={source ? `En fazla ${source.qty_on_hand}` : undefined} />
+        description={source ? `En fazla ${fmtQty(source.qty_on_hand, lot.uom)}` : undefined} />
       <TextInput label="Sebep" required mb="md" maxLength={400} placeholder="bozulma, imha, …" value={reason} onChange={(e) => setReason(e.currentTarget.value)} />
       <Group justify="flex-end">
         <Button variant="default" onClick={onClose}>Vazgeç</Button>
