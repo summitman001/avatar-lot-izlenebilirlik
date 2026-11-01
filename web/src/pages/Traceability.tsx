@@ -1,15 +1,17 @@
-import { Alert, Badge, Button, Card, Group, Loader, Modal, Stack, Table, Tabs, Text, Textarea, Title, Tooltip } from '@mantine/core'
-import { useDisclosure } from '@mantine/hooks'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Alert, Badge, Button, Card, Group, Loader, Modal, SimpleGrid, Stack, Table, Tabs, Text, Textarea, TextInput, Title, Tooltip } from '@mantine/core'
+import { useDebouncedValue, useDisclosure } from '@mantine/hooks'
+import { IconSearch } from '@tabler/icons-react'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { LotSearch } from '../components/LotSearch'
+import { LOT_STATUS, LotStatusBadge, RecallLink, isLotHeld, splitReason } from '../components/LotStatus'
 import { PageHeader } from '../components/Page'
 import {
   ApiError, apiGet, apiPost,
-  type GenealogyResponse,
+  type GenealogyResponse, type List, type Lot,
   type TraceBackwardResponse, type TraceForwardResponse,
 } from '../lib/api'
+import { qty, unitCost } from '../lib/format'
 import { processLabel } from '../lib/messages'
 import { DownstreamCell } from '../components/Downstream'
 
@@ -65,7 +67,7 @@ function GenealogyTree({ data, onSelect, selectedLotId }: { data: GenealogyRespo
               <Table.Tr key={i}>
                 <Table.Td>{nodeByID.get(e.from_lot_id)?.lot_no ?? e.from_lot_id}</Table.Td>
                 <Table.Td>{nodeByID.get(e.to_lot_id)?.lot_no ?? e.to_lot_id}</Table.Td>
-                <Table.Td ta="right">{e.qty} {e.uom}</Table.Td>
+                <Table.Td ta="right">{qty(e.qty, e.uom)}</Table.Td>
                 <Table.Td>{processLabel(e.process_type)}</Table.Td>
               </Table.Tr>
             ))}
@@ -94,8 +96,8 @@ function ForwardPanel({ data }: { data: TraceForwardResponse }) {
                 <Table.Td>{n.lot_no}</Table.Td>
                 <Table.Td>{n.item_name}</Table.Td>
                 <Table.Td ta="right">{n.depth}</Table.Td>
-                <Table.Td ta="right">{n.qty_on_hand_total} {n.uom}</Table.Td>
-                <Table.Td ta="right">{n.returned_qty} {n.uom}</Table.Td>
+                <Table.Td ta="right">{qty(n.qty_on_hand_total, n.uom)}</Table.Td>
+                <Table.Td ta="right">{qty(n.returned_qty, n.uom)}</Table.Td>
                 <Table.Td><Badge color={STATUS_COLOR[n.status]} variant="light">{STATUS_LABEL[n.status] ?? n.status}</Badge></Table.Td>
               </Table.Tr>
             ))}
@@ -116,8 +118,8 @@ function ForwardPanel({ data }: { data: TraceForwardResponse }) {
             {data.summary.customers.map((c) => (
               <Table.Tr key={c.customer_id}>
                 <Table.Td>{c.customer_name}</Table.Td>
-                <Table.Td ta="right">{c.qty_shipped}</Table.Td>
-                <Table.Td ta="right">{c.qty_returned}</Table.Td>
+                <Table.Td ta="right">{qty(c.qty_shipped)}</Table.Td>
+                <Table.Td ta="right">{qty(c.qty_returned)}</Table.Td>
                 <Table.Td>
                   <DownstreamCell known={c.downstream_known} note={c.downstream_note} entries={c.downstream ?? []} />
                 </Table.Td>
@@ -142,7 +144,7 @@ function ForwardPanel({ data }: { data: TraceForwardResponse }) {
                 <Table.Tr key={i}>
                   <Table.Td>{s.order_no}</Table.Td>
                   <Table.Td>{s.customer_name}</Table.Td>
-                  <Table.Td ta="right">{s.qty}</Table.Td>
+                  <Table.Td ta="right">{qty(s.qty)}</Table.Td>
                   <Table.Td>{new Date(s.sold_at).toLocaleDateString('tr-TR')}</Table.Td>
                   <Table.Td>{s.recall_violation && <Badge color="red" variant="filled">Bloke lot satışı</Badge>}</Table.Td>
                 </Table.Tr>
@@ -175,7 +177,7 @@ function BackwardPanel({ data }: { data: TraceBackwardResponse }) {
               <Table.Td>{n.item_name}</Table.Td>
               <Table.Td>{n.supplier_name ?? '—'}</Table.Td>
               <Table.Td><Text size="xs">{[n.supplier_phone, n.supplier_email].filter(Boolean).join(' · ') || '—'}</Text></Table.Td>
-              <Table.Td ta="right">{n.qty_used ?? '—'} {n.uom}</Table.Td>
+              <Table.Td ta="right">{qty(n.qty_used, n.uom)}</Table.Td>
               <Table.Td>{n.received_or_produced_at}</Table.Td>
               <Table.Td>{processLabel(n.process_type)}{n.order_no ? ` (${n.order_no})` : ''}</Table.Td>
             </Table.Tr>
@@ -185,6 +187,76 @@ function BackwardPanel({ data }: { data: TraceBackwardResponse }) {
           )}
         </Table.Tbody>
       </Table>
+    </Card>
+  )
+}
+
+// Açılışta en yeni lotlar listelenir (sunucu sırası); yazdıkça 300 ms gecikmeyle lot no / ürün adına göre
+// süzülür, buton gerekmez. Satıra tıklayınca o lotun izlemesi açılır.
+function LotPicker({ initialQuery, onSelect }: { initialQuery: string; onSelect: (id: string) => void }) {
+  const [q, setQ] = useState(initialQuery)
+  const [debouncedQ] = useDebouncedValue(q.trim(), 300)
+  const { data, isLoading, isFetching, error } = useQuery({
+    queryKey: ['lot-suggest', debouncedQ, 'trace'],
+    queryFn: () => apiGet<List<Lot>>('/lots', { q: debouncedQ, limit: '30' }),
+    placeholderData: keepPreviousData,
+  })
+  return (
+    <Stack gap="sm">
+      <div>
+        <TextInput radius="xl" size="md" leftSection={<IconSearch size={16} />} rightSection={isFetching ? <Loader size="xs" /> : null}
+          placeholder="Lot no veya ürün adı yazın" aria-label="Lot ara" value={q} onChange={(e) => setQ(e.currentTarget.value)} />
+        <Text size="xs" c="dimmed" mt={4} ml="md">Örnek: ET-2026-001</Text>
+      </div>
+      {error && <Alert color="red">{err(error)}</Alert>}
+      {isLoading && <Loader size="sm" />}
+      {data && (
+        <Table striped highlightOnHover withTableBorder>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Lot no</Table.Th><Table.Th>Ürün</Table.Th><Table.Th>Durum</Table.Th><Table.Th ta="right">Kalan miktar</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {data.items.map((lot) => (
+              <Table.Tr key={lot.id} onClick={() => onSelect(lot.id)} style={{ cursor: 'pointer' }}>
+                <Table.Td fw={600}>{lot.lot_no}</Table.Td>
+                <Table.Td>{lot.item_name}</Table.Td>
+                <Table.Td><LotStatusBadge status={lot.status} /></Table.Td>
+                <Table.Td ta="right" style={{ whiteSpace: 'nowrap' }}>{qty(lot.qty_on_hand ?? '0', lot.uom)}</Table.Td>
+              </Table.Tr>
+            ))}
+            {data.items.length === 0 && (
+              <Table.Tr><Table.Td colSpan={4}><Text c="dimmed" size="sm">Bu aramayla eşleşen lot yok</Text></Table.Td></Table.Tr>
+            )}
+          </Table.Tbody>
+        </Table>
+      )}
+    </Stack>
+  )
+}
+
+// Seçili lotun özeti (lot detayı): durum, miktar, maliyet; bloke/geri çağrılmışsa sebebin tam metni ve
+// ilgili geri çağırma kaydına link.
+function LotInfoCard({ lotId }: { lotId: string }) {
+  const { data: lot } = useQuery({ queryKey: ['lot', lotId], queryFn: () => apiGet<Lot>(`/lots/${lotId}`) })
+  if (!lot) return null
+  const reason = lot.blocked_reason ? splitReason(lot.blocked_reason) : null
+  return (
+    <Card withBorder>
+      <SimpleGrid cols={{ base: 2, md: 5 }}>
+        <div><Text size="xs" c="dimmed">Ürün</Text><Text fw={600}>{lot.item_name}</Text></div>
+        <div><Text size="xs" c="dimmed">Durum</Text><LotStatusBadge status={lot.status} /></div>
+        <div><Text size="xs" c="dimmed">İlk miktar</Text><Text fw={600}>{qty(lot.initial_qty, lot.uom)}</Text></div>
+        <div><Text size="xs" c="dimmed">Eldeki miktar</Text><Text fw={600}>{qty(lot.qty_on_hand ?? '0', lot.uom)}</Text></div>
+        <div><Text size="xs" c="dimmed">Birim maliyet</Text><Text fw={600}>{unitCost(lot.unit_cost)}</Text></div>
+      </SimpleGrid>
+      {reason && isLotHeld(lot.status) && (
+        <Alert color="red" variant="light" mt="md" title={`${LOT_STATUS[lot.status].label}: satışa ve sevke kapalı`}>
+          {reason.recallNo && <Text size="sm" mb={4}>Geri çağırma kaydı: <RecallLink recallNo={reason.recallNo} /></Text>}
+          <Text size="sm">Sebep: {reason.text}</Text>
+        </Alert>
+      )}
     </Card>
   )
 }
@@ -230,7 +302,7 @@ export default function Traceability() {
   return (
     <Stack>
       <PageHeader mb="xs" eyebrow="Bir lotun nereden geldiğini ve nereye gittiğini izle" title="İzlenebilirlik" />
-      <LotSearch radius="xl" size="md" initialQuery={params.get('q') ?? ''} onSelect={(lot) => select(lot.id)} />
+      {!selectedLotId && <LotPicker initialQuery={params.get('q') ?? ''} onSelect={select} />}
 
       {selectedLotId && (
         <>
@@ -241,6 +313,8 @@ export default function Traceability() {
               <Button color="red" onClick={openRecall}>Bu lottan geri çağırma başlat</Button>
             </Group>
           </Group>
+
+          <LotInfoCard lotId={selectedLotId} />
 
           {genealogyQuery.error && <Alert color="red">{genealogyQuery.error.message}</Alert>}
           {genealogyQuery.isLoading && <Loader />}
