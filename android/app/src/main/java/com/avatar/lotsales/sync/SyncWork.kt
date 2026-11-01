@@ -99,8 +99,11 @@ class ConnectivityObserver @Inject constructor(@ApplicationContext private val c
                 trySend(true)
             }
 
+            // Varsayilan ag baska bir aga gecerken onAvailable(yeni) gelir; onLost yalniz yerine ag
+            // kalmadiginda gelir. Burada current() sorulmaz: cm.activeNetwork bu anda kaybolan agi hala
+            // dondurebilir ve gosterge cevrimdisiyken "Guncel"de takili kalirdi.
             override fun onLost(network: Network) {
-                trySend(current())
+                trySend(false)
             }
         }
         trySend(current())
