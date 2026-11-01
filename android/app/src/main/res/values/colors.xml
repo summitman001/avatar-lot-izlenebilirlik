@@ -2,5 +2,5 @@
 <resources>
     <color name="ic_launcher_background">#2E7D32</color>
     <!-- Compose temasindaki yuzey rengiyle ayni (ui/Theme.kt); ilk karede pencere arka plani -->
-    <color name="surface_cream">#FBF8F1</color>
+    <color name="window_background">#F3F5F9</color>
 </resources>

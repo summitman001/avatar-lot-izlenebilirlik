@@ -1,13 +1,13 @@
 package com.avatar.lotsales.ui
 
-import androidx.compose.ui.test.assertHasClickAction
-import androidx.compose.ui.test.assertHasNoClickAction
-import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.avatar.lotsales.data.LotRepository
@@ -20,19 +20,26 @@ import com.avatar.lotsales.data.inMemoryDb
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.math.BigDecimal
 
-/** Lot listesi: bloke lot kirmizi rozetli, gerekcesi gorunur ve tiklanamaz; aktif lot tiklaninca o lotla satis acilir. */
+/**
+ * Lotlar: ilk ekran yalnız özet + liste butonu; listede satıra dokununca ayrıntılar açılır. Bloke lotun
+ * gerekçesi görünür ve satış butonu yoktur; aktif lotun butonu o lotla satışı açar.
+ */
 @RunWith(AndroidJUnit4::class)
 class LotsScreenTest {
     @get:Rule
     val compose = createComposeRule()
 
     private lateinit var db: AppDatabase
+
+    // aktif lotun SKT'si test tarihine göre kritik olabilir: buton metni ikisinden biri
+    private val sellButton = hasText("Satışa ver") or hasText("Öncelikli sat")
 
     @Before
     fun setUp() = runBlocking {
@@ -48,24 +55,55 @@ class LotsScreenTest {
     fun tearDown() = db.close()
 
     @Test
-    fun blockedLotIsNotClickableAndActiveLotOpensSale() {
-        val opened = mutableListOf<String>()
+    fun summaryShowsNoLotRowsAndButtonOpensList() {
+        var opened = false
         val vm = LotsViewModel(LotRepository(db))
-        compose.setContent { LotsScreen(onSell = { opened += it }, vm = vm) }
+        compose.setContent { LotsScreen(onOpenList = { opened = true }, vm = vm) }
 
         // Room Flow'u kendi executor'unda calisir; compose kurali onu beklemez.
+        compose.waitUntil(5_000) { vm.all.value.size == 2 }
+        compose.onNodeWithText("SUC-2026-045", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("Lot listesini aç", substring = true).performScrollTo().performClick()
+
+        assertTrue(opened)
+    }
+
+    @Test
+    fun tappingRowShowsDetailsAndOnlyActiveLotCanBeSold() {
+        val opened = mutableListOf<String>()
+        val vm = LotsViewModel(LotRepository(db))
+        compose.setContent { LotListScreen(onSell = { opened += it }, vm = vm, warehouse = "WH-MAIN") }
+
         compose.waitUntil(5_000) { vm.lots.value.size == 2 }
-        // Lot kartlari ozet kartlarinin altinda: kucuk test ekraninda gorunmek icin kaydirilir.
-        val list = compose.onNode(hasScrollAction())
+        val list = compose.onNode(hasScrollToIndexAction())
 
-        list.performScrollToNode(hasText("SUC-2026-099", substring = true))
-        compose.onNodeWithText("SUC-2026-099", substring = true).assertHasNoClickAction()
-        compose.onNodeWithText("geri cagirma").assertExists() // bloke gerekcesi kartta
-        compose.onAllNodesWithText("Bloke").fetchSemanticsNodes().let { check(it.isNotEmpty()) { "bloke rozeti bekleniyor" } }
+        // kapalı satırda ayrıntı yok; bloke satır dokununca gerekçe açılır, satış butonu çıkmaz
+        compose.onNodeWithText("geri cagirma").assertDoesNotExist()
+        compose.onNodeWithText("SUC-2026-099", substring = true).performClick()
+        list.performScrollToNode(hasText("geri cagirma"))
+        compose.onAllNodes(sellButton).assertCountEquals(0)
 
+        // aktif satır (FEFO: bloke lottan sonra) açılınca bloke satır kapanır; depo ve satış butonu görünür
         list.performScrollToNode(hasText("SUC-2026-045", substring = true))
-        compose.onNodeWithText("SUC-2026-045", substring = true).assertHasClickAction().performClick()
+        compose.onNodeWithText("SUC-2026-045", substring = true).performClick()
+        compose.onNodeWithText("geri cagirma").assertDoesNotExist()
+        list.performScrollToNode(sellButton)
+        compose.onNodeWithText("WH-MAIN").assertExists()
+        compose.onNode(sellButton).performClick()
 
         assertEquals(listOf("a"), opened)
+    }
+
+    @Test
+    fun blockedChipListsOnlyBlockedLots() {
+        val vm = LotsViewModel(LotRepository(db))
+        compose.setContent { LotListScreen(onSell = {}, vm = vm) }
+
+        compose.waitUntil(5_000) { vm.lots.value.size == 2 }
+        compose.onNodeWithText("Bloke · 1").performClick()
+        compose.waitUntil(5_000) { vm.lots.value.size == 1 }
+
+        compose.onAllNodesWithText("SUC-2026-045", substring = true).assertCountEquals(0)
+        compose.onNodeWithText("SUC-2026-099", substring = true).assertExists()
     }
 }

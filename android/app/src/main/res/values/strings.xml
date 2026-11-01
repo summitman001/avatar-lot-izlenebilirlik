@@ -17,6 +17,7 @@
     <string name="indicator_syncing">Senkronlanıyor…</string>
 
     <string name="title_lots">Stok ve Lotlar</string>
+    <string name="title_lot_list">Lotlar</string>
     <string name="title_new_sale">Yeni Satış</string>
     <string name="title_sales">Satışlar</string>
     <string name="title_sale_detail">Satış Detayı</string>
@@ -28,11 +29,14 @@
     <string name="lots_search">Lot no veya ürün adı ara…</string>
     <string name="lots_empty">Lot yok. Senkron sekmesinden senkronlayın.</string>
     <string name="lots_no_match">Aramaya uyan lot yok.</string>
+    <string name="lots_open_list">Lot listesini aç</string>
+    <string name="lots_most_urgent">En acil: %1$s · %2$s</string>
     <string name="expiry_none">SKT yok</string>
     <string name="expiry_expired">SKT geçti</string>
     <string name="expiry_today">SKT bugün</string>
     <string name="expiry_days">SKT %1$d gün</string>
     <string name="expiry_date">SKT %1$s</string>
+    <string name="expiry_in_days">SKT\'ye %1$d gün</string>
     <string name="status_active">Aktif</string>
     <string name="status_blocked">Bloke</string>
     <string name="status_recalled">Geri çağrıldı</string>
@@ -53,6 +57,7 @@
     <string name="sync_card_offline">Çevrimdışı · satışlar cihazda saklanır</string>
     <string name="refresh">Yenile</string>
     <string name="chip_all">Tümü</string>
+    <string name="chip_label">%1$s · %2$d</string>
     <string name="lot_remaining">Kalan stok</string>
     <string name="lot_price">Satış fiyatı</string>
     <string name="lot_expiry">SKT</string>
@@ -62,7 +67,12 @@
     <string name="lot_blocked_title">Bloke gerekçesi</string>
     <string name="lot_recalled_title">Geri çağırma</string>
     <string name="lot_blocked_default">Satış ve sevk yazılımsal olarak kilitli.</string>
-    <string name="badge_critical">Kritik (%1$d gün)</string>
+    <string name="lot_warehouse">Depo</string>
+    <string name="lot_unit_cost">Birim maliyet</string>
+    <string name="lot_details_show">Ayrıntıları göster</string>
+    <string name="lot_details_hide">Ayrıntıları gizle</string>
+    <string name="badge_days">%1$d gün</string>
+    <string name="badge_today">Bugün</string>
 
     <string name="customer">Müşteri</string>
     <string name="product">Ürün</string>
