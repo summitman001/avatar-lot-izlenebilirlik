@@ -10,7 +10,7 @@ Android uygulamasından oluşur.
 
 **Takım:** CIONA RB · **Üyeler:** Enes Altunbaş, Taha Efe Tuncer, Eren Sarı
 
-[DEMO VİDEOSU](VIDEO_LINKI_BURAYA)
+[DEMO VİDEOSU](https://www.youtube.com/watch?v=-Mo9bVZPAXw)
 
 ## İçindekiler
 
