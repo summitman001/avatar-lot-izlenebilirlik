@@ -9,7 +9,9 @@ from io import BytesIO
 import pytest
 
 from app import ocr
-from invoicegen.cli import build_clean, build_efatura, build_efatura_photo, build_low_quality, build_mismatch
+from invoicegen.cli import (build_clean, build_efatura, build_efatura_pdf, build_efatura_photo, build_low_quality,
+                            build_mismatch)
+from invoicegen.render import text_pdf
 
 
 def _png_bytes(img) -> bytes:
@@ -429,3 +431,72 @@ def test_efatura_telefon_fotografi():
     buf = BytesIO()
     build_efatura_photo().save(buf, format="JPEG", quality=90)
     _efatura_checks(ocr.extract_invoice(buf.getvalue(), "image/jpeg", "foto.jpg"))
+
+
+# ---------------------------------------------------------------- PDF
+
+
+@pytest.mark.parametrize("kwargs", [{}, {"info_layout": "left", "unit_column": True, "doc_date": "01.11.2026"},
+                                    {"info_layout": "below"}], ids=["sag", "sol-birim-sutunu", "alt"])
+def test_dijital_pdf_metin_katmani_ocrsiz_okunur(kwargs, monkeypatch):
+    # portaldan indirilen e-Fatura PDF'i: yazi belgede metin olarak durur, Tesseract hic cagrilmamali
+    def no_ocr(*_a, **_k):
+        raise AssertionError("metin katmani varken OCR calisti")
+
+    monkeypatch.setattr(ocr, "run_tesseract", no_ocr)
+    r = ocr.extract_invoice(build_efatura_pdf(**kwargs), "application/pdf", "efatura.pdf")
+    _efatura_checks(r)
+    # OCR hatasi olmadigindan adlar birebir (ornek PDF Helvetica'da g/s/i'nin Turkce hallerini sadelestirir)
+    assert [l.product_name.value for l in r.lines] == \
+        ["Kuzu But Kemikli Vakumlu Paket Özel Kesim 1 kg'lik", "Dana Kiyma", "Sucuk Baharati"]
+    assert r.supplier_name.value == "AKYAZI ET VE ET ÜRÜNLERI GIDA SANAYI VE TICARET LIMITED SIRKETI"
+
+
+def test_taranmis_pdf_poppler_olmadan_okunur():
+    # metin katmani olmayan (goruntuden olusan) PDF: sayfa pdfium ile goruntuye cevrilip OCR'lanir;
+    # eskiden poppler kurulu olmayan makinede (Windows) her PDF bos donuyordu
+    buf = BytesIO()
+    build_efatura().save(buf, format="PDF", resolution=200)
+    _efatura_checks(ocr.extract_invoice(buf.getvalue(), "application/octet-stream", "tarama.pdf"))
+
+
+def _pdf_rows(rows):
+    return [(x, y, 24, False, text) for y, segments in rows for x, text in segments]
+
+
+def test_cok_sayfali_dijital_pdf_kalemler_sonraki_sayfada_devam_eder():
+    header = [(80, "Urun"), (700, "Miktar"), (950, "Birim Fiyat"), (1300, "Tutar")]
+    page1 = _pdf_rows([
+        (100, [(70, "Yayla Hayvancilik Ltd. Sti.")]),
+        (160, [(1000, "Fatura No:"), (1250, "YAY2026000000012")]),
+        (200, [(1000, "Fatura Tarihi:"), (1250, "05.11.2026")]),
+        (400, header),
+        (450, [(80, "Kuzu But"), (700, "10 kg"), (950, "14,50"), (1300, "145,00")]),
+        (500, [(80, "Dana Kiyma"), (700, "20 kg"), (950, "11,25"), (1300, "225,00")]),
+        (2250, [(750, "Sayfa 1/2")]),
+    ])
+    page2 = _pdf_rows([
+        (100, header),
+        (150, [(80, "Sucuk Baharati"), (700, "4 adet"), (950, "24,00"), (1300, "96,00")]),
+        (300, [(950, "Ara Toplam"), (1300, "466,00")]),
+        (2250, [(750, "Sayfa 2/2")]),
+    ])
+    r = ocr.extract_invoice(text_pdf([page1, page2]), "application/pdf", "iki-sayfa.pdf")
+    assert [l.product_name.value for l in r.lines] == ["Kuzu But", "Dana Kiyma", "Sucuk Baharati"]
+    assert (r.document_no.value, r.document_date.value) == ("YAY2026000000012", "2026-11-05")
+    assert not any(w.startswith("TOPLAM_UYUSMAZLIGI") for w in r.warnings)
+
+
+def test_bozuk_pdf_hata_firlatmaz():
+    r = ocr.extract_invoice(b"%PDF-1.4 bu bir pdf degil", "application/pdf", "bozuk.pdf")
+    assert r.lines == [] and r.overall_confidence == 0.0
+    assert any(w.startswith("OCR_BASARISIZ") for w in r.warnings)
+
+
+def test_bozuk_kodlamali_metin_katmani_kullanilmaz():
+    # ToUnicode'u eksik PDF'te metin anlamsiz karakterlerdir: OCR'a dusulmeli
+    garbled = [ocr._Word("", 1.0, i * 50, 0, 40, 20, (0, 0)) for i in range(40)]
+    assert not ocr._text_layer_ok(garbled)
+    readable = [ocr._Word(t, 1.0, i * 80, 0, 70, 20, (0, 0))
+                for i, t in enumerate("Fatura No ABC2026000000001 Miktar Birim Fiyat Tutar Toplam Dana Eti".split() * 2)]
+    assert ocr._text_layer_ok(readable)

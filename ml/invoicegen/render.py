@@ -160,7 +160,12 @@ def _wrap(draw, text: str, font, width: int) -> list[str]:
 
 def render_efatura(inv: EfInvoice) -> Image.Image:
     img = Image.new("L", (_W, _H), color=255)
-    d = ImageDraw.Draw(img)
+    _draw_efatura(ImageDraw.Draw(img), inv)
+    return img.convert("RGB")
+
+
+def _draw_efatura(d, inv: EfInvoice) -> None:
+    """Cizim hedefi PIL ImageDraw ya da _PdfRecorder (ayni duzenin metin katmanli PDF'i)."""
     f_body, f_bold, f_small = _font(23), _font(23, bold=True), _font(21)
     f_title = _font(46, bold=True)
 
@@ -256,7 +261,76 @@ def render_efatura(inv: EfInvoice) -> Image.Image:
         d.text((1580 - _text_w(d, val, f_body), y + 8), val, font=f_body, fill=_INK)
         y += 40
     d.text((70, y + 40), "Not: Ödeme 30 gün içinde yapılacaktır.", font=f_small, fill=_INK)
-    return img.convert("RGB")
+
+
+# ---------------------------------------------------------------------------
+# Metin katmanli PDF (portaldan indirilen dijital e-Fatura gibi; OCR gerekmez)
+# ---------------------------------------------------------------------------
+
+# Standart Helvetica yalniz WinAnsi (cp1252) harflerini tasir: g/s/i'nin Turkce halleri sadelestirilir.
+_PDF_FOLD = str.maketrans({"ğ": "g", "Ğ": "G", "ş": "s", "Ş": "S", "ı": "i", "İ": "I"})
+
+
+def text_pdf(pages: list[list[tuple[float, float, float, bool, str]]], width: float = _W, height: float = _H,
+             dpi: int = 200) -> bytes:
+    """Kucuk PDF yazici: her oge (x, taban cizgisi y, punto(px), kalin, metin), piksel olarak sol ustten.
+    Yalniz metin nesnesi yazar (cizgi/goruntu yok); pdfium/Acrobat okuyabilir."""
+    k = 72 / dpi
+    objs = ["<< /Type /Catalog /Pages 2 0 R >>", None,
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>"]
+    kids = []
+    for items in pages:
+        ops = []
+        for x, y, size, bold, text in items:
+            s = text.translate(_PDF_FOLD).encode("cp1252", "replace").decode("latin-1")
+            s = s.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+            ops.append(f"BT /F{2 if bold else 1} {size * k:.2f} Tf 1 0 0 1 {x * k:.2f} {(height - y) * k:.2f} Tm ({s}) Tj ET")
+        stream = "\n".join(ops)
+        objs.append(f"<< /Length {len(stream.encode('latin-1'))} >>\nstream\n{stream}\nendstream")
+        objs.append(f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {width * k:.2f} {height * k:.2f}] "
+                    f"/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents {len(objs)} 0 R >>")
+        kids.append(f"{len(objs)} 0 R")
+    objs[1] = f"<< /Type /Pages /Kids [{' '.join(kids)}] /Count {len(kids)} >>"
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = []
+    for i, body in enumerate(objs, start=1):
+        offsets.append(len(out))
+        out += f"{i} 0 obj\n{body}\nendobj\n".encode("latin-1")
+    xref = len(out)
+    out += f"xref\n0 {len(objs) + 1}\n0000000000 65535 f \n".encode()
+    out += "".join(f"{o:010d} 00000 n \n" for o in offsets).encode()
+    out += f"trailer\n<< /Size {len(objs) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    return bytes(out)
+
+
+class _PdfRecorder:
+    """ImageDraw yerine gecer: metinleri PDF ogesi olarak kaydeder, olcumu gercek bir cizime birakir."""
+
+    def __init__(self):
+        self.items: list[tuple[float, float, float, bool, str]] = []
+        self._measure = ImageDraw.Draw(Image.new("L", (1, 1)))
+
+    def text(self, xy, text, font, fill=None):
+        ascent, _ = font.getmetrics()
+        bold = "bold" in str(getattr(font, "path", "")).lower() or "bd." in str(getattr(font, "path", "")).lower()
+        self.items.append((xy[0], xy[1] + ascent, font.size, bold, text))
+
+    def textbbox(self, xy, text, font):
+        return self._measure.textbbox(xy, text, font=font)
+
+    def rectangle(self, *_a, **_k):
+        pass
+
+    def line(self, *_a, **_k):
+        pass
+
+
+def efatura_pdf(inv: EfInvoice) -> bytes:
+    """render_efatura ile ayni duzenin metin katmanli PDF'i."""
+    rec = _PdfRecorder()
+    _draw_efatura(rec, inv)
+    return text_pdf([rec.items])
 
 
 def photo_degrade(img: Image.Image, angle: float = 2.5, seed: int = 7) -> Image.Image:
