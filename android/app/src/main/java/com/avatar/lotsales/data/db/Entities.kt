@@ -151,9 +151,14 @@ object SyncKeys {
     const val DEVICE_WAREHOUSE_ID = "device_warehouse_id"
 }
 
-/** sales_orders.status: confirmed (sunucuda temiz), flagged (kaydedildi, incelemede), rejected (kaydedilmedi). */
+/**
+ * sales_orders.status: confirmed (sunucuda temiz), flagged (kaydedildi, incelemede), rejected (kaydedilmedi).
+ * flagged satis pull'daki inceleme durumuyla reviewed (ihlal okundu) veya returned (tamami iade) olur.
+ */
 object OrderStatus {
     const val CONFIRMED = "confirmed"
     const val FLAGGED = "flagged"
     const val REJECTED = "rejected"
+    const val REVIEWED = "reviewed"
+    const val RETURNED = "returned"
 }

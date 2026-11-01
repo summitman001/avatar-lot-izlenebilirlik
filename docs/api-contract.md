@@ -428,6 +428,10 @@ Liste filtreleri: `customer_id`, `lot_id`, `from`/`to` (sold_at, `YYYY-MM-DD`). 
 sevkiyatları içerir; liste yalnızca `has_violation` (en az bir satırda `recall_violation=true` veya
 `negative_stock_violation=true`) bayrağını taşır. `negative_stock_violation`: offline satışta bakiye
 yetersizdi, satış kaydedildi ve stok negatife düştü (satıra bağlı `NEGATIVE_STOCK_OFFLINE` uyarısı).
+Her satır `returned_qty` (o satıra bağlı iadelerin toplamı) taşır; `qty - returned_qty` sıfırsa satır
+tamamen iade edilmiştir. Detay, ihlalli satışta `review_status` da döner: `returned` (tüm ihlalli satırlar
+tamamen iade edildi), `reviewed` (her ihlalli satır ya iade edildi ya da — geri çağırma ihlali yoksa —
+eksi stok uyarısı okundu), aksi halde `open`. İhlalsiz satışta alan yoktur.
 
 ### `POST /customer-returns` — müşteri iadesi
 

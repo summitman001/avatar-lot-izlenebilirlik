@@ -9,7 +9,8 @@ Makine okunur tanım: `backend/api/openapi.yaml`. Genel kurallar (decimal string
 
 > **Durum:** Sözleşme kesindir VE **sunucu tarafı push işleme gerçektir** (stub değil): `sales_order/create`
 > ve `customer_return/create` gerçekten işlenir, stok defterine yazar, offline kurallarını uygular.
-> Pull tamdır (item, customer, warehouse, lot — lot bakiyesi dahil).
+> Pull tamdır (item, customer, warehouse, lot — lot bakiyesi dahil; ayrıca customer_return ve ihlalli
+> satışın inceleme durumu için sales_order).
 
 ## Temel fikirler
 
@@ -126,7 +127,15 @@ bakiyeli olarak yeniden yazılır.
 }
 ```
 
-- `changes`: `seq > since_seq`, `seq` sırasıyla, en fazla `limit` (varsayılan 500, en çok 1000). Bugün `entity`: `item`, `customer`, `warehouse`, `lot`. Bu tablolara yazan her repo fonksiyonu `change_log` kaydını **aynı transaction'da** atar; yazma geri alınırsa kayıt da gitmez.
+- `changes`: `seq > since_seq`, `seq` sırasıyla, en fazla `limit` (varsayılan 500, en çok 1000). Bugün `entity`: `item`, `customer`, `warehouse`, `lot`, `customer_return`, `sales_order`. Bu tablolara yazan her repo fonksiyonu `change_log` kaydını **aynı transaction'da** atar; yazma geri alınırsa kayıt da gitmez.
+- `customer_return`: sunucuya yazılan her müşteri iadesi (web'den veya cihazdan), payload `CustomerReturn` JSON'u.
+  Cihaz satırı kendisinde olan iadeyi (aynı `id` zaten varsa dokunmadan) yerel iade listesine ekler, stok
+  hareketi yazmaz (bakiye zaten lot `upsert`'inden gelir). Böylece web'den alınan iade cihazda görünür ve
+  "İade al" kalan miktara göre kapanır.
+- `sales_order`: yalnızca ihlalli (`flagged`) satışın inceleme durumu değişince yazılır — iade alınınca veya
+  satıra bağlı `NEGATIVE_STOCK_OFFLINE` uyarısı okununca (`PATCH /anomaly-alerts/{id}`). Payload
+  `{ "id", "order_no", "review_status": "open" | "reviewed" | "returned" }`. Cihaz kendi satışının durumunu
+  günceller (İncelemede / İncelendi / İade edildi) ve son durumu değişen satış için bildirim gösterir.
 - `action`: `upsert | delete`. Bugün yalnızca `upsert` (silme yok).
 - `payload`: varlığın API JSON'u, yazıldığı andaki hâli. **Lot payload'ı `qty_on_hand`/`balances` İÇERİR**
   (önceki sözleşmenin aksine): lot oluştuğunda (alış, üretim çıktısı, parçalama çıktısı) ve lotun

@@ -75,7 +75,11 @@ func loadSalesLines(ctx context.Context, q DBTX, orderID string) ([]domain.Sales
 	rows, err := q.QueryContext(ctx,
 		`SELECT sl.id, sl.sales_order_id, sl.item_id, it.code, it.name, sl.lot_id, l.lot_no,
 		        sl.qty, sl.unit_price, sl.line_total, sl.stock_movement_id, sl.recall_violation,
-		        `+lineNegativeStockSQL+`, sl.created_at
+		        `+lineNegativeStockSQL+`,
+		        EXISTS (SELECT 1 FROM anomaly_alert a WHERE a.ref_type = 'sales_line' AND a.ref_id = sl.id
+		                AND a.alert_type = '`+domain.ViolationNegativeStock+`' AND a.acknowledged = FALSE),
+		        (SELECT COALESCE(SUM(cr.qty), 0) FROM customer_return cr WHERE cr.sales_line_id = sl.id),
+		        sl.created_at
 		 FROM sales_line sl
 		 JOIN item it ON it.id = sl.item_id
 		 JOIN lot l ON l.id = sl.lot_id
@@ -88,7 +92,8 @@ func loadSalesLines(ctx context.Context, q DBTX, orderID string) ([]domain.Sales
 	for rows.Next() {
 		var l domain.SalesLine
 		if err := rows.Scan(&l.ID, &l.SalesOrderID, &l.ItemID, &l.ItemCode, &l.ItemName, &l.LotID, &l.LotNo,
-			&l.Qty, &l.UnitPrice, &l.LineTotal, &l.StockMovementID, &l.RecallViolation, &l.NegativeStockViolation, &l.CreatedAt); err != nil {
+			&l.Qty, &l.UnitPrice, &l.LineTotal, &l.StockMovementID, &l.RecallViolation, &l.NegativeStockViolation,
+			&l.NegativeStockOpen, &l.ReturnedQty, &l.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, l)
@@ -162,10 +167,30 @@ func getSalesOrderDetail(ctx context.Context, q DBTX, id string) (*domain.SalesO
 	if o.Lines, err = loadSalesLines(ctx, q, id); err != nil {
 		return nil, err
 	}
+	o.ReviewStatus = domain.ReviewStatus(o.Lines)
 	if o.Shipments, err = loadShipmentsForOrder(ctx, q, id); err != nil {
 		return nil, err
 	}
 	return o, nil
+}
+
+// appendSalesReviewChange ihlalli satışın güncel inceleme durumunu change_log'a yazar: cihaz pull ile
+// "İncelemede" satışını "İncelendi"/"İade edildi" yapar. İhlalsiz satışta hiçbir şey yazmaz.
+func appendSalesReviewChange(ctx context.Context, q DBTX, orderID string) error {
+	o, err := getSalesOrderRow(ctx, q, orderID)
+	if err != nil {
+		return err
+	}
+	lines, err := loadSalesLines(ctx, q, orderID)
+	if err != nil {
+		return err
+	}
+	status := domain.ReviewStatus(lines)
+	if status == "" {
+		return nil
+	}
+	return appendChange(ctx, q, "sales_order", orderID, "upsert",
+		domain.SalesOrderReview{ID: o.ID, OrderNo: o.OrderNo, ReviewStatus: status})
 }
 
 func (s *Store) GetSalesOrder(ctx context.Context, id string) (*domain.SalesOrder, error) {
@@ -504,16 +529,16 @@ func (s *Store) createCustomerReturnInTx(ctx context.Context, tx *sql.Tx, req do
 		return nil, domain.Invalid("customer_id bulunamadi")
 	}
 
-	var lotID, warehouseID string
+	var lotID, warehouseID, orderID string
 	var soldQty, alreadyReturned domain.Qty
 
 	if req.SalesLineID != nil {
 		var lineLotID string
 		if err := tx.QueryRowContext(ctx,
-			`SELECT sl.lot_id, sl.qty, so.warehouse_id
+			`SELECT sl.lot_id, sl.qty, so.warehouse_id, so.id
 			 FROM sales_line sl JOIN sales_order so ON so.id = sl.sales_order_id
 			 WHERE sl.id = ? FOR UPDATE`, *req.SalesLineID).
-			Scan(&lineLotID, &soldQty, &warehouseID); err != nil {
+			Scan(&lineLotID, &soldQty, &warehouseID, &orderID); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return nil, domain.Invalid("sales_line_id bulunamadi")
 			}
@@ -598,7 +623,20 @@ func (s *Store) createCustomerReturnInTx(ctx context.Context, tx *sql.Tx, req do
 	if err := appendChange(ctx, tx, "lot", lotID, "upsert", lotView); err != nil {
 		return nil, err
 	}
-	return getCustomerReturnDetail(ctx, tx, id)
+	ret, err := getCustomerReturnDetail(ctx, tx, id)
+	if err != nil {
+		return nil, err
+	}
+	// Web'den alınan iade de cihaza gider: satış detayında iade edilen miktar ve "İade al" doğru kalır.
+	if err := appendChange(ctx, tx, "customer_return", id, "upsert", ret); err != nil {
+		return nil, err
+	}
+	if orderID != "" {
+		if err := appendSalesReviewChange(ctx, tx, orderID); err != nil {
+			return nil, err
+		}
+	}
+	return ret, nil
 }
 
 // ---------------------------------------------------------------------------

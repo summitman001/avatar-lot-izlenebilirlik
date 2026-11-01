@@ -161,7 +161,7 @@ func (s *Store) GetAnomalyAlert(ctx context.Context, id string) (*domain.Anomaly
 
 // PatchAnomalyAlert: acknowledged/note gunceller (ikisi de opsiyonel, en az biri zorunlu - bkz.
 // domain.PatchAnomalyAlertRequest.Validate). Bu islem SADECE uyarinin okundu durumunu degistirir;
-// hicbir lotu/siparisi etkilemez.
+// hicbir lotu/siparisi etkilemez. Satis satiri uyarisinda satisin inceleme durumu cihaza gider.
 func (s *Store) PatchAnomalyAlert(ctx context.Context, id string, req domain.PatchAnomalyAlertRequest) (*domain.AnomalyAlert, error) {
 	cur, err := s.GetAnomalyAlert(ctx, id)
 	if err != nil {
@@ -175,8 +175,21 @@ func (s *Store) PatchAnomalyAlert(ctx context.Context, id string, req domain.Pat
 	if req.Note != nil {
 		note = req.Note
 	}
-	if _, err := s.db.ExecContext(ctx, `UPDATE anomaly_alert SET acknowledged = ?, note = ? WHERE id = ?`, ack, note, id); err != nil {
-		return nil, mapErr(err)
+	err = s.InTx(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `UPDATE anomaly_alert SET acknowledged = ?, note = ? WHERE id = ?`, ack, note, id); err != nil {
+			return mapErr(err)
+		}
+		if cur.RefType != "sales_line" {
+			return nil
+		}
+		var orderID string
+		if err := tx.QueryRowContext(ctx, `SELECT sales_order_id FROM sales_line WHERE id = ?`, cur.RefID).Scan(&orderID); err != nil {
+			return mapErr(err)
+		}
+		return appendSalesReviewChange(ctx, tx, orderID)
+	})
+	if err != nil {
+		return nil, err
 	}
 	return s.GetAnomalyAlert(ctx, id)
 }

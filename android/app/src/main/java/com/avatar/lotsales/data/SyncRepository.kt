@@ -6,6 +6,7 @@ import com.avatar.lotsales.core.Uuid7
 import com.avatar.lotsales.data.db.AppDatabase
 import com.avatar.lotsales.data.db.BlockedLotEntity
 import com.avatar.lotsales.data.db.CustomerEntity
+import com.avatar.lotsales.data.db.CustomerReturnEntity
 import com.avatar.lotsales.data.db.ItemEntity
 import com.avatar.lotsales.data.db.LotEntity
 import com.avatar.lotsales.data.db.OrderStatus
@@ -17,10 +18,12 @@ import com.avatar.lotsales.data.db.WarehouseEntity
 import com.avatar.lotsales.data.net.AppJson
 import com.avatar.lotsales.data.net.Change
 import com.avatar.lotsales.data.net.CustomerDto
+import com.avatar.lotsales.data.net.CustomerReturnDto
 import com.avatar.lotsales.data.net.ItemDto
 import com.avatar.lotsales.data.net.LotDto
 import com.avatar.lotsales.data.net.PushOperation
 import com.avatar.lotsales.data.net.PushRequest
+import com.avatar.lotsales.data.net.SalesOrderReviewDto
 import com.avatar.lotsales.data.net.SyncApi
 import com.avatar.lotsales.data.net.WarehouseDto
 import kotlinx.coroutines.CancellationException
@@ -44,6 +47,9 @@ data class SyncStatus(
 
 class WarehouseChangeBlocked : Exception("Bekleyen işlem varken cihaz deposu değiştirilemez; önce senkronlayın")
 
+/** Senkronda incelemesi sonuclanan satis (status: reviewed | returned); bildirim icin. */
+data class SaleReviewUpdate(val orderId: String, val orderNo: String, val status: String)
+
 /**
  * Senkron sirasi (docs/sync.md, docs/android-integration.md): PUSH (outbox sirayla, 500'luk) -> PULL
  * (since_seq, has_more bitene kadar). Lot bakiyesi pull'daki lot payload'inin cihaz deposu kirilimidir.
@@ -65,13 +71,14 @@ class SyncRepository @Inject constructor(private val db: AppDatabase, private va
         )
     }
 
-    suspend fun sync() = mutex.withLock {
+    suspend fun sync(): List<SaleReviewUpdate> = mutex.withLock {
         try {
             val deviceId = deviceId()
             push(deviceId)
-            pull(deviceId)
+            val reviews = pull(deviceId)
             putState(SyncKeys.LAST_SYNC_AT, now())
             putState(SyncKeys.LAST_ERROR, "")
+            reviews
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -141,15 +148,16 @@ class SyncRepository @Inject constructor(private val db: AppDatabase, private va
      * pull basarili olunca yerel toplamdan cikarilir (synced=1). Aksi halde stok iki kez dusulur: hata hep
      * "eksik goster" yonundedir, fazla satis olmaz. Liste pull'dan ONCE alinir.
      */
-    internal suspend fun pull(deviceId: String) {
+    internal suspend fun pull(deviceId: String): List<SaleReviewUpdate> {
         val reachedServer = db.sales().reachedServerRefIds()
         val warehouseId = db.sync().state(SyncKeys.DEVICE_WAREHOUSE_ID)
         var since = db.sync().state(SyncKeys.LAST_PULL_SEQ)?.toLong() ?: 0L
+        val statusBefore = mutableMapOf<String, String>() // satis id -> bu senkrondan onceki durum
         do {
             val page = api.pull(since, deviceId, PULL_LIMIT)
             db.withTransaction {
                 val reasons = mutableMapOf<String, String?>()
-                page.changes.forEach { applyChange(it, warehouseId, reasons) }
+                page.changes.forEach { applyChange(it, warehouseId, reasons, statusBefore) }
                 // blocked_lot_ids her cekmede TAM liste: listede olmayanlar kaldirilir
                 db.master().deleteBlockedNotIn(page.blockedLotIds)
                 db.master().insertBlocked(page.blockedLotIds.map { BlockedLotEntity(it, reasons[it], now()) })
@@ -158,9 +166,19 @@ class SyncRepository @Inject constructor(private val db: AppDatabase, private va
             since = page.nextSeq
         } while (page.hasMore)
         if (reachedServer.isNotEmpty()) db.sales().markMovementsSynced(reachedServer)
+        // Imlec sifirlanip eski degisiklikler tekrar gelse de yalniz son durumu degisen satis bildirilir.
+        return statusBefore.mapNotNull { (id, before) ->
+            db.sales().order(id)?.takeIf { it.status != before && it.status in NOTIFY_STATUSES }
+                ?.let { SaleReviewUpdate(it.id, it.orderNo, it.status) }
+        }
     }
 
-    private suspend fun applyChange(change: Change, warehouseId: String?, blockedReasons: MutableMap<String, String?>) {
+    private suspend fun applyChange(
+        change: Change,
+        warehouseId: String?,
+        blockedReasons: MutableMap<String, String?>,
+        statusBefore: MutableMap<String, String>,
+    ) {
         val delete = change.action == "delete"
         when (change.entity) {
             "item" -> if (delete) db.master().deleteItem(change.entityId) else {
@@ -190,6 +208,23 @@ class SyncRepository @Inject constructor(private val db: AppDatabase, private va
                     db.master().updateLotQty(d.id, qty)
                 }
             }
+            "sales_order" -> if (!delete) {
+                val d = AppJson.decodeFromJsonElement(SalesOrderReviewDto.serializer(), change.payload)
+                val status = REVIEW_STATUS[d.reviewStatus] ?: return
+                val order = db.sales().order(d.id) ?: return // baska cihazin satisi
+                if (order.status == OrderStatus.REJECTED) return
+                statusBefore.putIfAbsent(d.id, order.status)
+                db.sales().setOrderStatus(d.id, status)
+            }
+            "customer_return" -> if (!delete) {
+                val d = AppJson.decodeFromJsonElement(CustomerReturnDto.serializer(), change.payload)
+                val lineId = d.salesLineId ?: return
+                if (db.sales().line(lineId) == null) return // baska cihazin satisi
+                // Hareket yazilmaz: lot upsert'indeki sunucu bakiyesi bu iadeyi zaten icerir.
+                db.sales().insertReturnIfAbsent(
+                    CustomerReturnEntity(d.id, d.customerId, lineId, d.lotId, BigDecimal(d.qty), d.reason, d.returnedAt, synced = true),
+                )
+            }
         }
     }
 
@@ -201,5 +236,9 @@ class SyncRepository @Inject constructor(private val db: AppDatabase, private va
         const val PUSH_BATCH = 500
         const val PULL_LIMIT = 500
         val REACHED_SERVER = setOf(OutboxStatus.APPLIED, OutboxStatus.DUPLICATE, OutboxStatus.FLAGGED)
+
+        /** Sunucunun review_status degeri -> yerel satis durumu. */
+        val REVIEW_STATUS = mapOf("open" to OrderStatus.FLAGGED, "reviewed" to OrderStatus.REVIEWED, "returned" to OrderStatus.RETURNED)
+        val NOTIFY_STATUSES = setOf(OrderStatus.REVIEWED, OrderStatus.RETURNED)
     }
 }

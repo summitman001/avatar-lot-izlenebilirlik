@@ -158,6 +158,8 @@ private fun SaleCard(sale: SaleSummary, onClick: () -> Unit, modifier: Modifier)
 private fun SaleStatusChip(sale: SaleSummary) = when {
     sale.status == OrderStatus.REJECTED -> Chip(stringResource(R.string.status_rejected), StatusColors.danger, R.drawable.ic_warning)
     sale.status == OrderStatus.FLAGGED -> Chip(stringResource(R.string.status_flagged), StatusColors.warning, R.drawable.ic_warning)
+    sale.status == OrderStatus.REVIEWED -> Chip(stringResource(R.string.status_reviewed), StatusColors.success, R.drawable.ic_cloud_done)
+    sale.status == OrderStatus.RETURNED -> Chip(stringResource(R.string.status_returned), StatusColors.neutral, R.drawable.ic_assignment_return)
     sale.synced -> Chip(stringResource(R.string.status_synced), StatusColors.success, R.drawable.ic_cloud_done)
     else -> Chip(stringResource(R.string.status_pending), StatusColors.neutral, R.drawable.ic_schedule)
 }

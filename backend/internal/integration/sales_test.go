@@ -250,6 +250,90 @@ func TestSyncSalesOrderNegativeStockFlagged(t *testing.T) {
 	}
 }
 
+// Eksi stoklu offline satis: uyari okununca "reviewed", tamami iade edilince "returned"; her ikisi de
+// pull'a sales_order degisikligi, web iadesi customer_return degisikligi olarak duser (cihaz bildirimi).
+func TestNegativeStockSaleReviewAndReturnReachDevice(t *testing.T) {
+	e := newEnv(t)
+	f := e.sellable(e.fixture())
+	cust := e.customer("MKT-A", "Market A")
+	lot := e.must(e.do("POST", "/api/v1/lots", f.lotBody("ET-2026-001", "10.000", "9.7000", nil)), 201)
+
+	op := domain.NewID()
+	payload := salesSyncOp(op, cust, f.warehouse, f.item, lot.str("id"))
+	payload["payload"].(map[string]any)["lines"] = []any{saleLine(f.item, lot.str("id"), "50.000", "24.9000")}
+	e.must(e.do("POST", "/api/v1/sync/push", map[string]any{"device_id": domain.NewID(), "operations": []any{payload}}), 200)
+	orderID := e.must(e.do("GET", "/api/v1/sales-orders", nil), 200).JSON["items"].([]any)[0].(map[string]any)["id"].(string)
+
+	detail := func() (map[string]any, map[string]any) {
+		d := e.must(e.do("GET", "/api/v1/sales-orders/"+orderID, nil), 200)
+		return d.JSON, d.JSON["lines"].([]any)[0].(map[string]any)
+	}
+	pullSince := func(seq int64) []map[string]any {
+		r := e.must(e.do("GET", "/api/v1/sync/pull?since_seq="+strconv.FormatInt(seq, 10), nil), 200)
+		var out []map[string]any
+		for _, c := range r.JSON["changes"].([]any) {
+			out = append(out, c.(map[string]any))
+		}
+		return out
+	}
+	reviewChange := func(changes []map[string]any) any {
+		var status any
+		for _, c := range changes {
+			if c["entity"] == "sales_order" && c["entity_id"] == orderID {
+				status = c["payload"].(map[string]any)["review_status"]
+			}
+		}
+		return status
+	}
+	seqNow := func() (seq int64) {
+		if err := testDB.QueryRow(`SELECT COALESCE(MAX(seq), 0) FROM change_log`).Scan(&seq); err != nil {
+			t.Fatal(err)
+		}
+		return seq
+	}
+
+	order, line := detail()
+	if order["review_status"] != "open" || line["returned_qty"] != "0.000" {
+		t.Fatalf("baslangic: review_status=open, returned_qty=0.000 beklenirdi: %v", order)
+	}
+
+	var alertID string
+	if err := testDB.QueryRow(`SELECT id FROM anomaly_alert WHERE ref_type = 'sales_line' AND ref_id = ?`, line["id"]).Scan(&alertID); err != nil {
+		t.Fatal(err)
+	}
+	seq := seqNow()
+	e.must(e.do("PATCH", "/api/v1/anomaly-alerts/"+alertID, map[string]any{"acknowledged": true}), 200)
+	if order, _ = detail(); order["review_status"] != "reviewed" {
+		t.Fatalf("uyari okununca reviewed beklenirdi: %v", order["review_status"])
+	}
+	if got := reviewChange(pullSince(seq)); got != "reviewed" {
+		t.Fatalf("pull'da sales_order review_status=reviewed beklenirdi: %v", got)
+	}
+
+	seq = seqNow()
+	ret := e.must(e.do("POST", "/api/v1/customer-returns", map[string]any{
+		"customer_id": cust, "sales_line_id": line["id"], "qty": "50.000", "reason": "eksi stok duzeltme",
+	}), 201)
+	order, line = detail()
+	if order["review_status"] != "returned" || line["returned_qty"] != "50.000" {
+		t.Fatalf("tam iade sonrasi returned / 50.000 beklenirdi: %v", order)
+	}
+	changes := pullSince(seq)
+	if got := reviewChange(changes); got != "returned" {
+		t.Fatalf("pull'da sales_order review_status=returned beklenirdi: %v", got)
+	}
+	foundReturn := false
+	for _, c := range changes {
+		if c["entity"] == "customer_return" && c["entity_id"] == ret.str("id") {
+			p := c["payload"].(map[string]any)
+			foundReturn = p["sales_line_id"] == line["id"] && p["qty"] == "50.000"
+		}
+	}
+	if !foundReturn {
+		t.Fatalf("pull'da web iadesi customer_return olarak bulunamadi: %v", changes)
+	}
+}
+
 // Bozuk payload / bilinmeyen referans: rejected, hicbir kayit yazilmaz (processed_request dahil).
 func TestSyncRejectedUnknownReferenceWritesNothing(t *testing.T) {
 	e := newEnv(t)

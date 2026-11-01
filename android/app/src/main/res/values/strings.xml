@@ -103,6 +103,8 @@
     <string name="sales_empty">Henüz satış yok.</string>
     <string name="status_rejected">Reddedildi</string>
     <string name="status_flagged">İncelemede</string>
+    <string name="status_reviewed">İncelendi</string>
+    <string name="status_returned">İade edildi</string>
     <string name="status_synced">Senkronlandı</string>
     <string name="status_pending">Bekliyor</string>
     <string name="returned">İade</string>
@@ -113,4 +115,10 @@
     <string name="save">Kaydet</string>
     <string name="cancel">Vazgeç</string>
     <string name="back">Geri</string>
+
+    <string name="notif_channel_reviews">Satış incelemeleri</string>
+    <string name="notif_sale_reviewed_title">%1$s incelendi</string>
+    <string name="notif_sale_reviewed_text">İhlalli satış merkezde incelendi.</string>
+    <string name="notif_sale_returned_title">%1$s iade edildi</string>
+    <string name="notif_sale_returned_text">İhlalli satış satırlarının iadesi alındı.</string>
 </resources>
