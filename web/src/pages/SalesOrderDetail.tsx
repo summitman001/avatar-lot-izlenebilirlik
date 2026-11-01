@@ -24,6 +24,8 @@ export default function SalesOrderDetail() {
   if (orderQuery.isLoading) return <Loader />
   if (orderQuery.error) return <Alert color="red">{orderQuery.error.message}</Alert>
   const order = orderQuery.data!
+  const recallViolation = order.lines?.some((l) => l.recall_violation)
+  const negativeStock = order.lines?.some((l) => l.negative_stock_violation)
 
   return (
     <Stack>
@@ -31,7 +33,8 @@ export default function SalesOrderDetail() {
         eyebrow={<><Anchor component={Link} to="/satis-sevkiyat" size="sm">Satış / Sevkiyat</Anchor> · {order.customer_name} — {new Date(order.sold_at).toLocaleString('tr-TR')}</>}
         badges={<>
           <Badge color="teal" variant="light">Onaylandı</Badge>
-          {order.has_violation && <Badge color="red" variant="filled">Geri çağırma ihlali</Badge>}
+          {recallViolation && <Badge color="red" variant="filled">Geri çağırma ihlali</Badge>}
+          {negativeStock && <Badge color="red" variant="filled">Eksi stok (çevrimdışı)</Badge>}
         </>} />
 
       <Card withBorder>
@@ -50,6 +53,7 @@ export default function SalesOrderDetail() {
                 <Table.Td>
                   <Link to={`/lotlar?q=${l.lot_no}`}>{l.lot_no}</Link>
                   {l.recall_violation && <Badge color="red" variant="filled" ml="xs">Bloke lot satışı</Badge>}
+                  {l.negative_stock_violation && <Badge color="red" variant="filled" ml="xs">Stok yetersizken satıldı</Badge>}
                 </Table.Td>
                 <Table.Td>{l.item_name}</Table.Td>
                 <Table.Td ta="right">{qty(l.qty)}</Table.Td>

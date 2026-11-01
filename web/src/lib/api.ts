@@ -498,6 +498,7 @@ export interface SalesLine {
   line_total: Decimal
   stock_movement_id: string | null
   recall_violation: boolean
+  negative_stock_violation: boolean
   created_at: string
 }
 

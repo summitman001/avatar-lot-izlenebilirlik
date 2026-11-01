@@ -419,13 +419,15 @@ servis fonksiyonu** kullanılır (bkz. `docs/sync.md`).
 ```
 
 `201` yanıtı satırları (`lines`, her birinde `lot_no`, `line_total`, `stock_movement_id`,
-`recall_violation`) ve `create_shipment=true` ise oluşan sevkiyatı (`shipments`, her birinde lot/miktar
+`recall_violation`, `negative_stock_violation`) ve `create_shipment=true` ise oluşan sevkiyatı (`shipments`, her birinde lot/miktar
 satırları) içerir. `order_no` boşsa `SAT-<yıl>-NNN` atomik üretilir; sevkiyat `SHP-<yıl>-NNN`.
 
 ### `GET /sales-orders` / `GET /sales-orders/{id}`
 
 Liste filtreleri: `customer_id`, `lot_id`, `from`/`to` (sold_at, `YYYY-MM-DD`). Detay satırları +
-sevkiyatları içerir; liste yalnızca `has_violation` (en az bir satırda `recall_violation=true`) bayrağını taşır.
+sevkiyatları içerir; liste yalnızca `has_violation` (en az bir satırda `recall_violation=true` veya
+`negative_stock_violation=true`) bayrağını taşır. `negative_stock_violation`: offline satışta bakiye
+yetersizdi, satış kaydedildi ve stok negatife düştü (satıra bağlı `NEGATIVE_STOCK_OFFLINE` uyarısı).
 
 ### `POST /customer-returns` — müşteri iadesi
 

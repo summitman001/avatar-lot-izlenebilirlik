@@ -42,9 +42,15 @@ func appendUnique(list []string, v string) []string {
 // Okuma
 // ---------------------------------------------------------------------------
 
+// lineNegativeStockSQL: sl satırına bağlı eksi stok uyarısı var mı (offline satışta bakiye yetersizdi).
+// Ayrı bir kolon tutulmaz: uyarı bu ihlalin tek kaydıdır (bkz. createSalesOrderInTx).
+const lineNegativeStockSQL = `EXISTS (SELECT 1 FROM anomaly_alert a
+       WHERE a.ref_type = 'sales_line' AND a.ref_id = sl.id AND a.alert_type = '` + domain.ViolationNegativeStock + `')`
+
 const salesOrderCols = `so.id, so.order_no, so.customer_id, c.code, c.name, so.device_id,
        so.warehouse_id, w.code, so.sold_at, so.status, so.total_amount,
-       EXISTS (SELECT 1 FROM sales_line sl WHERE sl.sales_order_id = so.id AND sl.recall_violation = TRUE),
+       EXISTS (SELECT 1 FROM sales_line sl WHERE sl.sales_order_id = so.id
+               AND (sl.recall_violation = TRUE OR ` + lineNegativeStockSQL + `)),
        so.created_at`
 
 const salesOrderFrom = ` FROM sales_order so
@@ -68,7 +74,8 @@ func getSalesOrderRow(ctx context.Context, q DBTX, id string) (*domain.SalesOrde
 func loadSalesLines(ctx context.Context, q DBTX, orderID string) ([]domain.SalesLine, error) {
 	rows, err := q.QueryContext(ctx,
 		`SELECT sl.id, sl.sales_order_id, sl.item_id, it.code, it.name, sl.lot_id, l.lot_no,
-		        sl.qty, sl.unit_price, sl.line_total, sl.stock_movement_id, sl.recall_violation, sl.created_at
+		        sl.qty, sl.unit_price, sl.line_total, sl.stock_movement_id, sl.recall_violation,
+		        `+lineNegativeStockSQL+`, sl.created_at
 		 FROM sales_line sl
 		 JOIN item it ON it.id = sl.item_id
 		 JOIN lot l ON l.id = sl.lot_id
@@ -81,7 +88,7 @@ func loadSalesLines(ctx context.Context, q DBTX, orderID string) ([]domain.Sales
 	for rows.Next() {
 		var l domain.SalesLine
 		if err := rows.Scan(&l.ID, &l.SalesOrderID, &l.ItemID, &l.ItemCode, &l.ItemName, &l.LotID, &l.LotNo,
-			&l.Qty, &l.UnitPrice, &l.LineTotal, &l.StockMovementID, &l.RecallViolation, &l.CreatedAt); err != nil {
+			&l.Qty, &l.UnitPrice, &l.LineTotal, &l.StockMovementID, &l.RecallViolation, &l.NegativeStockViolation, &l.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, l)
@@ -389,7 +396,7 @@ func (s *Store) createSalesOrderInTx(ctx context.Context, tx *sql.Tx, req domain
 			}
 			message := fmt.Sprintf("Offline satis stogu negatife dusurdu: lot %s, depo %s, eldeki %s, satilan %s",
 				lot.LotNo, req.WarehouseID, onHand.StringFixed(domain.QtyScale), line.Qty.StringFixed(domain.QtyScale))
-			if err := upsertAnomalyAlert(ctx, tx, "NEGATIVE_STOCK_OFFLINE", "critical", "sales_line", lineID, message, evidence); err != nil {
+			if err := upsertAnomalyAlert(ctx, tx, domain.ViolationNegativeStock, "critical", "sales_line", lineID, message, evidence); err != nil {
 				return nil, nil, err
 			}
 		}

@@ -236,6 +236,18 @@ func TestSyncSalesOrderNegativeStockFlagged(t *testing.T) {
 	if n := count(t, `SELECT COUNT(*) FROM anomaly_alert WHERE alert_type = 'NEGATIVE_STOCK_OFFLINE' AND severity = 'critical'`); n != 1 {
 		t.Fatalf("1 anomaly_alert beklenirdi")
 	}
+
+	// Web listesi ve detayi ihlali gosterir: liste rozeti (has_violation) ve satir bayragi.
+	list := e.must(e.do("GET", "/api/v1/sales-orders", nil), 200)
+	orders := list.JSON["items"].([]any)
+	if len(orders) != 1 || orders[0].(map[string]any)["has_violation"] != true {
+		t.Fatalf("listede has_violation=true beklenirdi: %s", list.Raw)
+	}
+	detail := e.must(e.do("GET", "/api/v1/sales-orders/"+orders[0].(map[string]any)["id"].(string), nil), 200)
+	line := detail.JSON["lines"].([]any)[0].(map[string]any)
+	if line["negative_stock_violation"] != true || line["recall_violation"] != false {
+		t.Fatalf("satirda negative_stock_violation=true, recall_violation=false beklenirdi: %s", detail.Raw)
+	}
 }
 
 // Bozuk payload / bilinmeyen referans: rejected, hicbir kayit yazilmaz (processed_request dahil).
