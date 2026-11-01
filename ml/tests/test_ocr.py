@@ -370,18 +370,35 @@ def test_lot_yazim_cesitleri(cell, lot):
 
 
 def _efatura_checks(r):
-    assert "AKYAZI" in ocr._key(r.supplier_name.value or "") and "SIRKETI" in ocr._key(r.supplier_name.value)
-    assert r.document_no.value == "AKY2026000000145"
-    assert r.document_date.value == "2026-11-01"
-    assert r.currency.value == "TRY"
-    assert len(r.lines) == 3
-    kuzu, dana, sucuk = r.lines
-    assert "KUZU BUT" in ocr._key(kuzu.product_name.value)
-    assert (kuzu.quantity.value, kuzu.unit.value, kuzu.unit_price.value, kuzu.line_total.value) == \
-        ("12", "kg", "14.50", "174.00")
-    assert (dana.unit_price.value, dana.line_total.value, dana.lot_no.value) == ("10.125", "202.50", "DK-2026-118")
-    assert (sucuk.quantity.value, sucuk.unit.value, sucuk.expiry_date.value) == ("4", "adet", "2027-05-10")
-    assert not any(w.startswith("TOPLAM_UYUSMAZLIGI") for w in r.warnings)
+    """Tum farklari birlikte raporlar (CI'da farkli Tesseract surumu/fontu tek turda gorunsun)."""
+    errs = []
+
+    def check(name, got, ok):
+        if not ok:
+            errs.append(f"{name}: {got!r}")
+
+    sup = ocr._key(r.supplier_name.value or "")
+    check("tedarikci", r.supplier_name.value, "AKYAZI" in sup and "SIRKETI" in sup)
+    check("belge no", r.document_no.value, r.document_no.value == "AKY2026000000145")
+    check("tarih", r.document_date.value, r.document_date.value == "2026-11-01")
+    check("para birimi", r.currency.value, r.currency.value == "TRY")
+    check("toplam uyarisi", r.warnings, not any(w.startswith("TOPLAM_UYUSMAZLIGI") for w in r.warnings))
+    check("satir sayisi", [l.product_name.value for l in r.lines], len(r.lines) == 3)
+    if len(r.lines) == 3:
+        kuzu, dana, sucuk = r.lines
+        name = ocr._key(kuzu.product_name.value or "")
+        # OCR kelime araligi/yazimi surume gore degisir ("KuzuBut"); kural hatasi ise ada sizan birim
+        # ("Paket KG Ozel") ya da bozuk okunmus yuzde ("Paket O Ozel") olur
+        check("kuzu adi", kuzu.product_name.value, "KUZU" in name and "KESIM" in name
+              and not any(tok in ("KG", "ADET") or len(tok) == 1 and tok.isalpha() for tok in name.split()))
+        check("kuzu sayilar", (kuzu.quantity.value, kuzu.unit.value, kuzu.unit_price.value, kuzu.line_total.value),
+              (kuzu.quantity.value, kuzu.unit.value, kuzu.unit_price.value, kuzu.line_total.value)
+              == ("12", "kg", "14.50", "174.00"))
+        check("dana", (dana.unit_price.value, dana.line_total.value, dana.lot_no.value),
+              (dana.unit_price.value, dana.line_total.value, dana.lot_no.value) == ("10.125", "202.50", "DK-2026-118"))
+        check("sucuk", (sucuk.quantity.value, sucuk.unit.value, sucuk.expiry_date.value),
+              (sucuk.quantity.value, sucuk.unit.value, sucuk.expiry_date.value) == ("4", "adet", "2027-05-10"))
+    assert errs == []
 
 
 @pytest.mark.parametrize("kwargs", [

@@ -1012,6 +1012,7 @@ class _Tok:
     unit: str | None = None
     zone: str | None = None
     orig: "_Tok | None" = None  # virgul duzeltmesiyle uretilen kopyanin satirdaki asli
+    unit_tok: "_Tok | None" = None  # sayiya bitisik birim kelimesi ("12" -> "KG")
 
 
 def _tokenize(word: _Word, number_format: str, zone: str | None) -> _Tok:
@@ -1211,12 +1212,18 @@ def _parse_row(row: _Row, cols: list[_Col] | None, number_format: str) -> tuple[
             toks[i + 1].kind = "pct"
     has_name_col = bool(cols) and any(c.cat == "name" for c in cols)
     if has_name_col:
-        for t in toks:  # sayi sutunlarina tasan yazi (uzun urun adi) ada aittir
+        # urun adi yalniz ad sutununun komsu sutunlarina tasar (baslik genis hucrede ortalandigindan
+        # adin basi "Sira No" bolgesine, uzun ad "Miktar" bolgesine dusebilir); uzaktaki sutunlarda ya
+        # da rakamli yazi bozuk okunmus sayi/yuzdedir ("%0" -> "O", "%1" -> "Y1"): ada eklenmez
+        spill = {cols[j].cat for i, c in enumerate(cols) if c.cat == "name" for j in (i - 1, i + 1)
+                 if 0 <= j < len(cols)}
+        for t in toks:
             if t.kind == "text" and t.zone in _NUMERIC_COLS:
-                if any(c.isdigit() for c in t.text):
-                    t.kind = "junk"  # bozuk okunmus sayi/yuzde ("%1" -> "Y1"): ada eklenmez
-                else:
+                letters = sum(ch.isalpha() for ch in t.text)
+                if t.zone in spill and letters >= 2 and not any(ch.isdigit() for ch in t.text):
                     t.zone = "name"
+                else:
+                    t.kind = "junk"
 
     def is_name(t: _Tok) -> bool:
         if not cols:
@@ -1227,7 +1234,7 @@ def _parse_row(row: _Row, cols: list[_Col] | None, number_format: str) -> tuple[
     # sayiya bitisik birim kelimesi: "25,000 kg", "10 KG"
     for i, t in enumerate(toks):
         if t.kind == "num" and t.unit is None and i + 1 < len(toks) and toks[i + 1].kind == "unit":
-            t.unit = toks[i + 1].unit
+            t.unit, t.unit_tok = toks[i + 1].unit, toks[i + 1]
             toks[i + 1].kind = "unit_used"
     leading_no = None
     if toks and toks[0].kind == "num" and toks[0].zone in (None, "line_no", "name") and toks[0].unit is None \
@@ -1287,18 +1294,20 @@ def _parse_row(row: _Row, cols: list[_Col] | None, number_format: str) -> tuple[
         unit_tok = next((t for t in toks if t.kind in ("unit", "unit_used", "text") and t.zone == "unit"), None) \
             if cols else None
         item.unit = q.unit or (unit_tok and (unit_tok.unit or _unit(unit_tok.text) or _key(unit_tok.text).lower()))
+        unit_tok = unit_tok or q.unit_tok
         item.unit_words = [q.word] + ([unit_tok.word] if unit_tok else [])
     chosen = [t.orig or t for t in (q, p, tot) if t is not None]
-    consumed = {id(t) for t in chosen}
+    # secilen sayilar ve miktara bitisik birim ada girmez; addaki "1 kg" ise kalir
+    consumed = {id(t) for t in chosen} | {id(t.unit_tok) for t in chosen if t.unit_tok}
     first_num = min((toks.index(t) for t in chosen), default=len(toks))
     name_toks = []
     for i, t in enumerate(toks):
-        if id(t) in consumed or t is leading_no or t.kind in ("cur", "pct", "date"):
+        if id(t) in consumed or t is leading_no or t.kind in ("cur", "pct", "date", "junk"):
             continue
         if cols:
             if is_name(t):
                 name_toks.append(t)
-        elif i < first_num and t.kind != "unit_used":
+        elif i < first_num:
             name_toks.append(t)
     item.name_words = [t.word for t in name_toks]
     item.name = " ".join(w.text for w in item.name_words).strip(_SEP_STRIP)
