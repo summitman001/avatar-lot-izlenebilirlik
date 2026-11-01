@@ -8,7 +8,7 @@ Gıda işletmesi için hammaddeden nihai satışa kadar maliyet ve lot izlenebil
 çağırma tek bir sistemde birleşir. Go API + MySQL, React yönetim paneli, Python ML servisi ve Kotlin
 Android uygulamasından oluşur.
 
-**Takım:** [TAKIM ADI] · **Üyeler:** Enes Altunbaş, Taha Efe Tuncer, Eren Sarı
+**Takım:** CIONA RB · **Üyeler:** Enes Altunbaş, Taha Efe Tuncer, Eren Sarı
 
 [DEMO VİDEOSU](VIDEO_LINKI_BURAYA)
 
