@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FilterChips, PageHeader, StatCard, StatGrid, SUMMARY_LIMIT, eur } from '../components/Page'
 import { ApiError, apiGet, apiPost, type Customer, type Item, type List, type Lot, type SalesOrder, type Warehouse } from '../lib/api'
+import { money, qty } from '../lib/format'
 
 function err(e: unknown): string {
   return e instanceof ApiError ? e.message : 'Bilinmeyen hata'
@@ -59,7 +60,7 @@ export default function SalesOrders() {
                 <Table.Td>{o.order_no}</Table.Td>
                 <Table.Td>{o.customer_name}</Table.Td>
                 <Table.Td>{new Date(o.sold_at).toLocaleString('tr-TR')}</Table.Td>
-                <Table.Td ta="right">{o.total_amount} €</Table.Td>
+                <Table.Td ta="right" style={{ whiteSpace: 'nowrap' }}>{money(o.total_amount)}</Table.Td>
                 <Table.Td>
                   <Badge color="teal" variant="light">Onaylandı</Badge>
                   {o.has_violation && <Badge color="red" variant="filled" ml="xs">İhlal</Badge>}
@@ -120,7 +121,7 @@ function NewSaleModal({ opened, onClose }: { opened: boolean; onClose: () => voi
   const itemOptions = (items.data?.items ?? []).map((i) => ({ value: i.id, label: `${i.name} (${i.code})` }))
   const lotsForItem = (itemId: string) =>
     (activeLots.data?.items ?? []).filter((l) => l.item_id === itemId).map((l) => ({
-      value: l.id, label: `${l.lot_no} (${l.qty_on_hand ?? '0'} ${l.uom} mevcut)`,
+      value: l.id, label: `${l.lot_no} (${qty(l.qty_on_hand ?? '0', l.uom)} mevcut)`,
     }))
 
   const canSubmit =

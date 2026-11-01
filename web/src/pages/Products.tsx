@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { NewItemModal } from '../components/NewItemModal'
 import { FilterChips, PageHeader, StatCard, StatGrid, SUMMARY_LIMIT, countBy } from '../components/Page'
 import { apiGet, type Item, type List } from '../lib/api'
+import { num, unitCost } from '../lib/format'
 
 const TYPE_LABEL: Record<Item['item_type'], string> = {
   raw: 'Hammadde',
@@ -78,8 +79,8 @@ export default function Products() {
                 <Table.Td>{TYPE_LABEL[it.item_type]}</Table.Td>
                 <Table.Td>{it.base_uom}</Table.Td>
                 {/* Decimal'ler string olarak gösterilir; Number'a çevrilmez. */}
-                <Table.Td ta="right">{it.unit_weight_kg ?? '—'}</Table.Td>
-                <Table.Td ta="right">{it.default_sale_price ?? '—'}</Table.Td>
+                <Table.Td ta="right">{num(it.unit_weight_kg)}</Table.Td>
+                <Table.Td ta="right">{unitCost(it.default_sale_price)}</Table.Td>
                 <Table.Td ta="right">{it.shelf_life_days ?? '—'}</Table.Td>
                 <Table.Td>
                   <Badge color={it.is_active ? 'green' : 'gray'} variant="light">

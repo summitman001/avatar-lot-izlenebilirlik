@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { FilterChips, PageHeader, StatCard, StatGrid, SUMMARY_LIMIT, countBy } from '../components/Page'
 import { ApiError, apiGet, apiPost, type Item, type List, type ProductionOrder, type Supplier, type Warehouse } from '../lib/api'
+import { qty, unitCost } from '../lib/format'
 import { warningLabel } from '../lib/messages'
 
 export const STATUS: Record<ProductionOrder['status'], { label: string; color: string }> = {
@@ -68,9 +69,9 @@ export default function ProductionOrders() {
                     <Badge color="orange" variant="light" ml="xs">{o.warnings.map(warningLabel).join(', ')}</Badge>
                   )}
                 </Table.Td>
-                <Table.Td ta="right">{o.planned_qty} adet</Table.Td>
-                <Table.Td ta="right">{o.received_qty ?? '—'} adet</Table.Td>
-                <Table.Td ta="right">{o.ekp_unit ?? '—'}</Table.Td>
+                <Table.Td ta="right">{qty(o.planned_qty, 'adet')}</Table.Td>
+                <Table.Td ta="right">{qty(o.received_qty, 'adet')}</Table.Td>
+                <Table.Td ta="right" style={{ whiteSpace: 'nowrap' }}>{unitCost(o.ekp_unit)}</Table.Td>
               </Table.Tr>
             ))}
           </Table.Tbody>

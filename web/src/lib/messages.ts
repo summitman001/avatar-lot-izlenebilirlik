@@ -1,5 +1,6 @@
 // Kullaniciya gorunen metinler. API alan adlari ve kodlari (lines[0], INSUFFICIENT_STOCK, VERIM_DUSUK)
 // sozlesmenin parcasidir, Android ve testler bunlara dayanir; bu yuzden API'de degil, burada cevrilir.
+import { num } from './format'
 
 const ROW_LABEL: Record<string, string> = {
   inputs: 'girdi satırı', lines: 'satır', returns: 'iade satırı', outputs: 'çıktı satırı',
@@ -52,7 +53,7 @@ const WARNING_LABEL: Record<string, string> = {
 }
 const WARNING_RE = new RegExp(`\\b(${Object.keys(WARNING_LABEL).join('|')})\\b`, 'g')
 
-const trNumber = (s: string) => s.replace('.', ',')
+const trNumber = (s: string) => num(s)
 
 function capitalize(s: string): string {
   return s.charAt(0).toLocaleUpperCase('tr') + s.slice(1)
@@ -84,6 +85,8 @@ export function humanizeMessage(raw: string): string {
     .replace(/([\d.]+) sigma\b/g, (_, z: string) => `${trNumber(z)} standart sapma`)
     .replace(FIELD_RE, (f) => FIELD_LABEL[f])
     .replace(WORD_RE, (w) => WORDS[w])
+    // Kalan ondalıklar (ör. "EKP (20.8714) ... %14.46") Türkçe ondalık virgülüyle; haneler korunur.
+    .replace(/(?<![\w.,-])(\d+)\.(\d+)(?![\w.])/g, '$1,$2')
   return capitalize(m)
 }
 

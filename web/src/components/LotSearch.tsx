@@ -4,6 +4,7 @@ import { IconSearch } from '@tabler/icons-react'
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { apiGet, type List, type Lot } from '../lib/api'
+import { qty } from '../lib/format'
 
 const STATUS_COLOR: Record<Lot['status'], string> = { active: 'green', blocked: 'orange', recalled: 'red', consumed: 'gray' }
 const STATUS_LABEL: Record<Lot['status'], string> = { active: 'Aktif', blocked: 'Bloke', recalled: 'Geri çağrıldı', consumed: 'Tükendi' }
@@ -45,7 +46,7 @@ export function LotSearch({ status, initialQuery = '', onSelect, ...rest }: {
             <Group justify="space-between" wrap="nowrap" w="100%">
               <div>
                 <Text size="sm" fw={500}>{option.value}</Text>
-                {lot && <Text size="xs" c="dimmed">{lot.item_name} · {lot.qty_on_hand ?? '0'} {lot.uom}</Text>}
+                {lot && <Text size="xs" c="dimmed">{lot.item_name} · {qty(lot.qty_on_hand ?? '0', lot.uom)}</Text>}
               </div>
               {lot && <Badge size="sm" variant="light" color={STATUS_COLOR[lot.status]}>{STATUS_LABEL[lot.status]}</Badge>}
             </Group>

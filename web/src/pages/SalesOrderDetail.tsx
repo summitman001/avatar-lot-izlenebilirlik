@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { PageHeader } from '../components/Page'
 import { ApiError, apiGet, apiPost, type SalesOrder } from '../lib/api'
+import { money, qty, unitCost } from '../lib/format'
 
 function err(e: unknown): string {
   return e instanceof ApiError ? e.message : 'Bilinmeyen hata'
@@ -51,12 +52,12 @@ export default function SalesOrderDetail() {
                   {l.recall_violation && <Badge color="red" variant="filled" ml="xs">Bloke lot satışı</Badge>}
                 </Table.Td>
                 <Table.Td>{l.item_name}</Table.Td>
-                <Table.Td ta="right">{l.qty}</Table.Td>
-                <Table.Td ta="right">{l.unit_price} €</Table.Td>
-                <Table.Td ta="right">{l.line_total} €</Table.Td>
+                <Table.Td ta="right">{qty(l.qty)}</Table.Td>
+                <Table.Td ta="right">{unitCost(l.unit_price)}</Table.Td>
+                <Table.Td ta="right">{money(l.line_total)}</Table.Td>
                 <Table.Td><Text size="xs" c="dimmed">{l.stock_movement_id ?? '—'}</Text></Table.Td>
                 <Table.Td>
-                  <Button size="xs" variant="subtle" onClick={() => { setReturnLine({ id: l.id, label: `${l.lot_no} (${l.qty})`, customerId: order.customer_id }); openReturn() }}>
+                  <Button size="xs" variant="subtle" onClick={() => { setReturnLine({ id: l.id, label: `${l.lot_no} (${qty(l.qty)})`, customerId: order.customer_id }); openReturn() }}>
                     İade Al
                   </Button>
                 </Table.Td>
@@ -64,7 +65,7 @@ export default function SalesOrderDetail() {
             ))}
             <Table.Tr>
               <Table.Td colSpan={4} fw={700}>Toplam</Table.Td>
-              <Table.Td ta="right" fw={700}>{order.total_amount} €</Table.Td>
+              <Table.Td ta="right" fw={700}>{money(order.total_amount)}</Table.Td>
               <Table.Td /><Table.Td />
             </Table.Tr>
           </Table.Tbody>
@@ -85,7 +86,7 @@ export default function SalesOrderDetail() {
                   <Table.Td>{new Date(sh.shipped_at).toLocaleString('tr-TR')}</Table.Td>
                   <Table.Td>
                     {sh.lines?.map((l) => (
-                      <Text key={l.id} size="sm">{l.lot_no}: {l.qty}</Text>
+                      <Text key={l.id} size="sm">{l.lot_no}: {qty(l.qty)}</Text>
                     ))}
                   </Table.Td>
                 </Table.Tr>

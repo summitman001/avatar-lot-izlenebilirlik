@@ -13,6 +13,7 @@ import {
   ApiError, apiGet, apiPost, type CreatePurchaseReceiptRequest, type Item, type List,
   type PurchaseReceiptListItem, type Supplier, type Warehouse,
 } from '../lib/api'
+import { money } from '../lib/format'
 
 function err(e: unknown): string {
   return e instanceof ApiError ? e.message : 'Bilinmeyen hata'
@@ -87,7 +88,7 @@ export default function Purchases() {
                 <Table.Td>{r.supplier_name}</Table.Td>
                 <Table.Td>{r.invoice_no ?? '—'}</Table.Td>
                 <Table.Td ta="right">{r.line_count}</Table.Td>
-                <Table.Td ta="right">{r.total_amount} €</Table.Td>
+                <Table.Td ta="right" style={{ whiteSpace: 'nowrap' }}>{money(r.total_amount)}</Table.Td>
                 <Table.Td>
                   {r.has_mismatch && (
                     <Tooltip label="En az bir satırda hesaplanan tutar beyan edilenden farklı">
