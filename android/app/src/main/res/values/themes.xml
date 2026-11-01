@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.LotSales" parent="@android:style/Theme.Material.Light.NoActionBar">
-        <item name="android:windowBackground">@color/surface_cream</item>
+        <item name="android:windowBackground">@color/window_background</item>
     </style>
 
     <!-- Acilis: yesil zemin, etiket ikonu (API 31+ animasyonlu, bkz. drawable-v31/splash_icon.xml) -->

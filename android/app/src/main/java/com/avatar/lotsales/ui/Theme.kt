@@ -16,54 +16,59 @@ import androidx.compose.ui.unit.dp
 import com.avatar.lotsales.R
 
 /**
- * Marka: ikondaki yesil (#2E7D32). Yuzeyler soguk, hafif yesil tonlu notr (web paneliyle ayni aile; Stitch
- * tasarimindaki katmanli yuzey dili). tertiary = kritik SKT turuncusu (Stitch). Yalniz acik tema.
+ * Marka: mavi/beyaz (#0B4FB3). Sayfa zemini soguk gri (#F3F5F9), kartlar beyaz; turuncu (tertiary = kritik SKT)
+ * ve kirmizi (error = bloke) yalniz anlam tasidiginda. Yalniz acik tema.
  */
 private val LightColors = lightColorScheme(
-    primary = Color(0xFF2E7D32),
+    primary = Color(0xFF0B4FB3),
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFC8EBC2),
-    onPrimaryContainer = Color(0xFF0B3D10),
-    inversePrimary = Color(0xFF8FD68B),
-    secondary = Color(0xFF52634F),
+    primaryContainer = Color(0xFFE3ECFB),
+    onPrimaryContainer = Color(0xFF0B4FB3),
+    inversePrimary = Color(0xFFAFC6FF),
+    secondary = Color(0xFF4A5A75),
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFD5E8CF),
-    onSecondaryContainer = Color(0xFF101F0F),
-    tertiary = Color(0xFF9A4600),
+    secondaryContainer = Color(0xFFE8EDF5),
+    onSecondaryContainer = Color(0xFF16233F),
+    tertiary = Color(0xFF9A4A06),
     onTertiary = Color.White,
-    tertiaryContainer = Color(0xFFFFDBC9),
-    onTertiaryContainer = Color(0xFF321200),
-    background = Color(0xFFF5F8F4),
-    onBackground = Color(0xFF191D18),
-    surface = Color(0xFFF5F8F4),
-    onSurface = Color(0xFF191D18),
-    surfaceVariant = Color(0xFFDDE5D9),
-    onSurfaceVariant = Color(0xFF424940),
-    surfaceTint = Color(0xFF2E7D32),
-    inverseSurface = Color(0xFF2E322D),
-    inverseOnSurface = Color(0xFFEFF2EC),
-    error = Color(0xFFBA1A1A),
+    tertiaryContainer = Color(0xFFFFF1E0),
+    onTertiaryContainer = Color(0xFF7A3A04),
+    background = Color(0xFFF3F5F9),
+    onBackground = Color(0xFF16233F),
+    surface = Color(0xFFF3F5F9),
+    onSurface = Color(0xFF16233F),
+    surfaceVariant = Color(0xFFE2E8F0),
+    onSurfaceVariant = Color(0xFF4A5A75),
+    surfaceTint = Color(0xFF0B4FB3),
+    inverseSurface = Color(0xFF2A3550),
+    inverseOnSurface = Color(0xFFEEF2F8),
+    error = Color(0xFFB42318),
     onError = Color.White,
-    errorContainer = Color(0xFFFFDAD6),
-    onErrorContainer = Color(0xFF93000A),
-    outline = Color(0xFF72796F),
-    outlineVariant = Color(0xFFC2C9BE),
-    surfaceBright = Color(0xFFF5F8F4),
-    surfaceDim = Color(0xFFD6DBD4),
+    errorContainer = Color(0xFFFDECEC),
+    onErrorContainer = Color(0xFF8F1C13),
+    outline = Color(0xFF7A879C),
+    outlineVariant = Color(0xFFC9D3E3),
+    surfaceBright = Color(0xFFF3F5F9),
+    surfaceDim = Color(0xFFD9DFE9),
     surfaceContainerLowest = Color.White,
-    surfaceContainerLow = Color(0xFFEFF3EE),
-    surfaceContainer = Color(0xFFE9EEE8),
-    surfaceContainerHigh = Color(0xFFE3E9E2),
-    surfaceContainerHighest = Color(0xFFDDE3DC),
+    surfaceContainerLow = Color(0xFFEEF2F8),
+    surfaceContainer = Color(0xFFE8EDF5),
+    surfaceContainerHigh = Color(0xFFE2E8F0),
+    surfaceContainerHighest = Color(0xFFDCE3EE),
 )
 
-/** Durum rozetleri; M3 semasinda karsiligi yok. Metin olarak kendi %12 tonlu zemininde (beyaz/krem/pembe kart ustu) >= 4.8:1. */
+/** Durum rozetleri ve kart kenarlari; M3 semasinda karsiligi yok. Metin olarak kendi tonlu zemininde >= 4.8:1. */
 object StatusColors {
-    val success = Color(0xFF236B28)
+    val success = Color(0xFF1E6B30)
+    val successContainer = Color(0xFFE4F4E8)
     val warning = Color(0xFF8A5000)
-    val neutral = Color(0xFF5C5D55)
-    val danger = Color(0xFFB3191A)
-    val dangerContainer = Color(0xFFFFEDEA)
+    val neutral = Color(0xFF5B6B85)
+    val danger = Color(0xFFB42318)
+    val dangerContainer = Color(0xFFFDECEC)
+    val dangerBorder = Color(0xFFF6C9C5)
+    val criticalBorder = Color(0xFFFBD9B0)
+    /** Beyaz kartin ince kenari */
+    val cardBorder = Color(0xFFE2E8F0)
 }
 
 // Variable font: 'wght' ekseni acikca verilmezse her agirlik dosyanin varsayilan agirliginda cizilir (minSdk 26).

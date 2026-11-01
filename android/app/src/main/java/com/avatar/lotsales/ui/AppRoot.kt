@@ -86,6 +86,9 @@ import kotlinx.serialization.Serializable
 object LotsRoute
 
 @Serializable
+object LotListRoute
+
+@Serializable
 data class NewSaleRoute(val lotId: String? = null)
 
 @Serializable
@@ -107,7 +110,9 @@ private data class Tab(
 )
 
 private val tabs = listOf(
-    Tab(R.string.tab_lots, R.string.title_lots, R.drawable.ic_inventory_2, R.drawable.ic_inventory_2_fill, LotsRoute) { it.hasRoute<LotsRoute>() },
+    Tab(R.string.tab_lots, R.string.title_lots, R.drawable.ic_inventory_2, R.drawable.ic_inventory_2_fill, LotsRoute) {
+        it.hasRoute<LotsRoute>() || it.hasRoute<LotListRoute>()
+    },
     Tab(R.string.tab_new_sale, R.string.title_new_sale, R.drawable.ic_shopping_cart, R.drawable.ic_shopping_cart_fill, NewSaleRoute()) {
         it.hasRoute<NewSaleRoute>()
     },
@@ -133,11 +138,15 @@ fun AppRoot() {
     val sync by syncVm.ui.collectAsStateWithLifecycle()
     val entry = nav.currentBackStackEntryAsState().value
     val destination = entry?.destination
-    // Geri yalniz ic ekranlarda: satis detayi ve lot kartindan acilan satis (sekme kokleri Material'e gore geri tasimaz)
-    val canGoBack = destination?.hasRoute<SaleDetailRoute>() == true ||
+    // Geri yalniz ic ekranlarda: lot listesi, satis detayi ve lot kartindan acilan satis (sekme kokleri Material'e gore geri tasimaz)
+    val canGoBack = destination?.hasRoute<SaleDetailRoute>() == true || destination?.hasRoute<LotListRoute>() == true ||
         (destination?.hasRoute<NewSaleRoute>() == true && entry.toRoute<NewSaleRoute>().lotId != null)
     val tab = tabs.firstOrNull { destination?.let(it.isCurrent) == true } ?: tabs.first()
-    val title = if (destination?.hasRoute<SaleDetailRoute>() == true) R.string.title_sale_detail else tab.title
+    val title = when {
+        destination?.hasRoute<SaleDetailRoute>() == true -> R.string.title_sale_detail
+        destination?.hasRoute<LotListRoute>() == true -> R.string.title_lot_list
+        else -> tab.title
+    }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -190,7 +199,13 @@ fun AppRoot() {
                     popExitTransition = { fadeOut(tween(90)) },
                 ) {
                     screen<LotsRoute> {
-                        LotsScreen(onSell = { lotId -> nav.navigate(NewSaleRoute(lotId)) }, sync = sync, onRefresh = syncVm::syncNow)
+                        LotsScreen(onOpenList = { nav.navigate(LotListRoute) }, sync = sync, onRefresh = syncVm::syncNow)
+                    }
+                    screen<LotListRoute> {
+                        LotListScreen(
+                            onSell = { lotId -> nav.navigate(NewSaleRoute(lotId)) },
+                            warehouse = sync.warehouses.firstOrNull { it.id == sync.status.warehouseId }?.code,
+                        )
                     }
                     screen<NewSaleRoute> { NewSaleScreen() }
                     screen<SalesRoute> { SalesScreen(onOpen = { id -> nav.navigate(SaleDetailRoute(id)) }) }
