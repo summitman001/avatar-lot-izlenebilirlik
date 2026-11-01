@@ -32,43 +32,98 @@ yükle → ML (Tesseract) öneri çıkarır → kullanıcı ekranda düzeltir �
 
 **Motor: Tesseract (pytesseract), imajda kurulu.** Harici API, API anahtarı veya internet bağlantısı
 **gerektirmez** — jüri kendi makinesinde ek kurulum yapmadan `docker compose up --build` ile çalıştırır.
-Model **eğitimi yapılmadı**: çıkarım tamamen kural tabanlı (regex + pozisyon sezgileri), üretim/parçalama
-ML modellerinden farklı olarak burada "öğrenen" bir model yok — fatura düzeni belge belge çok farklı
-olduğundan, bu ölçekte küçük bir eğitim verisiyle genel geçer bir model kurmak gerçekçi değil; kural
-tabanlı yaklaşım hem şeffaf (her alanın neden o değeri aldığı `source_text`'ten görülür) hem de
-jüri/kullanıcı için öngörülebilir.
+Model **eğitimi yapılmadı**: çıkarım tamamen kural tabanlı (kelime konumları + etiket/değer kuralları +
+`miktar × fiyat = tutar` aritmetiği), üretim/parçalama ML modellerinden farklı olarak burada "öğrenen"
+bir model yok — fatura düzeni belge belge çok farklı olduğundan, bu ölçekte küçük bir eğitim verisiyle
+genel geçer bir model kurmak gerçekçi değil; kural tabanlı yaklaşım hem şeffaf (her alanın neden o
+değeri aldığı `source_text`'ten görülür) hem de jüri/kullanıcı için öngörülebilir.
 
 ### Ön işleme (`preprocess_image`)
 
-Basit ve deterministik: gri tonlama → otomatik döndürme (Tesseract OSD, en iyi gayret — başarısız
-olursa atlanır) → kontrast normalizasyonu (`autocontrast`) → küçük görseller 1600 px genişliğe
-büyütülür (OCR doğruluğu düşük çözünürlükte belirgin düşer).
+Deterministik, her adım en iyi gayret (başarısız olursa atlanır):
+
+1. **EXIF yönü** — telefon fotoğrafları yönü EXIF etiketinde taşır; saydam PNG arka planı beyaza basılır.
+2. **90/180/270° döndürme** — Tesseract OSD.
+3. **Ölçek** — uzun kenar 2500–3600 px aralığına getirilir (Tesseract ~300 DPI'da en iyi okur; çok büyük
+   fotoğraflar süre için küçültülür).
+4. **Gölge/ışık giderme** — görüntü, yazıdan arındırılmış bulanık kopyasına (kâğıt arka planı) bölünür;
+   temiz taramada değişiklik yapmaz.
+5. **Eğiklik düzeltme** — ±10°: yazı satırlarının yatay izdüşümünün en keskin olduğu açı aranır.
+6. **Tablo/kutu çizgilerini silme** — harf boyunu çok aşan düz yatay/dikey çizgiler beyazlatılır;
+   rakamlara yapışık çizgiler Tesseract'ın `|1` gibi okumasına ve hücreleri birleştirmesine yol açıyordu.
+
+### Okuma: birden fazla sayfa düzeni modu
+
+Tesseract aynı görüntüyü farklı "sayfa düzeni" modlarında farklı yerlerde yanlış okur (ölçüldü:
+otomatik mod tablo hücresindeki yalnız sayıları — `Miktar`, `20` — atlıyor; tek blok modu bir unvan
+satırını `et` okuyabiliyor). Bu yüzden **tek blok (6) ve sütun (4) modları her zaman**, sonuç hâlâ eksikse
+otomatik mod (3) de çalıştırılır. Kalem tablosu aritmetiği en iyi tutan moddan, tedarikçi/belge no/tarih
+ise her biri o alanı en güvenle (ve en eksiksiz) okuyan moddan alınır. Tipik süre 3–5 sn.
 
 ### Çıkarım
 
-- **Belge üst bilgisi**: tedarikçi adı (belgenin ilk, salt sayısal/tarih olmayan metin satırı),
-  fatura/irsaliye no (`FATURA NO` / `IRSALIYE NO` / `BELGE NO` etiketleri), tarih (bkz. aşağıda),
-  para birimi (`€` / `TL`/`TRY`/`₺` sayımı, varsayılan `EUR` — **sistem tüm tutarları € olarak
-  tutar**, bu alan yalnızca bilgilendirme amaçlıdır, `confirm` gövdesine dahil edilmez).
-- **Satırlar**: ürün adı, miktar + ölçü birimi (`kg`/`adet`/`lt`), birim fiyat, satır tutarı, ve
-  (varsa, ayrı bir alt satırda) `LOT:`/`SKT:` etiketli lot no / son kullanma tarihi. Sütun ayrıştırması
-  ham metin değil, Tesseract'ın kelime kutucuklarından (`image_to_data`, `left`/`width`) yeniden
-  kurulmuş bir düzenle yapılır — `image_to_string`'in kendi düzen çıkarımı geniş sütun boşluklarını
-  tek boşluğa indirip komşu sütunları birbirine karıştırabiliyordu (bkz. `ocr.py` `run_tesseract`).
-- **Türkçe tarih formatları**: `01.11.2026`, `01/11/2026`, `1 Kasım 2026` (ay adları dahil).
-- **Türkçe sayı formatı**: `1.543,50` (binlik nokta, ondalık virgül) **ve** `1,543.50` (ABD formatı)
-  ikisi de desteklenir; hangisinin kullanıldığı belge genelinden sezilir (`detect_number_format`:
-  `\d,\d{2}$` kalıbı `\d\.\d{2}$` kalıbından daha sık geçiyorsa `tr`, aksi halde `us`).
+**Görsel satırlar.** Tesseract tablo sütunlarını ve etiket/değer kutularını ayrı bloklara bölebilir
+(`Fatura No:` bir blokta, numarası başka blokta). Bu yüzden kelime kutucukları (`image_to_data`) aynı
+yükseklikteki kelimeler tek satırda olacak şekilde yeniden birleştirilir; geniş boşluklar hücreleri ayırır.
+
+**Etiket → değer.** Her etiket için değer etiketin **sağında, solunda, altında ve üstünde** aranır ve
+değer tipine göre doğrulanır; en yüksek puanlı aday seçilir (etiketten sonra `:` varsa sağ güçlüdür,
+yoksa sol da güçlü adaydır: `ABC2026000000145   Fatura No` düzeni).
+
+- **Belge no**: `Fatura No` / `No.` / `Numarası` / `Nr` / `Fat. No`, `Belge No`, `İrsaliye No`,
+  `Seri-Sıra No`, `Invoice No`, `Evrak/Fiş No`. Değer rakam içermeli; tarih, tutar, ETTN (UUID) ya da başka
+  bir etiket olamaz. Matbu fatura `Seri: A  Sıra No: 123456` → `A-123456`. Etiket bulunamazsa belgede
+  **GİB e-Fatura numarası** biçimi (`ABC2026000000123`: 3 karakter + yıl + 9 hane) aranır; sıra kısmındaki
+  OCR harf/rakam karışıklıkları (`O→0`, `I→1`, `S→5`...) düzeltilir. `Özelleştirme No`, `Sipariş No`,
+  `Mersis No` gibi alanlar belge no sayılmaz.
+- **Tarih**: `Fatura/Belge/Düzenleme Tarihi`, `Tarih`, `Invoice Date`; **vade, son ödeme, SKT, üretim
+  tarihi belge tarihi sayılmaz**. Etiket yoksa tablo dışındaki ilk tarih (vade/SKT yanında olmayan).
+- **Tedarikçi**: önce açık etiket (`Satıcı`, `Tedarikçi`, `Gönderen`, `Ünvanı` — `Alıcı Ünvanı` hariç);
+  yoksa tablo başlığından önceki bölümde firma ekleri (`A.Ş.`, `Ltd. Şti.`, `Gıda`, `San. Tic.`...) taşıyan
+  hücre. Adres, vergi dairesi/VKN, telefon, e-posta, `e-FATURA` başlığı ve **alıcı bloğu (`SAYIN ...`)
+  elenir**. İki satıra bölünmüş unvanlar (`... GIDA` / `SANAYİ VE TİCARET LTD. ŞTİ.`) birleştirilir.
+- **Para birimi**: `€`/`EUR`, `TL`/`TRY`/`₺`, `$`/`USD` sayımı, varsayılan `EUR` — **sistem tüm tutarları
+  € olarak tutar**, bu alan yalnızca bilgilendirme amaçlıdır, `confirm` gövdesine dahil edilmez.
+
+**Kalem tablosu.**
+
+- **Başlık → sütunlar**: `Mal Hizmet`/`Ürün`/`Açıklama`, `Miktar`, `Birim`, `Birim Fiyat`, `İskonto Oranı/
+  Tutarı`, `KDV Oranı/Tutarı`, `Mal Hizmet Tutarı`/`Tutar`, `Lot`/`Parti`, `SKT`/`Son Kul. Tar.`, `Sıra No`.
+  İki satırlı başlıklar (`Birim` / `Fiyat`) — ortalanmış tek satırlık başlıklarla birlikte üç görsel satıra
+  dağılsa bile — birleştirilip öyle sınıflandırılır. Sık OCR bozulmaları (`Tutarı→Tutan`, `Oranı→Oram`)
+  tanınır. `Mal Hizmet` başlığı okunamazsa ilk sayı sütununun solu ad sütunu sayılır.
+- **Aritmetik**: `miktar × birim fiyat (× (1 − iskonto)) = tutar` tutan üçlü, sütun kaymasına ve KDV/
+  iskonto sütunlarına rağmen doğru sayıları seçer. Adın içindeki sayılar (`1 kg'lık`) miktar sanılmaz.
+- **İskontolu satır**: liste fiyatı yerine **net birim fiyat** (`tutar / miktar`) önerilir —
+  `ISKONTO_UYGULANDI` uyarısıyla (backend de tutarı `miktar × birim fiyat` ile karşılaştırır).
+- **Virgülü okunmamış sayı** (`14,80` → `1480`): aritmetik ancak `14.80` ile tutuyorsa düzeltilir,
+  **`ONDALIK_DUZELTILDI` uyarısıyla** kullanıcıya gösterilir ve güven yükseltilmez.
+- **Alt satıra taşan ürün adı** bir önceki kaleme eklenir; adı sayıların üstündeki satırda olan düzen
+  de desteklenir. Bozuk okunmuş yüzde (`%1 → Y1`) ada eklenmez.
+- **Lot / SKT**: `LOT:`, `Lot No`, `Parti No`, `Şarj`, `Charge`, `Batch` ve `SKT`, `S.K.T.`, `STT`, `TETT`,
+  `Son Kullanma/Tüketim Tarihi` — adın içinde, aynı satırda, alt satırda ya da kendi sütununda. Etiketsiz
+  bir kod/tarih lot/SKT diye **uydurulmaz**.
+- **Birimler**: `kg/kgs/kgm/kilo`, `gr/g`, `ton`, `adet/ad/C62/NIU/pcs`, `lt/l`, `ml`, `paket/pk`, `koli`, `kutu`.
+- **Başlıksız belge**: her satır sıra sezgisiyle denenir; birimli miktar + iki tutar ya da tutan bir
+  aritmetik üçlü şarttır.
+- **Sayılar**: `1.543,50` / `1,543.50` / `12,5` / `1 543,50` / `€1.018,00` / `12,50TL`. İki ayraç varsa
+  sondaki ondalıktır; tek ayraçtan sonra 3 hane gelmiyorsa ondalıktır (`12.50` TR belgede de 12,50);
+  tam 3 hanede (`1.500`, `25,000`) belge geneli biçim (`detect_number_format`) karar verir.
+  Rakam yerine okunan harfler düzeltilir (`1.543,5O → 1543.50`).
+- **Tarihler**: `01.11.2026`, `01/11/26`, `01-11-2026`, `01,11.2026` (OCR virgülü), `2026-11-01`,
+  `1 Kasım 2026`, `01 KAS 2026`, `05 Nov 2026`.
 
 ### Doğrulama (çıkarımdan SONRA, öneri kalitesini artırmak için)
 
 - **Satır düzeyi**: `miktar × birim fiyat` ile okunan `satır tutarı` karşılaştırılır
-  (`0,02 €` tolerans); tutmuyorsa `TUTAR_UYUSMAZLIGI` uyarısı eklenir. Bu, dokümandaki
+  (`0,02 €` tolerans); hiçbir yorum tutmuyorsa `TUTAR_UYUSMAZLIGI` uyarısı eklenir. Bu, dokümandaki
   `KZ-2026-001` tutarsızlığının (25 kg × 11,50 €/kg = 287,50 € ama belgede 351,00 € yazması) OCR
   üzerinden de yakalandığının kanıtıdır — `docs/samples/invoice_mismatch.png` bu senaryoyu birebir
   üretir ve `ml/tests/test_ocr.py::test_tutar_uyusmazligi_ocr_uzerinden_yakalanir` doğrular.
-- **Belge düzeyi**: satır tutarlarının toplamı ile belgedeki `TOPLAM`/`GENEL TOPLAM` karşılaştırılır;
-  tutmuyorsa `TOPLAM_UYUSMAZLIGI` belge uyarısı eklenir.
+- **Belge düzeyi**: satır tutarlarının toplamı belgedeki `Mal Hizmet Toplam Tutarı`/`Ara Toplam`/
+  `KDV Matrahı` ile ya da `Ödenecek Tutar`/`Genel Toplam`/`Vergiler Dahil Toplam` **eksi KDV** (birden
+  fazla KDV oranı toplanır) ile karşılaştırılır, iskonto da hesaba katılır. Hiçbiri tutmuyorsa
+  `TOPLAM_UYUSMAZLIGI` belge uyarısı eklenir (KDV'li toplam yüzünden yanlış alarm verilmez).
 - Hiçbir satır okunamazsa `SATIR_BULUNAMADI`, genel güven eşiğin (`OCR_CONFIDENCE_MEDIUM`, varsayılan
   0.5) altındaysa `DUSUK_GUVEN` belge uyarısı eklenir.
 
@@ -163,7 +218,14 @@ faturası **değildir**, hayali firma adları kullanılır.
 |---|---|
 | `invoice_clean.png` | Temiz, düzenli — yüksek güven beklenir; iki Türkçe tarih/sayı formatı (`2 Kasım 2026`, binlik nokta `1.018,00`) ayrıca test eder. |
 | `invoice_mismatch.png` | `KZ-2026-001` senaryosu: 25 kg × 11,50 €/kg yazıyor ama toplam 351,00 € — `TUTAR_UYUSMAZLIGI` OCR üzerinden de yakalanır. |
-| `invoice_low_quality.png` | Eğri taranmış (6°) + gürültülü + bulanık, LOT/SKT hiç yazılmamış — düşük güven, bu alanlar **boş** döner (sistemin dürüst davrandığının kanıtı: uydurma yok). |
+| `invoice_low_quality.png` | Eğri taranmış (6°) + gürültülü + bulanık, LOT/SKT hiç yazılmamış — eğiklik düzeltilip okunur, LOT/SKT alanları **boş** döner (sistemin dürüst davrandığının kanıtı: uydurma yok). |
+
+Testler ayrıca **GİB e-Fatura benzeri** belgeler üretir (`invoicegen.cli.build_efatura`, diske yazılmaz):
+sağ üstte bilgi kutusu (değer etiketin **sağında**, **solunda** ya da **altında**), iki satırlık unvan,
+`SAYIN` alıcı bloğu, ETTN, iki satırlı tablo başlıkları ve ızgara çizgileri, `%10` iskontolu satır, ayrı
+birim sütunu seçeneği, alt satıra taşan ve içinde `1 kg'lık` geçen ürün adı, adın içinde LOT/SKT, iki
+farklı KDV oranı ve KDV'li toplam kutusu. `build_efatura_photo` aynı belgeyi telefon fotoğrafı gibi
+bozar (eğik, köşe gölgesi, bulanık, gürültülü, JPEG).
 
 ## Ekran görüntüleri
 
@@ -176,10 +238,13 @@ uyuşmazlığı, mevcut "Tutar uyuşmazlığı" rozetiyle aynen görünüyor).
 ## Sınırlılıklar
 
 - **El yazısı desteklenmez.** Tesseract basılı metin için eğitilmiştir.
-- **Çok kötü taranmış/eğri belgeler ve alışılmadık (sütunsuz, serbest metin) düzenler başarısız
-  olabilir.** Bu durumda sistem boş öneri döner (hata vermez), kullanıcı manuel giriş yapar —
-  `invoice_low_quality.png` örneği bunu bilerek gösterir.
-- **Çok sayfalı PDF'in yalnızca ilk sayfası işlenir.**
+- **Kurallar, Tesseract'ın yanlış okuduğu harfi geri getiremez.** Bulanık bir görüntüde `Dana Kıyma`
+  `Dene Kıyma`, `14,80` `14.20` okunabilir. Ürün adı backend'deki benzerlik eşleştirmesiyle mevcut ürüne
+  bağlanır; yanlış okunan sayı `TUTAR_UYUSMAZLIGI` ile işaretlenir; kullanıcı düzeltir.
+- **Alışılmadık (sütunsuz, serbest metin) düzenler başarısız olabilir.** Bu durumda sistem boş öneri
+  döner (hata vermez), kullanıcı manuel giriş yapar.
+- **Çok sayfalı PDF'in yalnızca ilk sayfası işlenir.** PDF'in metin katmanı (dijital e-Fatura PDF'leri)
+  kullanılmaz, sayfa 300 DPI görüntüye çevrilip OCR'lanır.
 - **Tek bir global ondalık ayıracı sezilir** (belge genelinden); aynı belgede hem `1.234,56` hem
   `1,234.56` karışık kullanılırsa (gerçek hayatta neredeyse hiç olmaz) yanlış sezilebilir.
 - **Para birimi bilgisi yalnızca gösterim amaçlıdır**: sistem tüm tutarları € olarak tutar, çoklu
