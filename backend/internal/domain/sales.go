@@ -27,19 +27,22 @@ const (
 // ---------------------------------------------------------------------------
 
 type SalesLine struct {
-	ID              string    `json:"id"`
-	SalesOrderID    string    `json:"sales_order_id"`
-	ItemID          string    `json:"item_id"`
-	ItemCode        string    `json:"item_code"`
-	ItemName        string    `json:"item_name"`
-	LotID           string    `json:"lot_id"`
-	LotNo           string    `json:"lot_no"`
-	Qty             Qty       `json:"qty"`
-	UnitPrice       Amount    `json:"unit_price"`
-	LineTotal       Amount    `json:"line_total"`
-	StockMovementID *string   `json:"stock_movement_id"`
-	RecallViolation bool      `json:"recall_violation"`
-	CreatedAt       time.Time `json:"created_at"`
+	ID              string  `json:"id"`
+	SalesOrderID    string  `json:"sales_order_id"`
+	ItemID          string  `json:"item_id"`
+	ItemCode        string  `json:"item_code"`
+	ItemName        string  `json:"item_name"`
+	LotID           string  `json:"lot_id"`
+	LotNo           string  `json:"lot_no"`
+	Qty             Qty     `json:"qty"`
+	UnitPrice       Amount  `json:"unit_price"`
+	LineTotal       Amount  `json:"line_total"`
+	StockMovementID *string `json:"stock_movement_id"`
+	RecallViolation bool    `json:"recall_violation"`
+	// NegativeStockViolation: offline satışta bakiye yetersizdi (bu satıra bağlı NEGATIVE_STOCK_OFFLINE
+	// uyarısı var); satış kaydedildi, stok negatife düştü.
+	NegativeStockViolation bool      `json:"negative_stock_violation"`
+	CreatedAt              time.Time `json:"created_at"`
 }
 
 type ShipmentLine struct {
@@ -65,7 +68,7 @@ type Shipment struct {
 }
 
 // SalesOrder API JSON'udur. Violations yalnızca sync push sonucunda (flagged) doldurulur; GET
-// yanıtlarında satır bazlı recall_violation'a bakılmalıdır (Lines[i].RecallViolation).
+// yanıtlarında satır bazlı recall_violation / negative_stock_violation'a bakılmalıdır.
 type SalesOrder struct {
 	ID            string    `json:"id"`
 	OrderNo       string    `json:"order_no"`
@@ -78,8 +81,8 @@ type SalesOrder struct {
 	SoldAt        time.Time `json:"sold_at"`
 	Status        string    `json:"status"`
 	TotalAmount   Amount    `json:"total_amount"`
-	// HasViolation: en az bir satırda recall_violation=true (liste görünümünde rozet için; detayda
-	// hangi satırın ihlal ettiği Lines[i].RecallViolation'dan okunur).
+	// HasViolation: en az bir satırda recall_violation veya negative_stock_violation (liste görünümünde
+	// rozet için; detayda hangi satırın neyi ihlal ettiği Lines[i]'den okunur).
 	HasViolation bool        `json:"has_violation"`
 	CreatedAt    time.Time   `json:"created_at"`
 	Lines        []SalesLine `json:"lines,omitempty"`

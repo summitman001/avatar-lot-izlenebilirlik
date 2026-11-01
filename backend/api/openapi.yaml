@@ -1540,6 +1540,7 @@ components:
         line_total: { $ref: "#/components/schemas/Amount" }
         stock_movement_id: { oneOf: [{ $ref: "#/components/schemas/Id" }, { type: "null" }] }
         recall_violation: { type: boolean, description: "true: offline satis aninda lot sunucuda blocked/recalled idi" }
+        negative_stock_violation: { type: boolean, description: "true: offline satista bakiye yetersizdi (NEGATIVE_STOCK_OFFLINE uyarisi), stok negatife dustu" }
         created_at: { $ref: "#/components/schemas/DateTime" }
     ShipmentLine:
       type: object
@@ -1596,7 +1597,7 @@ components:
         sold_at: { $ref: "#/components/schemas/DateTime" }
         status: { const: confirmed }
         total_amount: { $ref: "#/components/schemas/Amount" }
-        has_violation: { type: boolean, description: "en az bir satirda recall_violation=true" }
+        has_violation: { type: boolean, description: "en az bir satirda recall_violation=true veya negative_stock_violation=true" }
         created_at: { $ref: "#/components/schemas/DateTime" }
         lines: { type: array, items: { $ref: "#/components/schemas/SalesLine" } }
         shipments: { type: array, items: { $ref: "#/components/schemas/Shipment" } }
